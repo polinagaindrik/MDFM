@@ -1,0 +1,8 @@
+matplotlib>=3.8
+numpy>=1.26
+pandas>=2.1
+PyBIS==1.36.3
+pydantic<2.0
+scipy>=1.12
+openpyxl>=3.1
+scikit-learn

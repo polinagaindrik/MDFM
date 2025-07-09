@@ -1,0 +1,154 @@
+Old computational times (before code improvement):
+
+num_species     |noise|num_exp| steps |comp_time (Workstation J)|comp_time (Workstation V)|
+-----------------------------------------------------------------------------------------------
+4               | no  | 2     | 90    | 53min                   | 51 min                  |
+4               | no  | 2     | 131   | 69min   = 1.15h         |
+4               | no  | 2     | 191   | 95min   = 1.5h          |
+6               | no  | 2     | 200   | 280min  = 4.5h          |
+6               | yes | 6     | 133   | 715min  = 11h           |
+10              | no  | 2     | 126   | 253min  = 4.3h          |
+10              | no  | 3     | 261   | 867min  = 14.45h        |
+10 (popsize=20) | no  | 2     | 200   | 626min  = 10.4h         | 
+10 (popsize=20) | no  | 2     | 178   |                         | 781min = 13h
+10 (popsize=25) | no  | 2     | 178   |                         | 866min = 14.4h
+10 (popsize=25) | yes | 6     | 113   | 2259min = 37.65h        |
+
+
+
+After code optimization:  (if not written popsize=40, recombintion=0.7)
+num_species|noise|inhib|num_exp| steps        |popsize| comp_time (WS J)     | comp_time (WS V) |
+----------------------------------------------------------------------------------------------------------------
+4          | no  | no  | 2     | 200          | 20    |                      | 4 min            |
+10         | no  | no  | 2     | 193          | 20    |                      | 8 min
+10         | no  | no  | 3     | 400          | 20    |26min (23min:new time |
+                                                       with popsize=30, 1.6times faster)
+10         | no  | no  | 3     |1000(600 good)| 30    |98min=1.6h(4.4e-7cost)| - 
+mutation=(0.1, 1.5) and  strategy='best1bin'   
+
+10         | no  | no  | 3     |              | 30    |       -              | 125min=2h (4.8e-7)
+mutation=(0.1, 1.5) and  strategy='randtobest1bin'
+
+10         | no  | no  | 3     |              | 25    |       -              | 108min=1.8h ()
+mutation=(0.1, 1.5) and  strategy='randtobest1bin'
+
+10         | no  | yes | 3     |              | 30    |       -              | =104min=1.7h (1750steps)
+mutation=(0.3, 1.5) and  strategy='best1bin'
+
+10         | yes | no  | 6     |1000(500 good)| 30    | 281min=4.6h (1e-3)   |
+mutation=(0.3, 1.5) and  strategy='best1bin'
+
+13         | no  | no  | 3     |321/823/789   | 30     | 26min/65min/84min(40popsize)    |
+
+13         | no  | no  | 3     | 2000         | 35     | 72min               |
+2steps: 1.  mutation=(1, 1.9) and  strategy='rand2bin', 500 steps
+        2.  mutation=(0.3, 1.5) and  strategy='randtobest1bin', 2000 steps
+
+13         | no  | no  | 3     | 623          | 35     |  31min (293steps)   | 60 min
+2steps: 1.  mutation=(0.3, 1.9) and  strategy='randtobest1bin', 2000 steps
+        2. local minimization
+
+
+# NEW TIMES (the fastest code)
+
+13         | no  | no  |5(3 2C)| 1750         | 35    | 386min = 6.4h        | -
+tol=1e-8, atol=1e-8, maxiter=2000, mutation=(0.3, 1.9), init='latinhypercube'
+randtobest1bin
+
+13         | no  | no  | 3     | 2000/5000    | 35     |       -              | 189min= 3.15h(geom_mean of sumcomponents)
+tol=1e-8, atol=1e-8, maxiter=2000, mutation=(0.3, 1.9), init='latinhypercube'
+best1bin 
+
+13         | no  | no  | 3     | 299          | 40     | 32min                 | -
+tol=1e-6, atol=1e-6, maxiter=2000, mutation=(0.3, 1.9), init='latinhypercube'
+randtobest1bin (sumexplog a=0,5)
+
+13         | no  | no  | 3     | 5000         | 40     |                       | 564min=9.4h
+tol=1e-7, atol=1e-7, maxiter=2000, mutation=(0.3, 1.9), init='latinhypercube'
+randtobest1bin (full geom mean) (not good)
+
+13         | no  | no  | 3     | 1324         | 40     |                       | 140min = 2.3h (5e-7)
+tol=1e-7, atol=1e-7, maxiter=2000, mutation=(0.3, 1.9), init='latinhypercube'
+randtobest1bin (sumexplog a=1) (good)
+
+13         | no  | no  | 3     | 512          | 40     |                       | 54min (1e-6)
+tol=1e-7, atol=1e-7, maxiter=2000, mutation=(0.3, 1.9), init='latinhypercube'
+randtobest1bin (sumexplog a=0.1) (also really good)
+
+13         | yes | no  | 9     | ca. 700      | 40     |                       | ca. 8h
+mutation=(0.3, 1.9), recombination=0.7, init='latinhypercube', strategy='randtobest1bin'
+ (sumexplog a=0.1) (result is not clear)
+
+ 13        | yes | no  | 9     | 595          | 40     |                       | 376min=6.2h
+mutation=(0.3, 1.9), recombination=0.7, init='latinhypercube', strategy='randtobest1bin'
+ (sumexplog a=1.) (result is not clear)
+
+  13       | yes | no  | 9     | 550           | 40     |                       |  min
+mutation=(0.3, 1.9), recombination=0.7, init='latinhypercube', strategy='randtobest1bin'
+ (sum geom mean)
+
+   13      | no  | yes | 3     |     3500     | 40     |                       |  1065min = 18h
+mutation=(0.3, 1.9), recombination=0.7, init='latinhypercube', strategy='randtobest1bin'
+ (sumexplog a=1) (works better for inhib than sum geom mean)
+
+    13     | no  | yes | 3     |     3500     | 40     |                       |  1070min = 18h
+mutation=(0.3, 1.9), recombination=0.7, init='latinhypercube', strategy='randtobest1bin'
+ (sum geom mean)
+
+     13    | no  | no  | 3     |     2383     | 40     |                       | 248min = 4h
+mutation=(0.3, 1.9), recombination=0.7, init='latinhypercube', strategy='randtobest1bin'
+ (with Smatrix estimation, sumexplog a=0.1)
+
+     13    | no  | no  | 3     |     5000     | 40     |                       | 525min = 9h
+mutation=(0.3, 1.9), recombination=0.7, init='latinhypercube', strategy='randtobest1bin'
+ (with Smatrix estimation, sum geom mean)
+
+So far the best optimization setup (based on 10 species model):
+
+strategy      =  randtobest1bin better for 13species,  (best1bin also good, even)
+popsize       =  40 (from 13sp, for others 30 is enough)
+recombination =  0.7
+mutation      =  (0.3, 1.9)
+maxiter       =  3000 (from 13sp, for others 1000 is enough)
+tol           =  1e-7
+When cost (arithmmean) <=  1e-6  -> the result looks really good.
+When cost (sumgeommean) <= 2e-4  -> the result looks really good.
+
+
+ 
+Not good: strategy='rand1bin'/'best1exp', 2step global optimization, geom mean of all entries
+
+
+Now running:
+- manjaro: -
+- ikarus: 
+
+
+Discussion with Christian (04.06.2025):
+1. Introduce parameters for activation and inhibition, common form/parameter for all bacteria not separate for eah bacteria as it is rigt now.
+        ? For inhibition term (1 - sign(a)) a/2
+        ? For activation term (1 + sign(a)) a/2
+
+        How to model interaction in more common form.
+
+2. For uncertainty quantification: maybe use the same method as for his Sensorik model
+        Ansatz: there are still hidden variables/processes that cause parameter distributions
+
+        2.1 Possible solution (what Christian did): For each experiment (curve) he estimated model parameters.
+        And then fitted distribution (log-normal) of these parameters from parameter values for each curves.
+
+        2.2 Estimation P(D, Sigma): Multi-level mixed effects, Mixture clustering, Moderatorvariablenmodell, Mischungsmodell
+
+3. Change the model structure/T-dependence of the parameters:
+        p(T) = p0 T^p1, where p0, p1: estimated parameters
+
+        Some tips from results from total count model sum(x_i) (1 dimensional):
+        - alpha \propto T^{1/2}    
+        - Model works if self-inhibition term is included 1 / (1+ \beta(T) n(t)/nmax).
+          Terms comes from inibition of diff species of each other.
+        - \beta doesn't strongly depend on the temperature
+        - \lambda strongly depend on T 
+
+4.  H. Banga Conformal Predicton - ??
+
+5. To think about the paper based on the model. What to publish with what? Sections? Journals?

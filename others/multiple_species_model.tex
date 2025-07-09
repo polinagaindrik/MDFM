@@ -1,0 +1,550 @@
+\documentclass[10pt,A4paper]{article}
+\usepackage[a4paper,
+            inner=2.5cm,
+            outer=3cm
+            ]{geometry}
+\usepackage{acronym}
+\usepackage{amsmath,amssymb}
+\usepackage[aboveskip=1pt,labelfont=bf,labelsep=period,justification=raggedright,singlelinecheck=off]{caption}
+\usepackage{changepage}
+\usepackage{cite}
+\usepackage{nameref,hyperref}
+\usepackage[right]{lineno}
+\usepackage[nopatch=item]{microtype}
+
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage{ctable} % for \specialrule command
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{tikz}
+
+\newcommand{\mbP}{\textbf{P: }}
+\newcommand{\mbC}{\textbf{C: }}
+
+\begin{document}
+\tableofcontents
+\section{General observations on bacterial diversity}
+\subsection{Measurement methods}
+\begin{itemize}
+    \item NGS: diversity in the meat sample
+    
+    \item MiBi: bacterial count in a certain AGAR\\
+        - PCA (Plate Count Agar): non-selective media, aerobic bacteria growth\\
+        - MRS: selective media, lactic acid bacteria growth\\
+        - VRBD: Enterobacteria
+
+    \item MALDI-ToF: diversity in the AGAR
+
+\end{itemize}
+
+\subsection{Bacterial key players}
+\textbf{From NGS data:}
+\begin{itemize}
+    \item Leuconostoc (Can measure in MiBi in MRS)
+    \item Lactobacillus (In MRS, for higher temperatures)
+    \item \textit{Lactococcus} (Not quantative through MiBi, Exp2, 10Grad)
+    \item Brochothrix  (Measure in MiBi in PC)
+    \item Carnobacterium (Measure in MiBi in PC)
+    \item Pseudomonas (Noticable in 14 Grad in PC, but not in 2Grad, can be mistake in NGS?)
+    \item Enterobacteriaceae (e.g. Serratia, Can measure in PC and/or VRBD)
+\end{itemize}
+
+
+\textbf{In MiBI + MALDI-ToF:}
+\begin{itemize}
+    \item Brochothric thermospacta (in PC)
+    \item Carnibacterium divergens (LAB)(in PC)
+    \item Leuconostoc gelidum (LAB) (in MRS)
+    
+    \item Cronobacter sp. (VRBD) (?)
+    \item Serratia (VRBD) (?) (at high temperatures in MALDI but not present on NGS? In tables as well)
+\end{itemize}
+
+\subsection{Noticed trends}
+\begin{itemize}
+    \item \textbf{10 Grad, PC, O2:} Exp2 at the beginning much more Carnobacterium -> Brochothrix is inhibited\\
+    In Exp 2 Brochothr in not growing --  at the end the maximum count value is smaller then in Exps with Broch.
+
+    \item \textbf{2 Grad, PC, O2:} Similarly, at the end Exp 8 has higher value and the persentage of the Brochothrix is higher.\\
+    Also the more diverse at the end Exp 1 has the smaller bacterial count. 
+
+    \item \textbf{14 Grad, PC, O2:} New players are: Serratia (Enterobacteriaceae) and Pseudomonas in addition to Br. and Carn.
+    \textbf{Assumption:} 14 Grad is less diverse. Why? LAB inhibit Brochothris, hence, diff initial concentrations Broch. and Carn. gives quite diff dynamics.\\
+    At 14 Grad We see much more Pseudomonas. Pseudomonas inhibit LAB but does not affect Brochothrix.
+    Hence, LAB affect less Brochothrix and we have less variation in the growth.
+\end{itemize}
+
+\begin{itemize}
+    \item \textbf{2 Grad, NGS, O2:} We have a lot of LAB: Leuconostoc, Lactobacillus. But also a lot of Pseudomonas (which we do not see in MALDI, Exp7).
+    Pseudomonas I can see a little bit in PC media. But they are not dominant there. (how to detect, not clear?) (Or meaybe it's measurement error in NGS due to sampling) \\
+    (Can it be that Pseudomonas are better detected for NGS, due to their DNA sequence or whatever?)
+
+    \item  \textbf{10 Grad, NGS, O2:} Lactococcus (Exp 2) and Pseudomonas (Exp 5). \\
+    Lactococcus (a little bit in PC, a little bit in MRS < 10 percent, but we do not get really numbers for them).
+    Carno (Exp 2, 4 percent), Brochothrix (Exp 5, 15 percent)
+
+    \item \textbf{14 Grad, NGS, O2:} Pseudomonas (mostly) + Enterobacteria (PC/VRBD media then needed ?) (it is probably Serratia)
+\end{itemize}
+
+\newpage
+\subsection{Ideas}
+\textbf{Idea:}
+\begin{itemize}
+    \item \textbf{Assumption:} assume that bacteria seen in PCA do not interact with bacteria in media MRS. 
+    They grow in different media and consume different resource. 
+    \item Then we can build independent models for each media. Defining for each model critical count.
+    Or on the count sum of the model results.
+\end{itemize}
+Then \textbf{PCA Model}:\\
+\begin{itemize}
+    \item 4 species compete for 1 common resurce: \\
+          - \textbf{\textit{Brochothrix, Carnobacterium}:} \\
+          (dominate at low temp 2 Grad, competition depending on the initial condition. More Broch. at the end gives higher nmax.
+          It happens when Br. where initially more)\\
+          - \textbf{\textit{Serratia} (corr. to Enterobact.):}\\
+           (dominate at high temp 14 Grad)
+           (At high temperatures may be also seen in VRBD?)\\
+          - \textbf{\textit{Pseudomonas}:}\\
+           (present always, more at 14 Grad, does not depend on T)
+           (But data not consistent in NGS and MALDI. Can we really measure them?)\\
+    \item From literature known:\\
+          - \textit{LAB} (prob. \textit{Carnobact.}) inhibit growth of Brochothrix\\
+          - \textit{Pseudomonas} and \textit{Enterobact (Serratia)} have no direct influence on the growth of \textit{Brochothrix} (prob diff resurce as well??).\\
+          - \textit{Pseudomonas} and \textit{Enterobact (Serratia)} inhibit \textit{LAB (Carnobacterium)}\\
+\end{itemize}
+
+\textbf{MRS Model}:
+\begin{itemize}
+    \item 2 key players: \textbf{\textit{Leuconostoc}}, \textbf{\textit{Lactobaccilus}} \\
+    \item 2 Grad: 100\% \textit{Leuconostoc}\\
+          10 Grad: 70/30\% (\textit{Leuconostoc}/\textit{Lactobaccilus})\\
+          14 Grad: 50/50 \% (or \textit{Lactobaccilus} can also dominate)
+\end{itemize}
+
+\textbf{VRBD media}: Values for Serratia at higher temperatures.\\
+
+\textbf{But:}
+\begin{itemize}
+    \item Some bacteria present both in PC and MRS but in less amount.\\
+    Then they have common nutritient? 
+    \item Use NGS to determine which bacteria/media is more active in a certain case?
+    \item The usage of the initial distributionin NGS. How it affects time dynamics? Search for patterns?
+    \item Criteria for critical time? Sum of all bacteria or for each bacteria responsible of the spoilage?
+    The time at which this bacteria was present in certain quantity?
+\end{itemize}
+
+\newpage
+\section{Fusion model. Mathematical formulation.}
+\subsection{Observables}
+Assume initial / real-life system of $N$ bacterial species.
+The bacterial count (colony forming units, cfu) of each bacterial species described with vector $\mathbf{x} = (x^1, ... x^N)^T$.
+Observables of the systems obtained with 3 different methods: MiBi (standard microbiology), MALDI-TOF and NGS (diversity measurement variables).
+The mathematical description of the variables:
+\begin{itemize}
+    \item \textbf{NGS:} Observable vector $(N\times1)$.\\
+    Element of the observable vector: 
+    \begin{equation}
+        (y_\text{NGS})^n = \frac{x^n}{\sum_i x^i}
+    \end{equation}
+    Then the total observable NGS vector: 
+    \begin{equation}
+        \boxed{\mathbf{y}_\text{NGS} = \frac{1}{\sum_i x^i} \mathbf{x} = \frac{\mathbf{x}}{\lVert \mathbf{x} \rVert}}
+    \end{equation}
+    where $\mathbf{1}$ is unit vector of size $(N\times1)$.
+
+    \item \textbf{MiBi:} Observable vector $(M\times1)$, where $M$ is the number of different media used for MiBi measurement.\\
+    To get the MiBi observables the sample is planted to a specific media either selective (e.g. MRS) or allowing the majority of bacteria to grow (e.g. PC).
+    Hence, bacteria is subjected to some sort of media filtering described by function $\mathbf{f}(\mathbf{x})$. 
+    Then the element of the observable vector:
+    \begin{equation}
+        (y_\text{MiBi})^m = \sum_i f^m_i
+    \end{equation}
+    Where $f^m_i$ is an element of the matrix $F (M \times N)$ describing the number of bacteria grown in media.
+    The MiBi observable vector is then will be:
+    \begin{equation}
+        \mathbf{y}_\text{MiBi} = \sum_i \begin{pmatrix}
+            f^1_i \\ \vdots \\ f^M_i
+        \end{pmatrix} = F \mathbf{1}
+    \end{equation}
+    If we assume that media filtering is a linear function of bacteria in meat: $f^m_i=s^m_i \cdot x^i$.\\
+    Then the element of the observable vector is
+    \begin{equation}
+        (y_\text{MiBi})^m = \sum_i s^m_i x^i
+    \end{equation}
+    And the observable vector is described as:
+    \begin{equation}
+        \boxed{\mathbf{y}_\text{MiBi} = S \mathbf{x}}
+    \end{equation}
+    Where $S$ is a $(M \times N)$ matrix whose element $s^m_n$ describes the probability of the colony forming of the species $n$ in media $m$.
+
+    \item \textbf{MALDI:}  Observable vector $(M \times N)$.
+    Element of the observable vector:
+    \begin{equation}
+        (y_\text{MALDI})^m_n = \frac{f^m_n}{\sum_i f^m_i} = \frac{s^m_n  x^n}{\sum_i s^m_i  x^i}
+    \end{equation}
+    Then the observable vector:
+    \begin{equation}
+        \mathbf{y}_\text{MALDI} = \begin{pmatrix}
+            \frac{1}{\sum_i f_i^1} & 0                      & ... & 0           \\
+            0                      & \frac{1}{\sum_i f_i^2} & ... & 0           \\
+            \vdots                 & \vdots                 &     & \vdots      \\
+            0                      & 0                      &     & \frac{1}{\sum_i f_i^M}
+        \end{pmatrix} F
+        \end{equation}
+        \begin{equation}
+            \boxed{\mathbf{y}_\text{MALDI} = \begin{pmatrix}
+                \frac{1}{\sum_i s_i^1 x^i} & 0                           & ... & 0 \\
+                0                          & \frac{1}{\sum_i s_i^2  x^i} & ... & 0 \\
+                \vdots                     & \vdots                      &     &\vdots \\
+                0                          & 0                           &     &\frac{1}{\sum_i s_i^M  x^i}
+        \end{pmatrix} 
+        \begin{pmatrix}
+            s_1^1 x^1 & ... & s_n^1 x^N \\
+            \vdots    &     & \vdots    \\
+            s_1^M x^1 & ... & s_n^M x^N 
+        \end{pmatrix}} 
+    \end{equation}
+\end{itemize}
+
+\subsection{Clustering constraints}
+We group $N$ bacteria ($x^n$) into $K$ different clusters: $C^k$.
+Then the clusters can be described as:
+\begin{equation}
+    C^k = \sum_n x^n p_n^k, \hspace{1cm} p_n^k = \begin{cases}
+        0, \text{ if bacterial species $n$ belongs to cluster } k \\
+        1, \text{ if bacterial species $n$ doesn't belong to cluster } k
+    \end{cases}
+\end{equation}
+Or in matrix form: 
+\begin{equation}
+    \mathbf{C} = P \mathbf{x}
+\end{equation}
+where $\mathbf{C}$ is $(K \times 1)$ vector of cluster values.
+$R$ is the $(K \times N)$ transition matrix from bacterial species to bacterial clusters with elements $p_n^k$ corresponding to species $n$ and cluster $k$.
+The built clusters should be still able to reproduce the observables as MiBi and MALDI.\\
+E.g., constraint due to MiBi observable:
+\begin{equation}
+    \sum_i s_i^m x^i = \sum_k C^k \tilde{s^m_k} = \sum_k  \tilde{s^m_k} \sum_i x^i p_i^k = \sum_i x^i \sum_k \tilde{s^m_k} p_i^k
+\end{equation}
+should hold for any vector $\mathbf{x}$.
+That follows:
+\begin{equation}
+    \boxed{s_i^m = \sum_k \tilde{s^m_k} p_i^k}
+\end{equation}
+And in matrix form constraint on clustering procedure due to MiBi measurements:
+\begin{equation}
+    \boxed{S = \tilde{S} P}, \hspace{1cm} \text{or} \hspace{1cm}  \boxed{P = \tilde{S}^{-1} S}
+\end{equation}
+Check dimensionality: $(M \times N) = (M \times K) \cdot (K \times N)$.
+
+\subsection{Clustering interpretation}
+
+\begin{tikzpicture}
+    \begin{axis}[option of the axis]
+        \draw[help lines, color=gray!30, dashed] (-0.1,-0.1) grid (4.9,4.9);
+        \draw[->,ultra thick] (0,0)--(5,0) node[right]{$x_1$};
+        \draw[->,ultra thick] (0,0)--(0,5) node[above]{$x_2$};
+        \draw[-,thick]  (0, 0)--(5,5) node[above]{$\mathbf{C}$};
+        \draw[->,thick] (0, 0)--(3.75, 3.75) node[above]{};
+        \draw[-,thick]  (3, 4.5)--(3.75, 3.75) node[above]{};
+        \draw[->,thick] (0, 0)--(3, 4.5) node[above]{$\mathbf{x}$};
+        \draw[->,thick] (0, 0)--(4, 2.5) node[above]{$S\mathbf{x}$};
+        \draw[-,thick]  (3.3, 3.3)--(4, 2.5) node[above]{};
+    \end{axis}
+\end{tikzpicture}
+
+To measure NGS data vector:
+\begin{equation}
+    \mathbf{x} = (x_1, ..., x_N)
+\end{equation}
+For MALDI-TOF after media filtering:
+\begin{equation}
+    S\mathbf{x} = (s^m_1 x_1, ..., s^m_N x_N)
+\end{equation}
+
+The new cluster vector:
+\begin{equation}
+    \mathbf{C} = <\mathbf{x} \cdot \mathbf{e_C}> \mathbf{e_C} = (C^1, ..., C^K)
+\end{equation}
+
+Cluster vector after media filtering:
+\begin{equation}
+   \tilde{S} \mathbf{C} = <S \mathbf{x} \cdot \mathbf{e_C}> \mathbf{e_C} = (s^m_1 C^1, ..., s^m_K C^K)
+\end{equation}
+
+Recalculating $x$ variables into cluster variables $C$:
+\begin{equation}
+    (y^C_\text{ngs})^k = \sum_i^N p_i^k (y_\text{ngs})^i = \frac{\sum_k^K p_i^k x^i}{\sum_j^N x^j} = \frac{C^k}{\sum_l^K C^l}
+\end{equation}
+
+\begin{equation}
+    (y^C_\text{maldi})_k^m = \sum_i^N p_i^k (y_\text{maldi})_i^m = \frac{\sum_k^K p_i^k s^m_i x^i}{\sum_j^N s^m_j x_j} = \frac{\tilde s^m_k C^k}{\sum_l^K  \tilde s^m_l C^l}
+\end{equation}
+
+\begin{equation}
+    (y^C_\text{mibi})^m = (y_\text{mibi})^m = \sum_j^N s^m_j x_j = \sum_l^K  \tilde s^m_l C^l
+\end{equation}
+
+
+\subsection{Estimation of the media filtering matrix}
+
+Let us define the filtering matrix of the media $m$ for the system consisting of $N$ different bacteria types:
+\begin{equation}
+    S^m_\text{filt} = \begin{pmatrix}
+        s^m_1  & 0       & ...    & 0      \\
+        0      & s^m_2   & ...    & 0      \\
+        \vdots & \vdots  & \vdots & \vdots \\
+        0      & 0       & ...    & s^m_N  \\
+    \end{pmatrix}
+\end{equation}
+$S^m_\text{filt}$ is a diagonal matrix whose diagonal elements $s^m_i$ define probability of growing of the  bacteria $i$ in the media $m$.
+Remember that the vector of the real bacteria counts in meat $\mathbf{x}$ is a $( N \times 1)$ vector:
+\begin{equation}
+    \mathbf{x} = \begin{pmatrix} x^1 \\ x^2 \\ \vdots \\ x^N
+    \end{pmatrix}
+\end{equation}
+
+And the NGS observable:
+\begin{equation}
+    \mathbf{y}_\text{NGS} = \frac{\mathbf{x}}{\lVert \mathbf{x} \rVert} = \frac{\mathbf{x}}{\sum_j x^j}
+    \label{eq:obs_ngs}
+\end{equation}
+
+The bacterial count that we observe in media is defined by:
+\begin{equation}
+    \mathbf{x}_\text{filt} = S^m_\text{filt} \mathbf{x} = \begin{pmatrix} s^m_1 x^1 \\ s^m_2 x^2 \\ \vdots \\ s^m_N x^N \end{pmatrix}   
+\end{equation}
+
+Then the MALDI-ToF observable in media $m$ is:
+\begin{equation}
+    \mathbf{y}^m_\text{MALDI} = \frac{\mathbf{x}_\text{filt}}{\lVert \mathbf{x}_\text{filt} \rVert} = \frac{ S^m_\text{filt} \mathbf{x}}{\lVert S^m_\text{filt} \mathbf{x} \rVert}
+    \label{eq:obs_maldi0}
+\end{equation}
+Multiplying \ref{eq:obs_ngs} to $S^m_\text{filt}$ and using \ref{eq:obs_maldi0} we can define the relation between MALDI-ToF and NGS observables:
+\begin{equation}
+    \mathbf{y}^m_\text{MALDI} = \underbrace{\frac{\sum_j x^j}{\sum_j^N s^m_j x^j}}_{A(t)} S^m_\text{filt} \mathbf{y}_\text{NGS}
+\end{equation}
+
+To define time dependent constant $A(t)$ we will take into account that $\mathbf{y}^m_\text{MALDI}$ defines proportions of bacteria in media and the sum of all bacteria in the sample should be equal 1:
+\begin{equation}
+    \sum_i^N (\mathbf{y}^m_\text{MALDI})_i = \sum_i^N s_i^m (\mathbf{y}_\text{NGS})_i A(t) = 1
+ \end{equation}
+ \begin{equation}
+    A(t) = \frac{1}{\sum_i^N s_i^m (\mathbf{y}_\text{NGS})_i} = \frac{1}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert}
+ \end{equation}
+ \begin{equation}
+    \boxed{\mathbf{y}^m_\text{MALDI} = \frac{S^m_\text{filt} \mathbf{y}_\text{NGS}}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert}}
+    \label{eq:obs_maldi}
+\end{equation}
+
+To calculate the real bacterial values $x^i(t)$ we need to know scaling factor $\sum_j x^j$.
+Note that the MALDI-ToF scaling factor $A(t)$:
+\begin{equation}
+    A(t) = \frac{\sum_j x^j}{\sum_j^N s^m_j x^j} = \frac{1}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert}
+\end{equation}
+Using that MiBi observables are known and y definition for media $m$:
+\begin{equation}
+    (y_\text{mibi})^m = \sum_j^N s^m_j x^j = \lVert S^m_\text{filt} \mathbf{x} \rVert
+\end{equation}
+We get that:
+\begin{equation}
+    \sum_j x^j = \frac{y_\text{mibi}^m}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert}
+\end{equation}
+And the real bacterial values without media filtering are:
+\begin{equation}
+    \boxed{\mathbf{x}_\text{data} = \mathbf{y}_\text{NGS} \sum_j x^j = \frac{\mathbf{y}_\text{NGS} y_\text{mibi}^m}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert}}
+    \label{eq:X_real}
+\end{equation}
+
+Clustered measurement points are then:
+\begin{equation}
+    \mathbf{C}_\text{data} = P \mathbf{x}_\text{data}
+\end{equation} 
+The cost function is 
+\begin{equation}
+    ll = \frac{(\mathbf{C}_\text{data} - \mathbf{C}_\text{model})^2}{2 \sigma^2} \propto \bigg (P \frac{\mathbf{y}_\text{NGS} y_\text{mibi}^m}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert} - \mathbf{C}_\text{model} (t, p) \bigg )^2
+\end{equation}
+
+So we estimate parameters $p$ and get model prediction $ \mathbf{C}_\text{model} (t, p)$
+
+\subsection{Estimation of the media filtering matrix (New)}
+To account for data (species) measured with MALDI-ToF method but not captured with NGS measurement approach we introduce matrix:
+\begin{equation}
+    T = \begin{pmatrix}
+        t_1    & 0      & ... & 0      \\
+        0      & t_2    & ... & 0      \\
+        \vdots & \vdots & ... & \vdots \\
+        0      & 0      & ... & t_N    \\
+    \end{pmatrix}
+\end{equation}
+where
+\begin{equation}
+    t_i = \begin{cases}
+        0 \text{ if NGS cannot measure bacteria $i$, nowhere in data present } \\
+        1 \text{ if at least 1 NGS measurement of bacteria $i$ not equal to zero } \\
+    \end{cases}
+\end{equation}
+
+Then we define NGS observable as
+\begin{equation}
+    \mathbf{y}_\text{NGS} = \frac{T \mathbf{x}}{\lVert T \mathbf{x} \rVert}
+\end{equation}
+And MALDI-ToF observable for media $m$ is
+\begin{equation}
+    \mathbf{y}^m_\text{MALDI} = \frac{S^m \mathbf{x}}{\lVert S^m \mathbf{x} \rVert}
+\end{equation}
+Multiplying MALDI observables with $T$ matrix and using that $ST=TS$ as diagonal matrices:
+\begin{equation}
+    T \mathbf{y}^m_\text{MALDI} = \frac{TS^m \mathbf{x}}{\lVert S^m \mathbf{x} \rVert} = \frac{S^m T \mathbf{x}}{\lVert S^m \mathbf{x} \rVert} =
+    S^m \frac{T \mathbf{x}}{\lVert T \mathbf{x} \rVert} \frac{\lVert T \mathbf{x} \rVert}{\lVert S^m \mathbf{x} \rVert} = S^m \mathbf{y}_\text{NGS} \underbrace{\frac{\lVert T \mathbf{x} \rVert}{\lVert S^m \mathbf{x} \rVert}}_{A(t)}
+\end{equation}
+
+To calculate constant $A(t)$ we normalize the equation above:
+\begin{equation}
+    A(t) = \frac{\lVert T \mathbf{y}^m_\text{MALDI} \rVert}{\lVert S^m \mathbf{y}_\text{NGS} \rVert}
+\end{equation}
+where norms are calculated from data.
+Then the final relation is 
+\begin{equation}
+    T \mathbf{y}^m_\text{MALDI} = S^m \mathbf{y}_\text{NGS} \frac{\lVert T \mathbf{y}^m_\text{MALDI} \rVert}{\lVert S^m \mathbf{y}_\text{NGS} \rVert}
+\end{equation}
+
+And cost function term:
+
+\begin{equation}\boxed{
+    cost1 = \frac{1}{N_{meas}} \Big \lVert T \mathbf{y}^m_\text{MALDI} \lVert S^m \mathbf{y}_\text{NGS} \rVert -  S^m \mathbf{y}_\text{NGS} \lVert T \mathbf{y}^m_\text{MALDI} \rVert \Big \rVert _2}
+\end{equation}
+Where norm is the squared sum over all measurement data (all experiments and all timepoints) and over all bacteria species.
+In case of $T = 1$ is unity matrix:
+\begin{equation}
+    \mathbf{y}^m_\text{MALDI} = S^m \mathbf{y}_\text{NGS} \frac{1}{\lVert S^m \mathbf{y}_\text{NGS} \rVert}
+\end{equation}
+
+$S^m$ matrices for each media $m$ are determined till scaling constant (one degree of freedom pro media).
+To correctly build observables from the same model $x$ we need to reduce it to one degree of freedom pro system.
+Assuming that the real $S$ matrix for each media $m_k$ can be written with scaling constant $s_0$ as
+\begin{equation}
+    \tilde S^{m_k} = s_0^{m_i} S^{m_k}
+\end{equation}
+
+Then the ratio between MALDI-ToF measurements in two different media $m_i$ and $m_j$:
+\begin{equation}
+    \frac{\mathbf{y}^{m_k}_\text{MALDI}}{\mathbf{y}^{m_l}_\text{MALDI}} = \frac{ \tilde S^{m_k} \mathbf{x}}{ \tilde S^{m_l} \mathbf{x}} \frac{\lVert S^{m_l} \mathbf{x} \rVert}{\lVert S^{m_k} \mathbf{x} \rVert} =
+    \frac{s^{m_k}_0 S^{m_k} }{s^{m_l} S^{m_l}} \frac{y^{m_l}_\text{MiBi}}{y^{m_k}_\text{MiBi}} =
+    s_0^{kl} \frac{S^{m_k} }{S^{m_l}} \frac{y^{m_l}_\text{MiBi}}{y^{m_k}_\text{MiBi}}
+\end{equation}
+allows to estimate the ratio between two scaling constants in different media $s_0^kl$.
+The cost function to estimate scaling constants:
+
+\begin{equation}\boxed{
+    cost2 = \frac{1}{N_{meas2}} \Big \lVert S^{m_k} \mathbf{y}^{m_l}_\text{MALDI} y^{m_l}_\text{MiBi} 
+     -  s_0^{kl} S^{m_l} \mathbf{y}^{m_k}_\text{MALDI} y^{m_k}_\text{MiBi}  \Big \rVert _2}
+\end{equation}
+where norm is the squared sum over all experiments, bacterial species and media $l$.
+
+(?? Add setting s to zero if ti = 0)
+
+
+\subsection{Projection matrix estimation}
+
+\begin{equation}
+    C = Px = \begin{pmatrix}
+        p^1_1 & \dots & p^1_N  \\
+        \vdots &      & \vdots \\
+        p^K_1 & \dots & p^K_N  \\
+    \end{pmatrix} x
+\end{equation}
+Here $P$ is $(K \times N)$ projection matrix to a system with reduced number of variables $C$.
+\begin{equation}
+    x = P_\text{inv} C
+\end{equation}
+where $P_\text{inv}$ is a pseudo-inverse matrix of $P$.
+
+To get the projection matrix $P$ we minimize the following cost function:
+\begin{equation}
+    Cost = \lVert P_\text{inv} P \mathbf{y}_\text{NGS} - \mathbf{y}_\text{NGS} \rVert^2 +
+           \lVert S P_\text{inv} P S^{-1} \mathbf{y}_\text{MALDI} - \mathbf{y}_\text{MALDI} \rVert^2 +
+           \underbrace{\lVert P P^T - I \rVert^2}_\text{ortogonality} +
+           \underbrace{\lVert \lVert p^k \rVert^2  - 1\rVert^2}_\text{normalization}
+\end{equation}
+where $I$ is identity matrix and $p^k = (p^k_1 \dots p^k_N)$
+
+\section{Justification for the projection matrix}
+Considering projection of the full system from $N$ to $m$ dimensions
+
+$P: N \rightarrow m$
+
+Number of parameters included in projection matrix $P$ is $(N-m)m$.\\
+Number of the parameters of the full system of $N$ dimensions is  $N(N-1) + 2 n_{st} N + 1$.\\
+Number of the parameters of the reduced system of $m$ dimensions is  $m(m-1) + 2 n_{st} m + 1$.\\
+
+Then the projection makes sense if:
+\begin{equation}
+    (N-m)m + N(N-1) + 2 n_{st} N + 1 < m(m-1) + 2 n_{st} m + 1
+\end{equation}
+\begin{equation}
+    N(N + 2 n_{st} - 1) < m(N + 2 n_{st} - 1)
+\end{equation}
+which holds always when 
+\begin{equation}
+    m < N.
+\end{equation}
+
+\section{Parameter Estimation with Reduced Model}
+ 
+The optimizer tries to find a set of parameters $\mathbf{p}$ for a "small" model that minimizes the difference between the real data and the model observables using log-likelihood function.
+One iteration step to calculate log-likelihood is the following:
+\begin{enumerate}
+    \item Pick parameter set $\mathbf{p}$ for a "small" model.
+    \item Solve "small" model solution for the chosen parameter set $\mathbf{C}(t, \mathbf{p})$.
+    \item Back-project the solution on the "big" model using pseudoinverse projection matrix for estimated before projection $P$.
+    \begin{equation}
+        \mathbf{x} (t) = P^{-1} \mathbf{C} (t)
+    \end{equation}
+    \item Calculate observables for the "big" model $\mathbf{y}_\text{MiBi}$,  $\mathbf{y}_\text{MALDI}$,  $\mathbf{y}_\text{NGS}$.
+    \item Calculate cost function as a sum over all measurement data and corresponding model observables:
+    \begin{equation}
+        \text{cost} = \sum_i \frac{(y_i^\text{data} - y_i^\text{model})^2}{2 \sigma_i^2}
+    \end{equation}
+\end{enumerate}
+The optimizing function aims to find the parameters $\mathbf{p}$ that correspond to the global minimum of the cost function.
+
+\section{Overview of the model}
+\begin{enumerate}
+    \item Daten: \\
+        NGS:  $ \mathbf{y}_\text{NGS} = \frac{\mathbf{x}}{\lVert \mathbf{x} \rVert}$\\
+        MiBi: $ \mathbf{x}_\text{filt} = {\lVert S^m \mathbf{x} \rVert}$\\
+        MALDI-ToF in media $m$: $ \mathbf{y}^m_\text{MALDI} = \frac{ S^m \mathbf{x}}{\lVert S^m \mathbf{x} \rVert}$\\
+    \item Model Possibilities:
+    \begin{enumerate}
+        \item 1-species model for each temperature and media (need MiBi data)
+        \item \textbf{1-species model for each media} (temperature-dependent model, need MiBi data)
+        \item Multi-species model for each media (temperature-dependent model, more complicated model for smaller uncertinties need Mibi/ MALDI)
+        \item \textbf{Multi-species model} (temperature- and media- dependent model, more complicated model for smaller uncertinties need MiBi/MALDI/NGS)
+        NGS allows us to determine S matrices and, hence, to connect data for different media.
+    \end{enumerate}
+    (c) and (d) use diversity data and need dimensionality reduction.
+
+    \item Dimensionality Reduction:
+    \begin{itemize}
+        \item Projection matrix $Px$: Due to L1-norm division cannot build observables with reduced coordinates.
+        \item Need to back-project $P^{-1} P x$ - Losing information.
+        \item Information loss vs. simplicity/computational speed (number of clusters)
+        \item Large number of clusters (less information loss) and more complicated ODE model vs. Small number of clusters (loss information is higher and model is simple to solve).
+    \end{itemize}
+    \item Temperature-dependence
+    \begin{enumerate}
+        \item P: temperature-dependent or one P for all temperatures
+        \item ODE model: polynomial T-dependence of parameters (or some function) or specific parameter for each temperature
+        \item Till now: Different P for each temperature and linear T-dependence of the parameters - Give a problem.
+        \item What to do?\\
+        \textbf{1. P- common, ODE - linear of T}\\
+                2. P(T), but ode params calculated for each temperature?\\
+                3. P(T), ode params non-linear with  T ???  Can we even determine this dependence?
+                If we have P(T) as a continuous function then probably ODE parameters can also be continuous function of T.
+        \item 1. Option works good in-silico for both 2 and 6 clusters. But doesn't work on real data.
+    \end{enumerate}
+    \item Other alternatives - ?
+\end{enumerate}
+\end{document}

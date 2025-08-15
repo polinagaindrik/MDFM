@@ -30,8 +30,8 @@ def fusion_model_linear(t, x, param, x0, const):
         (temp, ) = temp_cond
     else:
         (temp, ) = temp_func(t, temp_cond)
-    lambd = 1e-3*param[:n_cl] * temp
-    #lambd = 10**param[:n_cl]  * temp
+    #lambd = 1e-3*param[:n_cl] * temp
+    lambd = 10**param[:n_cl]  * temp
     #lambd_1 = 10**param[:n_cl]
 
     alph_1 = np.array(param[n_cl:2*n_cl])

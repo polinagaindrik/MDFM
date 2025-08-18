@@ -10,7 +10,7 @@ if __name__ == "__main__":
     plt.rcParams['figure.dpi'] = 500
 
     path = 'model_paper/out/'
-    path2 ='model_paper/out/10_dim/calibration/'
+    path2 ='model_paper/out/10_dim/'#calibration/'
     add_name = ''
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     step = 1
     optim_file2 = f"optimization_history{int(step)}.csv"
     df_optim2 = pd.read_csv(path+optim_file2)
-    T_x = [1. for _ in range(n_cl)]
+    T_x = [0.] +[1. for _ in range(n_cl-1)]
     # Take optimal parameter values on last optimization step
     step = 1
     param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
@@ -43,5 +43,5 @@ if __name__ == "__main__":
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     labels = ('Tag',  r'log CFU mL$^{-1}$')
     for j, media in enumerate(['MRS', 'PC']):
-        fm.plotting.plot_all([2., 10., 14.], labels, templ_meas=fm.plotting.plot_measurements_ZL2030_consttemp, df=data[0].filter(like=media), time_lim=[18., 10.3, 10.3],
+        fm.plotting.plot_all([2., 10., 14.], labels, templ_meas=fm.plotting.plot_measurements_ZL2030_consttemp, df=data[0].filter(like=media),
                  temps=temps_model, mtimes=t_model, mestim=obs_mibi_model[:,j, : ], dir=path2, add_name=f'MiBi_{media}_const_model')

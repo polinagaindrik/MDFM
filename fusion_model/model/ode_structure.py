@@ -16,7 +16,7 @@ def fusion_model2(t, x, param, x0, const):
     alph_exp = np.array(param[3*n_cl:4*n_cl])
     alph = alph_1 * temp**alph_exp
 
-    nmax = 10**param[4*n_cl] * temp**param[4*n_cl+2]
+    nmax = 10**param[4*n_cl] * temp**param[4*n_cl+1]
     kij_matrix = param[4*n_cl+2:].reshape(n_cl, -1)*(5e-8) # kij then are sampled between (5e-9, 1e-7)
     b = np.sum(kij_matrix*x[n_cl:2*n_cl], axis=1)
     return np.concatenate((-x[:n_cl]*x[-1]*lambd,

@@ -29,8 +29,11 @@ def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, jac_func=None,
 def generate_insilico_df(model, t, param, x0, const,  n_traj=1, exp_start_num=1, n_states=2, jac=None, **kwargs):
     n_cl = const[1]
     x0 = np.asarray(x0, dtype=float)
-    x = mdl.model_ODE_solution(model, t, np.asarray(param[:n_cl*(3+n_cl)+1]), x0, const)#, jac=jac)
-
+    if model  == mdl.fusion_model_linear:
+        param_ode = np.asarray(param[:n_cl*(3+n_cl)+1])
+    else:
+        param_ode = np.asarray(param[:n_cl*(4+n_cl)+2])
+    x = mdl.model_ODE_solution(model, t, param_ode, x0, const)#, jac=jac)
     count = mdl.get_bacterial_count(x, const[1], n_states)
     create_df = [dtf.create_df_mibi, dtf.create_df_maldi, dtf.create_df_ngs, dtf.create_df_x]
     obss = [mdl.observable_MiBi, mdl.observable_MALDI, mdl.observable_NGS, mdl.observable_x]

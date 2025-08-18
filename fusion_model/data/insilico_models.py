@@ -164,6 +164,37 @@ def model_6sp_2media_inhib(temps, ntr, inhib=False, noise=0., rel_noise=0., path
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path_new, add_name=f'{int(n_cl)}sp_insilicodata_')
     return df_mibi, df_maldi, df_ngs, df_realx
 
+def model_6sp_2media_exp(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
+    t = np.array([0., 1., 3., 6., 10., 13.])
+    n_cl = 6
+    if inhib:
+        kij = np.random.uniform(low=0.0, high=1.0, size=(n_cl, n_cl))
+        for i in range (n_cl):
+            kij[i, i] = 0.
+        kij_list = [kk for k in kij for kk in k]
+    else:
+        kij_list=[0. for _ in range(n_cl*n_cl)]
+    param_ode = [-5., -3., -2., -3., -6., -3., # lambda_1
+                  0.,  1.,  2.,  3., 1.5, 2.5, # lambda_exp
+                  .2,  .5,  .5,  .5,  .3,  .4, # alpha0
+                  .6,  .3,  .4,  .5,  .2,  .5, # alpha1
+                  8., 0.5] + kij_list
+    s_x = [ .6, .0, .4, .2, .6, .8, 1., .1, 0., .4,   # s_PC
+            0., 1., .1, .3, 0., .5, 0., .5, 1., .1]  # s_MRS
+    T_x = [0., 1., 1., 1., 1., 1., 1., 1., 1., 1.]
+    param_model = param_ode + s_x + T_x
+    x10_param = [1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.]
+    x0 = [10**L0 for L0 in x10_param] + [1. for _ in range (n_cl+1)]
+    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
+                                                                      noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
+    df_mibi.to_pickle(path+'dataframe_mibi.pkl')
+    df_maldi.to_pickle(path+'dataframe_maldi.pkl')
+    df_ngs.to_pickle(path+'dataframe_ngs.pkl')
+    df_realx.to_pickle(path+'dataframe_x.pkl')
+    json_dump({'param_ode': [x00 for _ in range (len(temps)) for x00 in x10_param]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
+    return df_mibi, df_maldi, df_ngs, df_realx
+
 
 def model_10sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
     t = np.array([0., 1., 3., 6., 10., 13.])
@@ -208,11 +239,11 @@ def model_10sp_2media_exp(temps, ntr, path='', inhib=False, noise=0., rel_noise=
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [-5., -3., -2., -3., -6., -3., -2., -4., -5., -3.3, # lambda_1
                   0.,  1.,  2.,  3., 1.5, 2.5,  1., 0.5, 0.8,  0.2, # lambda_exp
-                .2, .5, .5, .5, .3, .4, .3, .4, .2, .5,   # alpha0
-                .6, .3, .4, .5, .2, .5, .6, .3, .6, 1.3,   # alpha1
-                8.,] + kij_list
-    s_x = [.6, .0, .4, .2, .6, .8, 1., .1, 0., .4,   # s_PC
-            0., 1., .1, .3, 0., .5, 0., .5, 1., .1]   # s_MRS
+                  .2,  .5,  .5,  .5,  .3,  .4,  .3,  .4,  .2,   .5, # alpha0
+                  .6,  .3,  .4,  .5,  .2,  .5,  .6,  .3,  .6,  1.3, # alpha1
+                  8., 0.5] + kij_list
+    s_x = [ .6, .0, .4, .2, .6, .8, 1., .1, 0., .4,   # s_PC
+            0., 1., .1, .3, 0., .5, 0., .5, 1., .1]  # s_MRS
     T_x = [0., 1., 1., 1., 1., 1., 1., 1., 1., 1.]
     param_model = param_ode + s_x + T_x
     x10_param = [1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.]
@@ -237,11 +268,11 @@ def model_13sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_nois
             kij[i, i] = 0.
         kij_list = [kk for k in kij for kk in k]
     else:
-        kij_list=[0. for _ in range(n_cl*n_cl)]
+        kij_list = [0. for _ in range(n_cl*n_cl)]
     param_ode = [.001, .003, .005, .003, .001, .003, .005, .003, .001, .003, .001, .003, .0005, # lambda
-                   .1, .4, .4, .4, .2, .04, .2, .3, .1, .4, .1,  .4,   .7,   # alpha0
-                   .5, .2, .3, .4, .1, .4,  .5, .2, .5, .2, .2,  .4,   .01,   # alpha1
-                    8.,] + kij_list
+                   .1,   .4,   .4,   .4,   .2,  .04,   .2,   .3,   .1,   .4,   .1,   .4,    .7, # alpha0
+                   .5,   .2,   .3,   .4,   .1,  .4,    .5,   .2,   .5,   .2,   .2,   .4,   .01, # alpha1
+                   8.,] + kij_list
     s_x = [.6, .0, .4, .2, .6, .8, 1., .1, 0., .4, .5, 0., .5,   # s_PC
            0., 1., .1, .3, 0., .5, 0., .5, 1., .1, .7, .1, .6]   # s_MRS
     T_x = [0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]

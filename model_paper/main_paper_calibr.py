@@ -12,10 +12,10 @@ if __name__ == "__main__":
     add_name = ''
 
     # 'Real' model:
-    temps = [2., 2., 2., 10., 10., 10., 14., 14., 14.,]
+    temps = [2., 10., 14.,]
     ntr = 1
     dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(fm.data.model_10sp_2media_exp, temps, ntr,
-                                                                              inhib=True, noise=0.1, rel_noise=.15,
+                                                                              inhib=False, noise=0.0, rel_noise=.0,
                                                                               path=path+'10_dim/', cutoff=0., cutoff_prop=0.)
     (df_mibi, df_maldi, df_ngs) = dfs_calibr
     n_cl = np.shape(dfs_calibr[1])[0]
@@ -37,7 +37,7 @@ if __name__ == "__main__":
         'exp_temps': {exp: temp for exp, temp in zip(exps_calibr, temps)},
         }
     fm.output.json_dump(calibr_presetup['exp_temps'], 'exp_temps_model_paper.json', dir='model_paper/')
-    calibr_setup = fm.pest.define_calibr_setup_ZL2030(calibr_presetup, inhib=True, s_x_predefined=s_x_predefined, s_x=None)
+    calibr_setup = fm.pest.define_calibr_setup_insilico(calibr_presetup, inhib=False, s_x_predefined=s_x_predefined, s_x=None) 
     param_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_setup)[0]
     print((time.time()-start)/60., 'min')
 

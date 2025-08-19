@@ -7,12 +7,12 @@ import fusion_model.tools.dataframe_functions as dtf
 def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, jac_func=None, **kwargs):
     df_mibi, df_maldi, df_ngs, df_real, df_fullx = [], [], [], [], []
     for j, temp in enumerate(temps):
-        exp_start = 1+n_traj*j
+        exp_start = 1+j #1+n_traj*j
         if jac_func is not None:
             jac = jac_func#lambda t, x: jac_func(t, x, param[:n_cl*(3+n_cl)+1], x0, [[temp], n_cl])
         else:
             jac = None
-        df_mibi0, df_maldi0, df_ngs0, df_realx0, df_fullx0 = generate_insilico_df(model, t, param, x0, [[temp], n_cl], n_traj=n_traj,
+        df_mibi0, df_maldi0, df_ngs0, df_realx0, df_fullx0 = generate_insilico_df(model, t, param, x0[j], [[temp], n_cl], n_traj=n_traj,
                                                                                   exp_start_num=exp_start, jac=jac, **kwargs)
         df_mibi.append(df_mibi0)
         df_maldi0[df_maldi0<0] = 0
@@ -43,7 +43,7 @@ def generate_insilico_df(model, t, param, x0, const,  n_traj=1, exp_start_num=1,
                for j in range(n_traj)])
     return [
         dtf.merge_dfs([insilico_traj_dataframe(t, count, param, x0, const, df_func, bacteria_name,
-                                           obs_func=obs, name_part=[f'V{j+exp_start_num:02d}','M1',f'{int(const[0][0]):02d}C'], **kwargs)
+                                               obs_func=obs, name_part=[f'V{j+exp_start_num:02d}','M1',f'{int(const[0][0]):02d}C'], **kwargs)
                    for j in range(n_traj)])
         for df_func, obs in zip(create_df, obss)
     ] +  [df_ode]

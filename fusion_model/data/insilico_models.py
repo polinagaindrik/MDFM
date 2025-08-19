@@ -2,7 +2,7 @@
 
 import numpy as np
 from ..model import fusion_model2, fusion_model_linear#, jacobian_fusion_model  # noqa: F401
-from .output import json_dump
+from .output import json_dump, read_from_json
 from .data_generation import generate_data_dfs
 from ..tools import dataframe_functions as dtf
 
@@ -38,13 +38,15 @@ def prepare_insilico_data(insilico_model, temps, ntr, path='', inhib=False, nois
   
 
 def model_2sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
+    np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13., 17.])
     n_cl = 2
     s_x = [.5,   1.,    # s_PC
            .7,   .1 ]   # s_MRS
     T_x = [1., 1.] # NGS filtering
-    x10_param = [4., 1.]
-    x0 = [10**L0 for L0 in x10_param] + [1. for _ in range (n_cl+1)]
+    x10_param = [[4., 1.] for _ in range (len(temps))]
+    #x10_param = np.random.uniform(1., 4.5, size=(len(temps), n_cl))
+    x0 = [[10**L0 for L0 in x10_param[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
     #np.random.seed(6934113)
     if inhib:
         kij = np.random.uniform(low=0.0, high=1.0, size=(n_cl, n_cl))
@@ -65,18 +67,20 @@ def model_2sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise
     df_ngs.to_pickle(path+'dataframe_ngs.pkl')
     df_realx.to_pickle(path+'dataframe_x.pkl')
     df_fullx.to_pickle(path+'dataframe_fullx.pkl')
-    json_dump({'param_ode': [x00 for _ in range (len(temps)) for x00 in x10_param]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10_param[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     return df_mibi, df_maldi, df_ngs, df_realx
 
 
 def model_3sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
+    np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13., 17.])
     n_cl = 3
     s_x = [.5,  1., .5,   # s_PC
            .7,  .1, .6]   # s_MRS        
     T_x = [1., 1., 1.] # NGS filtering
-    x10_param = [4., 1., 2.]
-    x0 = [10**L0 for L0 in x10_param] + [1. for _ in range (n_cl+1)]
+    x10_param = [[4., 1., 2.] for _ in range (len(temps))]
+    #x10_param = np.random.uniform(1., 4.5, size=(len(temps), n_cl))
+    x0 = [[10**L0 for L0 in x10_param[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
     np.random.seed(6934113)
     if inhib:
         kij = np.random.uniform(low=0.0, high=1.0, size=(n_cl, n_cl))
@@ -97,18 +101,20 @@ def model_3sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise
     df_ngs.to_pickle(path+'dataframe_ngs.pkl')
     df_realx.to_pickle(path+'dataframe_x.pkl')
     df_fullx.to_pickle(path+'dataframe_fullx.pkl')
-    json_dump({'param_ode': [x00 for _ in range (len(temps)) for x00 in x10_param]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10_param[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     return df_mibi, df_maldi, df_ngs, df_realx
 
 
 def model_4sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
+    np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13., 17.])
     n_cl = 4
     s_x = [.5,   1.,   .5,  .5,    # s_PC
            .7,   .1,   .6,  .6]    # s_MRS
     T_x = [0., 1., 1., 1.] # NGS filtering
-    x10_param = [4., 1., 2., 2.]
-    x0 = [10**L0 for L0 in x10_param] + [1. for _ in range (n_cl+1)]
+    x10_param = [[4., 1., 2., 2.] for _ in range (len(temps))]
+    #x10_param = np.random.uniform(1., 4.5, size=(len(temps), n_cl))
+    x0 = [[10**L0 for L0 in x10_param[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
     np.random.seed(6934113)
     if inhib:
         kij = np.random.uniform(low=0.0, high=1.0, size=(n_cl, n_cl))
@@ -128,11 +134,12 @@ def model_4sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise
     df_maldi.to_pickle(path+'dataframe_maldi.pkl')
     df_ngs.to_pickle(path+'dataframe_ngs.pkl')
     df_realx.to_pickle(path+'dataframe_x.pkl')
-    json_dump({'param_ode': [x00 for _ in range (len(temps)) for x00 in x10_param]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10_param[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     return df_mibi, df_maldi, df_ngs, df_realx
 
 
 def model_6sp_2media_inhib(temps, ntr, inhib=False, noise=0., rel_noise=0., path=''):
+    np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13., 17.])
     n_cl = 6
     np.random.seed(6934113)
@@ -152,19 +159,21 @@ def model_6sp_2media_inhib(temps, ntr, inhib=False, noise=0., rel_noise=0., path
 
     T_x = [0., 1., 1., 1., 1., 1.]
     param_model = param_ode + s_x + T_x
-    x10_param = [1., 2., 1., 5., 2., 1.]
-    x0 = [10**L0 for L0 in x10_param] + [1. for _ in range (n_cl+1)]
+    x10_param = [[1., 2., 1., 5., 2., 1.] for _ in range (len(temps))]
+    #x10_param = np.random.uniform(1., 4.5, size=(len(temps), n_cl))
+    x0 = [[10**L0 for L0 in x10_param[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
     df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
     df_mibi.to_pickle(path+'dataframe_mibi.pkl')
     df_maldi.to_pickle(path+'dataframe_maldi.pkl')
     df_ngs.to_pickle(path+'dataframe_ngs.pkl')
     df_realx.to_pickle(path+'dataframe_x.pkl')
-    json_dump({'param_ode': [x00 for _ in range (len(temps)) for x00 in x10_param]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10_param[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path_new, add_name=f'{int(n_cl)}sp_insilicodata_')
     return df_mibi, df_maldi, df_ngs, df_realx
 
 def model_6sp_2media_exp(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
+    np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13.])
     n_cl = 6
     if inhib:
@@ -183,20 +192,22 @@ def model_6sp_2media_exp(temps, ntr, path='', inhib=False, noise=0., rel_noise=0
             0., 1., .1, .3, 0., .5, 0., .5, 1., .1]  # s_MRS
     T_x = [0., 1., 1., 1., 1., 1., 1., 1., 1., 1.]
     param_model = param_ode + s_x + T_x
-    x10_param = [1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.]
-    x0 = [10**L0 for L0 in x10_param] + [1. for _ in range (n_cl+1)]
+    x10_param = [[1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.] for _ in range (len(temps))]
+    #x10_param = np.random.uniform(1., 4.5, size=(len(temps), n_cl))
+    x0 = [[10**L0 for L0 in x10_param[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
     df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
     df_mibi.to_pickle(path+'dataframe_mibi.pkl')
     df_maldi.to_pickle(path+'dataframe_maldi.pkl')
     df_ngs.to_pickle(path+'dataframe_ngs.pkl')
     df_realx.to_pickle(path+'dataframe_x.pkl')
-    json_dump({'param_ode': [x00 for _ in range (len(temps)) for x00 in x10_param]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10_param[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
     return df_mibi, df_maldi, df_ngs, df_realx
 
 
 def model_10sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
+    np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13.])
     n_cl = 10
     if inhib:
@@ -214,20 +225,22 @@ def model_10sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_nois
             0., 1., .1, .3, 0., .5, 0., .5, 1., .1]  # s_MRS
     T_x = [0., 1., 1., 1., 1., 1., 1., 1., 1., 1.]
     param_model = param_ode + s_x + T_x
-    x10_param = [1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.]
-    x0 = [10**L0 for L0 in x10_param] + [1. for _ in range (n_cl+1)]
+    x10_param = [[1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.] for _ in range (len(temps))]
+    #x10_param = np.random.uniform(1., 4.5, size=(len(temps), n_cl))
+    x0 = [[10**L0 for L0 in x10_param[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
     df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
     df_mibi.to_pickle(path+'dataframe_mibi.pkl')
     df_maldi.to_pickle(path+'dataframe_maldi.pkl')
     df_ngs.to_pickle(path+'dataframe_ngs.pkl')
     df_realx.to_pickle(path+'dataframe_x.pkl')
-    json_dump({'param_ode': [x00 for _ in range (len(temps)) for x00 in x10_param]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10_param[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
     return df_mibi, df_maldi, df_ngs, df_realx
 
 
 def model_10sp_2media_exp(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
+    np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13.])
     n_cl = 10
     if inhib:
@@ -239,27 +252,94 @@ def model_10sp_2media_exp(temps, ntr, path='', inhib=False, noise=0., rel_noise=
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [-5., -3., -2., -3., -6., -3., -2., -4., -5., -3.3, # lambda_1
                   0.,  1.,  2.,  3., 1.5, 2.5,  1., 0.5, 0.8,  0.2, # lambda_exp
-                  .2,  .5,  .5,  .5,  .3,  .4,  .3,  .4,  .2,   .5, # alpha0
+                  .2,  .5,  .5,  .5,  .3,  .4,  .3,  .4,  .2,   .1, # alpha0
                   .6,  .3,  .4,  .5,  .2,  .5,  .6,  .3,  .6,  1.3, # alpha1
                   8., 0.5] + kij_list
-    s_x = [ .6, .0, .4, .2, .6, .8, 1., .1, 0., .4,   # s_PC
+    s_x = [ .6, .0, .4, .2, .6, .8, 1., .1, 0., .4,  # s_PC
             0., 1., .1, .3, 0., .5, 0., .5, 1., .1]  # s_MRS
     T_x = [0., 1., 1., 1., 1., 1., 1., 1., 1., 1.]
     param_model = param_ode + s_x + T_x
-    x10_param = [1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.]
-    x0 = [10**L0 for L0 in x10_param] + [1. for _ in range (n_cl+1)]
+    x10_param = [[1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.] for _ in range (len(temps))]
+    #x10_param = np.random.uniform(1., 4.5, size=(len(temps), n_cl))
+    x0 = [[10**L0 for L0 in x10_param[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
     df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
     df_mibi.to_pickle(path+'dataframe_mibi.pkl')
     df_maldi.to_pickle(path+'dataframe_maldi.pkl')
     df_ngs.to_pickle(path+'dataframe_ngs.pkl')
     df_realx.to_pickle(path+'dataframe_x.pkl')
-    json_dump({'param_ode': [x00 for _ in range (len(temps)) for x00 in x10_param]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10_param[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
+    return df_mibi, df_maldi, df_ngs, df_realx
+
+
+def model_10sp_2media_exp_fromzl2030(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
+    np.random.seed(4698517)
+    t = np.array([0., 1., 3., 6., 10., 13.])
+    n_cl = 10
+
+    res_zl2030 = read_from_json('Result_calibration_zl2030.json', dir='out/zl2030/exp_model/calibration/')
+    s_x = np.round((np.array(res_zl2030['s_x'])[:, :-2]).flatten(), 1)
+    T_x = np.array(res_zl2030['T_x'])[:-2]
+    n_cl_zl2030 = 12
+    n_exps_zl2030 = 15
+    param_ode_zl2030 = np.round(np.array(res_zl2030['param_ode'])[n_cl_zl2030*n_exps_zl2030:-2*n_cl_zl2030], 1)
+    lambd_1 = param_ode_zl2030[:n_cl]
+    lambda_exp = param_ode_zl2030[n_cl_zl2030:n_cl_zl2030+n_cl]
+    alpha0 = param_ode_zl2030[2*n_cl_zl2030:2*n_cl_zl2030+n_cl]
+    alpha1 = param_ode_zl2030[3*n_cl_zl2030:3*n_cl_zl2030+n_cl]
+    n_max_param = param_ode_zl2030[4*n_cl_zl2030:4*n_cl_zl2030+2]
+    k_ij = param_ode_zl2030[4*n_cl_zl2030+2:].reshape(n_cl_zl2030, n_cl_zl2030)[:n_cl, :n_cl].flatten()
+    param_ode =  np.concatenate([lambd_1, lambda_exp, alpha0, alpha1, n_max_param, k_ij])
+    param_model = np.concatenate([param_ode, s_x, T_x])
+
+    x10_param = np.random.uniform(1., 4., size=(len(temps), n_cl))
+    x0 = [[10**L0 for L0 in x10_param[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
+    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
+                                                                      noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
+    df_mibi.to_pickle(path+'dataframe_mibi.pkl')
+    df_maldi.to_pickle(path+'dataframe_maldi.pkl')
+    df_ngs.to_pickle(path+'dataframe_ngs.pkl')
+    df_realx.to_pickle(path+'dataframe_x.pkl')
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10_param[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
+    return df_mibi, df_maldi, df_ngs, df_realx
+
+
+def model_10sp_2media_linear_fromzl2030(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
+    np.random.seed(4698517)
+    t = np.array([0., 1., 3., 6., 10., 13.])
+    n_cl = 10
+
+    res_zl2030 = read_from_json('Result_calibration_zl2030.json', dir='out/zl2030/linear_model/calibration/')
+    s_x = np.round((np.array(res_zl2030['s_x'])[:, :-2]).flatten(), 1)
+    T_x = np.array(res_zl2030['T_x'])[:-2]
+    n_cl_zl2030 = 12
+    n_exps_zl2030 = 15
+    param_ode_zl2030 = np.round(np.array(res_zl2030['param_ode'])[n_cl_zl2030*n_exps_zl2030:-2*n_cl_zl2030], 1)
+    lambd_1 = param_ode_zl2030[:n_cl]
+    alpha0 = param_ode_zl2030[n_cl_zl2030:n_cl_zl2030+n_cl]
+    alpha1 = param_ode_zl2030[2*n_cl_zl2030:2*n_cl_zl2030+n_cl]
+    n_max_param = param_ode_zl2030[3*n_cl_zl2030:3*n_cl_zl2030+1]
+    k_ij = param_ode_zl2030[3*n_cl_zl2030+1:].reshape(n_cl_zl2030, n_cl_zl2030)[:n_cl, :n_cl].flatten()
+    param_ode =  np.concatenate([lambd_1, alpha0, alpha1, n_max_param, k_ij])
+    param_model = np.concatenate([param_ode, s_x, T_x])
+
+    x10_param = np.random.uniform(1., 4., size=(len(temps), n_cl))
+    x0 = [[10**L0 for L0 in x10_param[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
+    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
+                                                                      noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
+    df_mibi.to_pickle(path+'dataframe_mibi.pkl')
+    df_maldi.to_pickle(path+'dataframe_maldi.pkl')
+    df_ngs.to_pickle(path+'dataframe_ngs.pkl')
+    df_realx.to_pickle(path+'dataframe_x.pkl')
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10_param[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
     return df_mibi, df_maldi, df_ngs, df_realx
 
 
 def model_13sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
+    np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13.])
     n_cl = 13
     if inhib:
@@ -277,14 +357,15 @@ def model_13sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_nois
            0., 1., .1, .3, 0., .5, 0., .5, 1., .1, .7, .1, .6]   # s_MRS
     T_x = [0., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]
     param_model = param_ode + s_x + T_x
-    x10_param = [1., 2., 1., 5., 2., 1., 2., 1., 2., 1., 4., 1., 2.]
-    x0 = [10**L0 for L0 in x10_param] + [1. for _ in range (n_cl+1)]
+    x10_param = [[1., 2., 1., 5., 2., 1., 2., 1., 2., 1., 4., 1., 2.] for _ in range (len(temps))]
+    #x10_param = np.random.uniform(1., 4.5, size=(len(temps), n_cl))
+    x0 = [[10**L0 for L0 in x10_param[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
     df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
     df_mibi.to_pickle(path+'dataframe_mibi.pkl')
     df_maldi.to_pickle(path+'dataframe_maldi.pkl')
     df_ngs.to_pickle(path+'dataframe_ngs.pkl')
     df_realx.to_pickle(path+'dataframe_x.pkl')
-    json_dump({'param_ode': [x00 for _ in range (len(temps)) for x00 in x10_param]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10_param[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
     return df_mibi, df_maldi, df_ngs, df_realx

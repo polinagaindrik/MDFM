@@ -9,13 +9,13 @@ import time
 if __name__ == "__main__":
     path = 'model_paper/out/'
     workers = -1 
-    add_name = ''
+    add_name = '_2media_selgen'
 
     # 'Real' model:
-    temps = [2., 10., 14.,]
+    temps = [2., 2., 2., 10., 10., 10., 14., 14., 14.,]
     ntr = 1
-    dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(fm.data.model_10sp_2media_exp_fromzl2030, temps, ntr,
-                                                                              inhib=True, noise=0.0, rel_noise=.0,
+    dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(fm.data.model_10sp_2media_expfromzl2030, temps, ntr,
+                                                                              inhib=True, noise=0.1, rel_noise=.15,
                                                                               path=path+'10_dim/', cutoff=0., cutoff_prop=0.)
     (df_mibi, df_maldi, df_ngs) = dfs_calibr
     n_cl = np.shape(dfs_calibr[1])[0]

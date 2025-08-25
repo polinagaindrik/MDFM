@@ -80,10 +80,14 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, clrs=None,
     (df_mibi0, df_maldi0, df_ngs0, ) = dtf.filter_dataframe(exp+'_', data)
     #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
     temp = prediction_setup['exp_temps'][exp]
+    days = dtf.get_meas_days(df_mibi0, exp)
+    t_model = np.linspace(0., np.max(days)+0.7, 100)
+    '''
     if temp == 10. or temp == 14.:
         t_model = np.linspace(0., 10.+0.7, 100)
     else:
         t_model = np.linspace(0., 17.+0.7, 100)
+    '''
     const = [[temp], n_cl]
     C0_opt = np.concatenate((L0, np.ones((n_cl+1))))       
     C = mdl.model_ODE_solution(prediction_setup['model'], t_model, param_opt, C0_opt, const)

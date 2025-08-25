@@ -17,7 +17,7 @@ if __name__ == "__main__":
     ntr = 1
     x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=path)['x0'])[:len(temps), :n_cl]
     S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=path)
-    dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(fm.data.model_10sp_2media_expfromzl2030, temps, ntr, S_matrix_setup, x10=x10,
+    dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(fm.data.model_2media_expfromzl2030, n_cl, temps, ntr, S_matrix_setup, x10=x10,
                                                                               inhib=True, noise=0.1, rel_noise=.15,
                                                                               path=path+'10_dim/', cutoff=0., cutoff_prop=0., add_name=add_name)
     (df_mibi, df_maldi, df_ngs) = dfs_calibr

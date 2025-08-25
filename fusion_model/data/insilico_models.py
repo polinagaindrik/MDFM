@@ -27,8 +27,8 @@ def save_all_dfs(dfs, names=[''], path=''):
         df.to_pickle(path+f'dataframe_{n}.pkl')
 
 
-def prepare_insilico_data(insilico_model, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name=''):
-    data = insilico_model(temps, ntr, S_matrix_setup, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name)
+def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name=''):
+    data = insilico_model(n_cl, temps, ntr, S_matrix_setup, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name)
     dfs = data[:-1]
     (df_mibi, df_maldi, df_ngs) = dfs
     df_ngs, bact_ngs = dtf.preprocess_dataframe(df_ngs, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
@@ -288,11 +288,11 @@ def model_13sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
 '''
 
 ############################# Models for fusion mode paper ##################################
-n_cl_max = 12
-S_general = np.round(np.random.uniform(0.0, 1.0, size=(3, n_cl_max)), 1)
-S_selective = np.round(np.random.uniform(0.0, 05.0, size=(n_cl_max, n_cl_max)) + np.random.uniform(0.6, 0.95, n_cl_max)*np.eye(n_cl_max), 1)
+#n_cl_max = 12
+#S_general = np.round(np.random.uniform(0.0, 1.0, size=(3, n_cl_max)), 1)
+#S_selective = np.round(np.random.uniform(0.0, 05.0, size=(n_cl_max, n_cl_max)) + np.random.uniform(0.6, 0.95, n_cl_max)*np.eye(n_cl_max), 1)
 t = np.array([0., 1., 3., 6., 10., 13.])
-np.random.seed(4698517)
+#np.random.seed(4698517)
 
 def get_res_from_zl2030dict(n_cl, model='linear', dir=''):
     n_cl_zl2030 = 12
@@ -318,9 +318,8 @@ def get_res_from_zl2030dict(n_cl, model='linear', dir=''):
     return s_x, T_x, param_ode
 
 
-#################### 10 species models ##################
-def model_10sp_2media_linearfromzl2030(temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
-    n_cl = 10
+# 10 species models (linear model)
+def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
     s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='linear', dir='out/zl2030/linear_model/calibration/')
     s_x = s_x_zl2030
     param_model = np.concatenate([param_ode, s_x, T_x])
@@ -336,9 +335,28 @@ def model_10sp_2media_linearfromzl2030(temps, ntr, S_matrix_setup, x10=None, pat
     return df_mibi, df_maldi, df_ngs, df_realx
 
 
-def model_10sp_1mediaselect_expfromzl2030(temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
+############################ For experiments with different number of species ############################
+# 10 species model (exponential model)
+def model_2media_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
     np.random.seed(46987)
-    n_cl = 10
+    s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
+    s_x = s_x_zl2030
+    param_model = np.concatenate([param_ode, s_x, T_x])
+    if x10 is not None:
+        x0 = set_initial_vals(x10, temps, n_cl)
+    else:
+        x10, x0 = get_random_initial_vals(temps, n_cl)
+    df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
+                                                                      noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
+    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
+    return df_mibi, df_maldi, df_ngs, df_realx
+
+
+################### Experiments with different media (10 species) #######################
+def model_1mediaselect_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
+    np.random.seed(46987)
     s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
     s_x = s_x_zl2030[:n_cl]
     param_model = np.concatenate([param_ode, s_x, T_x])
@@ -353,28 +371,11 @@ def model_10sp_1mediaselect_expfromzl2030(temps, ntr, S_matrix_setup, x10=None, 
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
     return df_mibi, df_maldi, df_ngs, df_realx
 
-def model_10sp_1mediageneral_expfromzl2030(temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
+
+def model_1mediageneral_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
     np.random.seed(46987)
-    n_cl = 10
     s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
     s_x = s_x_zl2030[n_cl:]
-    param_model = np.concatenate([param_ode, s_x, T_x])
-    if x10 is not None:
-        x0 = set_initial_vals(x10, temps, n_cl)
-    else:
-        x10, x0 = get_random_initial_vals(temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
-                                                                      noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
-    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
-    #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx
-
-def model_10sp_2media_expfromzl2030(temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
-    np.random.seed(46987)
-    n_cl = 10
-    s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
-    s_x = s_x_zl2030
     param_model = np.concatenate([param_ode, s_x, T_x])
     if x10 is not None:
         x0 = set_initial_vals(x10, temps, n_cl)

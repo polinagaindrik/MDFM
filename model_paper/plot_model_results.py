@@ -8,23 +8,22 @@ import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     plt.rcParams['figure.dpi'] = 500
+    n_cl = 4
+    n_media = 2
 
     path = 'model_paper/out/'
-    path2 ='model_paper/out/10_dim/'#calibration/'
-    add_name = ''
+    path2 =f'model_paper/out/{int(n_cl)}_dim/calibration/'
+    add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
     data = fm.dtf.filter_dataframe_regex('V.._', data)
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
-    n_cl = np.shape(data[1])[0]
-    n_media = 2
 
     step = 1
     optim_file2 = f"optimization_history{int(step)}.csv"
     df_optim2 = pd.read_csv(path+optim_file2)
     T_x = [0.] +[1. for _ in range(n_cl-1)]
     # Take optimal parameter values on last optimization step
-    step = 1
     param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
     s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl)) 
     param_ode = param_opt[:-n_cl*n_media]

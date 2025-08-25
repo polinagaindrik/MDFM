@@ -205,7 +205,8 @@ def plot_measurement(ax0, df0, exp, c, lst, scatter_marker):
     days_meas, obs_meas, std_meas = zip(*sorted(zip(days_meas, obs_meas, std_meas)))
     lab = exp
     ax0.errorbar(days_meas, np.log10(np.array(obs_meas)), fmt=scatter_marker,
-                yerr=np.abs(0.43*np.array(std_meas)/np.array(obs_meas)), linestyle=lst, linewidth=1.5,
+                yerr=np.abs(0.43*(0.1+0.15*np.array(obs_meas))/np.array(obs_meas)),#np.abs(0.43*np.array(std_meas)/np.array(obs_meas)),
+                linestyle=lst, linewidth=1.5,
                 markersize=7, color=c, label="{}".format(lab))
 
     

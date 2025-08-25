@@ -9,8 +9,11 @@ import time
 if __name__ == "__main__":
     path = 'model_paper/out/'
     workers = -1
-    n_cl = 10
-    add_name = f'_{int(n_cl)}dim_2media'
+    n_cl = 4
+    n_media = 2
+
+    add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
+    path_new = path+f'{int(n_cl)}_dim/calibration/'
 
     # 'Real' model:
     temps = [2., 2., 2., 10., 10., 10., 14., 14., 14.,]
@@ -18,13 +21,11 @@ if __name__ == "__main__":
     x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=path)['x0'])[:len(temps), :n_cl]
     S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=path)
     dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(fm.data.model_2media_expfromzl2030, n_cl, temps, ntr, S_matrix_setup, x10=x10,
-                                                                              inhib=True, noise=0.1, rel_noise=.15,
-                                                                              path=path+'10_dim/', cutoff=0., cutoff_prop=0., add_name=add_name)
+                                                                              inhib=True, noise=0.1, rel_noise=.15, cutoff=0., cutoff_prop=0.,
+                                                                              path=path_new, add_name=add_name)
     (df_mibi, df_maldi, df_ngs) = dfs_calibr
-    n_cl = np.shape(dfs_calibr[1])[0]
-    path_new = path+f'{int(n_cl)}_dim/calibration/'
+    #n_cl = np.shape(dfs_calibr[1])[0] 
     exps_calibr = sorted(list(set([s.split('_')[0] for s in dfs_calibr[0].columns])))
-    n_media = 2
 
     start = time.time()
     calibr_presetup={

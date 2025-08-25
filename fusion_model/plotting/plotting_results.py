@@ -113,7 +113,7 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
     days_meas, obs_meas = zip(*sorted(zip(days_meas, obs_meas)))
     for k, (o_n, o_meas, bact) in enumerate(zip(np.array(obs_model), np.array(obs_meas).T, df_ngs0.T.columns)):
         if std is None:
-            std = 0 # 0.01 + o_meas*0.1
+            std = 0.1 + o_meas*0.15
         if clrs is not None:
             clr = clrs[bact]
         else:
@@ -146,7 +146,7 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
             else:
                 clr = plt_templ.colors_ngs[4*k]
             if std is None:
-                std = 0#0.01 + o_meas*0.1
+                std = 0.1 + o_meas*0.15
             #ax.plot(days_model, o_m, linewidth=2., label=f'{bact} ({med})', color=clr, linestyle=lnsts[j])
             ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, markersize=8, label=f'{bact} ({med})')
             #ax.scatter(days_model, o_m, linewidth=2., label=f'{bact} ({med})', color='w', marker='o', s=40, edgecolors=clr) #color='w'

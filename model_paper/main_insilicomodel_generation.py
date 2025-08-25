@@ -21,7 +21,7 @@ def generate_S_matrix(n_cl_max, add_name=''):
 if __name__ == "__main__":
    np.random.seed(4698517)
    path = 'model_paper/out/'
-   n_exp_max = 20
+   n_exp_max = 15
    n_cl_max = 12
    add_name = '_paper'
    x10 = fm.data.generate_x0_for_simulation(n_exp_max, n_cl_max, path=path, add_name=add_name)

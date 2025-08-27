@@ -54,7 +54,7 @@ def plot_optimization_result(param_x0, calibr_setup, t_model, **kwargs):
     n_cl = np.shape(data[1])[0]
     param_opt = param_x0[n_cl*len(exps):]
     for i, exp in enumerate(exps):
-        plot_one_exp_model(exp, param_opt, 10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), calibr_setup, t_model, **kwargs)
+        plot_one_exp_model(exp, param_opt, 10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), calibr_setup, t_model, media=calibr_setup['media'], **kwargs)
 
 
 def plot_prediction_result(param, x0_dict, prediction_setup, t_model, **kwargs):
@@ -62,7 +62,7 @@ def plot_prediction_result(param, x0_dict, prediction_setup, t_model, **kwargs):
     param_opt = param
     L0_arr = [10**np.array(x0_dict[exp]) for exp in exps]
     for i, exp in enumerate(exps):
-        plot_one_exp_model(exp, param_opt, L0_arr[i], prediction_setup, t_model, **kwargs)
+        plot_one_exp_model(exp, param_opt, L0_arr[i], prediction_setup, t_model, media=prediction_setup['media'], **kwargs)
 
 
 def plot_prediction_result_x0lambda(param, lambda_dict, x0_dict, prediction_setup, t_model, **kwargs):
@@ -70,10 +70,10 @@ def plot_prediction_result_x0lambda(param, lambda_dict, x0_dict, prediction_setu
     L0_arr = [10**np.array(x0_dict[exp]) for exp in exps]
     for i, exp in enumerate(exps):
         param_opt = np.concatenate((lambda_dict[exp], param))
-        plot_one_exp_model(exp, param_opt, L0_arr[i], prediction_setup, t_model, **kwargs)
+        plot_one_exp_model(exp, param_opt, L0_arr[i], prediction_setup, t_model, media=prediction_setup['media'], **kwargs)
 
 
-def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, clrs=None, path='', add_name=''):
+def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=[''], clrs=None, path='', add_name=''):
     data = prediction_setup['dfs']
     n_cl = np.shape(data[1])[0]
 
@@ -88,7 +88,7 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, clrs=None,
     else:
         t_model = np.linspace(0., 17.+0.7, 100)
     '''
-    const = [[temp], n_cl]
+    const = [[temp], n_cl, media]
     C0_opt = np.concatenate((L0, np.ones((n_cl+1))))       
     C = mdl.model_ODE_solution(prediction_setup['model'], t_model, param_opt, C0_opt, const)
 
@@ -102,11 +102,11 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, clrs=None,
     f_x = mdl.media_filtering(t_model, n_C, prediction_setup['s_x'], n_C0, const)
 
     plot_opt_res_realx(df_ngs0, t_model, n_C, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
-    plot_opt_res_realx(df_ngs0, t_model, f_x[0], exp, path=path+'Sx_media1_', clrs=clrs, add_name=add_name)
-    plot_opt_res_realx(df_ngs0, t_model, f_x[1], exp, path=path+'Sx_media2_', clrs=clrs, add_name=add_name)
+    for i in range (len(media)):
+        plot_opt_res_realx(df_ngs0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name)
     plot_opt_res_ngs(df_ngs0, days_ngs, obs_ngs, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
-    plot_opt_res_maldi(df_maldi0, days_maldi, obs_maldi, exp, media=['MRS', 'PC'], path=path+'Param_estim_', clrs=clrs, add_name=add_name)
-    plot_opt_res_mibi(df_mibi0, days_mibi, obs_mibi, exp, media=['MRS', 'PC'], path=path+'Param_estim_', add_name=add_name)
+    plot_opt_res_maldi(df_maldi0, days_maldi, obs_maldi, exp, media=media, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
+    plot_opt_res_mibi(df_mibi0, days_mibi, obs_mibi, exp, media=media, path=path+'Param_estim_', add_name=add_name)
 
 
 def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None):

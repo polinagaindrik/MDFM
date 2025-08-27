@@ -133,6 +133,8 @@ def plot_measurements_ZL2030_consttemp(ax0, temp, df, c=['b'], lab='',  media=''
         y0_loc = 3.5
     elif media == 'MRS':
         y0_loc = 2.4
+    else:
+        y0_loc = 3. 
     if temp == 2:
         ax0.text(13.6, y0_loc, f'a) {round(temp)}°C', fontsize=20)
     elif temp ==10:

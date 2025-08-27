@@ -33,14 +33,13 @@ def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, x10=
     (df_mibi, df_maldi, df_ngs) = dfs
     df_ngs, bact_ngs = dtf.preprocess_dataframe(df_ngs, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
     df_maldi, bact_maldi = dtf.preprocess_dataframe(df_maldi, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
- 
+    media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
     # Take intersection of ngs and maldi bacteria
     '''
     bact_all = dtf.intersection(bact_ngs.values, bact_maldi.values)
     df_maldi = df_maldi.T[bact_all].T
     df_ngs = df_ngs.T[bact_all].T
     T_x = np.ones((len(bact_all)))
-    media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
     s_x_predefined = np.ones((len(media), len(bact_all)))*np.nan
     for i, med in enumerate(media):
         bact_med_null = df_maldi.filter(like=med)[df_maldi.filter(like=med).T.sum()==0].T.columns
@@ -48,7 +47,7 @@ def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, x10=
         s_x_predefined[i, ind_med_null] = 0.
     '''
     # Take union of ngs and maldi bacteria
-    df_maldi, df_ngs, T_x, s_x_predefined = dtf.make_df_maldi_ngs_compatible(df_maldi, df_ngs, cutoff=0.001)
+    df_maldi, df_ngs, T_x, s_x_predefined = dtf.make_df_maldi_ngs_compatible(df_maldi, df_ngs, cutoff=0.001, media=media)
     bact_all = sorted(set(list(bact_maldi) + list(bact_ngs)))
     save_all_dfs([df_mibi, df_maldi, df_ngs], names=[f'mibi{add_name}_preprocessed', f'maldi{add_name}_preprocessed', f'ngs{add_name}_preprocessed'], path=path)
     return [df_mibi, df_maldi, df_ngs], bact_all, T_x, s_x_predefined
@@ -327,8 +326,9 @@ def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, pa
         x0 = set_initial_vals(x10, temps, n_cl)
     else:
         x10, x0 = get_random_initial_vals(temps, n_cl)
+    media = ['MRS', 'PC']
     df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
-                                                                      noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
+                                                                      noise=noise, rel_noise=rel_noise, media=media)#, jac_func=jacobian_fusion_model)
     save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
@@ -346,8 +346,9 @@ def model_2media_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path=
         x0 = set_initial_vals(x10, temps, n_cl)
     else:
         x10, x0 = get_random_initial_vals(temps, n_cl)
+    media = ['MRS', 'PC']
     df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
-                                                                      noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
+                                                                      noise=noise, rel_noise=rel_noise, media=media)
     save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
@@ -364,8 +365,9 @@ def model_1mediaselect_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None,
         x0 = set_initial_vals(x10, temps, n_cl)
     else:
         x10, x0 = get_random_initial_vals(temps, n_cl)
+    media = ['mediasel1']
     df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
-                                                                      noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
+                                                                      noise=noise, rel_noise=rel_noise, media=media)
     save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
@@ -381,8 +383,9 @@ def model_1mediageneral_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None
         x0 = set_initial_vals(x10, temps, n_cl)
     else:
         x10, x0 = get_random_initial_vals(temps, n_cl)
+    media = ['mediagen1']
     df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
-                                                                      noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
+                                                                noise=noise, rel_noise=rel_noise, media=media)
     save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')

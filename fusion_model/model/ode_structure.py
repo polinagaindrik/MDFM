@@ -4,7 +4,7 @@ import scipy.sparse
 
 
 def fusion_model2(t, x, param, x0, const):
-    (temp_cond, n_cl) = const
+    (temp_cond, n_cl, media) = const
     if np.size(temp_cond) == 1:
         (temp, ) = temp_cond
     else:
@@ -25,7 +25,7 @@ def fusion_model2(t, x, param, x0, const):
 
 
 def fusion_model_linear(t, x, param, x0, const):
-    (temp_cond, n_cl) = const
+    (temp_cond, n_cl, media) = const
     if np.size(temp_cond) == 1:
         (temp, ) = temp_cond
     else:
@@ -48,7 +48,7 @@ def fusion_model_linear(t, x, param, x0, const):
 
 
 def fusion_model_woR(t, x, param, x0, const):
-    (temp_cond, n_cl) = const
+    (temp_cond, n_cl, media) = const
     #if len(temp_cond) == 1:
     #    (temp, ) = temp_cond
     #else:
@@ -65,7 +65,7 @@ def fusion_model_woR(t, x, param, x0, const):
 
 # For polynomial T-dependence of the parameters
 def jacobian_fusion_model(t, x, param, x0, const):
-    (temp_cond, n_cl) = const
+    (temp_cond, n_cl, media) = const
     (temp, ) = temp_cond
     #lambd = 1e-3*param[:n_cl] * temp
     lambd = 10**param[:n_cl]  * temp
@@ -91,7 +91,7 @@ def jacobian_sparsity(n_cl):
 
 
 def fusion_model_woT(t, x, param, x0, const):
-    (temp_cond, n_cl) = const
+    (temp_cond, n_cl, media) = const
     n_max = 10**param[2*n_cl]*2
     lambd = [5e-3*param[i] for i in range (n_cl)]
     alph0 = [param[i+n_cl]*2 for i in range (n_cl)]

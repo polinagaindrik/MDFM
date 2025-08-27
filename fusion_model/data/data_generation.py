@@ -3,8 +3,7 @@ import numpy as np
 import fusion_model.model as mdl
 import fusion_model.tools.dataframe_functions as dtf
 
-
-def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, jac_func=None, **kwargs):
+def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, jac_func=None, media=['media1', 'media2'], **kwargs):
     df_mibi, df_maldi, df_ngs, df_real, df_fullx = [], [], [], [], []
     for j, temp in enumerate(temps):
         exp_start = 1+j #1+n_traj*j
@@ -12,7 +11,7 @@ def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, jac_func=None,
             jac = jac_func#lambda t, x: jac_func(t, x, param[:n_cl*(3+n_cl)+1], x0, [[temp], n_cl])
         else:
             jac = None
-        df_mibi0, df_maldi0, df_ngs0, df_realx0, df_fullx0 = generate_insilico_df(model, t, param, x0[j], [[temp], n_cl], n_traj=n_traj,
+        df_mibi0, df_maldi0, df_ngs0, df_realx0, df_fullx0 = generate_insilico_df(model, t, param, x0[j], [[temp], n_cl, media], n_traj=n_traj,
                                                                                   exp_start_num=exp_start, jac=jac, **kwargs)
         df_mibi.append(df_mibi0)
         df_maldi0[df_maldi0<0] = 0
@@ -58,14 +57,15 @@ def insilico_traj_dataframe(t, n, param, x0, const, create_df_func, bact_name, n
             t_x =  param[-1*const[1]:]
             filt = t_x
         else:
-            s_x = param[-3*const[1]:-1*const[1]]
+            n_media = len(const[2])
+            s_x = param[-(1+n_media)*const[1]:-1*const[1]]
             filt = s_x
         stds = rel_noise*n+noise
         t, observables = obs_func(t, n, filt, x0, const, t, std=stds)
         if obs_func != mdl.observable_x:
             observables = observables + np.random.normal(0., rel_noise*observables+noise, size=np.shape(observables))
         observables[observables<0.00] = 0
-    return create_df_func(t, observables, name_part, bact_name, stds=stds)
+    return create_df_func(t, observables, name_part, bact_name, stds=stds, media=const[2])
 
 
 # The list of possible combinations of parameter combinations, 1D array of probabilities

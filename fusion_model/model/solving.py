@@ -3,7 +3,7 @@ from scipy.integrate import solve_ivp
 
 
 def calc_obs_model(data, param_x0, calibr_setup, t_model):
-    (df_mibi, df_maldi, df_ngs, ) = data
+    (df_mibi, df_maldi, df_ngs,) = data
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     n_cl = np.shape(data[1])[0]
     param_opt = param_x0[n_cl*len(exps):]
@@ -16,7 +16,7 @@ def calc_obs_model(data, param_x0, calibr_setup, t_model):
         #df_mibi0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
         #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
         temp = calibr_setup['exp_temps'][exp]
-        const = [[temp], n_cl]
+        const = [[temp], n_cl, calibr_setup['media']]
         #C0_opt = 1e3*np.concatenate((param_x0_opt[n_cl*i:n_cl*(i+1)],[1e-3 for _ in range(n_cl)]+[1e-3])) 
         C0_opt = np.concatenate((10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), np.ones((n_cl+1))))
         C = model_ODE_solution(calibr_setup['model'], t_model, param_opt, C0_opt, const)
@@ -44,7 +44,7 @@ def get_bacterial_count(x, n_cl, n_states):
 
 # Get [fpc(xi), fmrs(xi)]
 def media_filtering(t, n, s_x, x0, const):
-    (temp_cond, n_cl) = const
+    (temp_cond, n_cl, media) = const
     f_media = np.array(s_x).reshape(-1, n_cl, 1) 
     x_filt = n.reshape((1,)+np.shape(n))*f_media #(n_media, n_sp, n_times)
     return x_filt

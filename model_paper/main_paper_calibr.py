@@ -24,6 +24,7 @@ if __name__ == "__main__":
                                                                               inhib=True, noise=0.1, rel_noise=.15, cutoff=0., cutoff_prop=0.,
                                                                               path=path_new, add_name=add_name)
     (df_mibi, df_maldi, df_ngs) = dfs_calibr
+    media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
     #n_cl = np.shape(dfs_calibr[1])[0] 
     exps_calibr = sorted(list(set([s.split('_')[0] for s in dfs_calibr[0].columns])))
 
@@ -39,6 +40,7 @@ if __name__ == "__main__":
         'aggregation_func': fm.pest.cost_sum_and_geometric_mean,
         'exps': exps_calibr,
         'exp_temps': {exp: temp for exp, temp in zip(exps_calibr, temps)},
+        'media': media, 
         }
     fm.output.json_dump(calibr_presetup['exp_temps'], 'exp_temps_model_paper.json', dir='model_paper/')
     calibr_setup = fm.pest.define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=s_x_predefined, s_x=None) 

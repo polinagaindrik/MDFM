@@ -16,7 +16,7 @@ def squared_differences(param_ode, x0_vals, s_x, calibr_setup, jac_spasity=None)
     for i, exp in enumerate(exps):
         #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
         temp = calibr_setup['exp_temps'][exp]
-        const = [[temp], n_cl]
+        const = [[temp], n_cl, calibr_setup['media']]
 
         C0 = np.concatenate((10**np.array(x0_vals[n_cl*i:n_cl*(i+1)]), np.ones((n_cl+1))))
         C = model_ODE_solution(model, days, param_ode, C0, const)

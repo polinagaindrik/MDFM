@@ -13,14 +13,13 @@ def rest(lst1, lst2):
 
 
 # Create dataframes for lnown days and observables
-def create_df_mibi(days, obs, name_part, bact_name, stds=None):
+def create_df_mibi(days, obs, name_part, bact_name, media=['MRS', 'PC'], stds=None):
     if stds is None:
         stds = np.zeros(np.shape(obs))
     data = {'Properties': ['Average', 'Standard deviation', 'Replicas']}
-    media = sorted(['MRS', 'PC'])
-    for d, o, std in zip(days, obs.T, stds.T):   
-        data["_".join(name_part + [f'{int(d):02d}', f'{media[0]}-mibi'])] = [o[0], std[0], [o[0]]]
-        data["_".join(name_part + [f'{int(d):02d}', f'{media[1]}-mibi'])] = [o[1], std[1], [o[1]]]
+    for d, o, std in zip(days, obs.T, stds.T):
+        for med, o_med, std_med in zip(media, o, std):
+            data["_".join(name_part + [f'{int(d):02d}', f'{med}-mibi'])] = [o_med, std_med, [o_med]]
     return pd.DataFrame(data=data).groupby('Properties').sum()
 
 
@@ -31,18 +30,17 @@ def create_df_sumx(days, obs, name_part, bact_name, stds=None):
     return pd.DataFrame(data=data).groupby('Properties').sum()
 
 
-def create_df_maldi(days, obs, name_part, bact_name, stds=0):
+def create_df_maldi(days, obs, name_part, bact_name, media=['MRS', 'PC'], stds=0):
     data = {"Genus": bact_name}
-    media = sorted(['MRS', 'PC'])
     for d, o in zip(days, obs.T):
-        data["_".join(name_part + [f'{int(d):02d}', f'{media[0]}-maldi'])] = o.T[0]
-        data["_".join(name_part + [f'{int(d):02d}', f'{media[1]}-maldi'])] = o.T[1]
+        for med, o_med in zip(media, o.T):
+            data["_".join(name_part + [f'{int(d):02d}', f'{med}-maldi'])] = o_med
     df = pd.DataFrame(data=data).groupby('Genus').sum()
     #df[df < 0] = 0
     return df.apply(calc_proportion)
 
 
-def create_df_ngs(days, obs, name_part, bact_name, stds=0):
+def create_df_ngs(days, obs, name_part, bact_name, **kwargs):
     data = {"Genus": bact_name}
     for d, o in zip(days, obs.T):
         data["_".join(name_part + [f'{int(d):02d}', 'ngs'])] = o
@@ -51,7 +49,7 @@ def create_df_ngs(days, obs, name_part, bact_name, stds=0):
     return df.apply(calc_proportion)
 
 
-def create_df_x(days, obs, name_part, bact_name, stds=0):
+def create_df_x(days, obs, name_part, bact_name, **kwargs):
     data = {"Genus": bact_name}
     for d, o in zip(days, obs.T):
         data["_".join(name_part + [f'{int(d):02d}', 'realx'])] = o
@@ -134,7 +132,7 @@ def restore_missing_rows(df, clmns):
     return df_new.T.sort_values(by=['Genus'], ascending=True)
 
 
-def make_df_maldi_ngs_compatible(df_maldi, df_ngs, cutoff=0.):
+def make_df_maldi_ngs_compatible(df_maldi, df_ngs, cutoff=0., media=['MRS', 'PC']):
     df_ngs_red, bact_ngs = preprocess_dataframe(df_ngs, cutoff=cutoff)
     df_maldi_red, bact_maldi = preprocess_dataframe(df_maldi, cutoff=cutoff)
 
@@ -148,7 +146,6 @@ def make_df_maldi_ngs_compatible(df_maldi, df_ngs, cutoff=0.):
 
     s_x_predefined =  np.array([np.nan if i in ind_maldi else 0. for i in range (len(bact_all))])
     s_x_predefined[ind_not_in_maldi] = 1.
-    media = ['MRS', 'PC']
     s_x_predefined_fin = np.zeros((len(media), len(s_x_predefined)))
     for i, med in enumerate(media):
         bact_med_null = df_maldi.filter(like=med)[df_maldi.filter(like=med).T.sum()==0].T.columns

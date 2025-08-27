@@ -48,7 +48,8 @@ if __name__ == "__main__":
         'T_x': T_x, #param_real['T_x'],#[0., 1., 1., 1., 1., 1., 1., 1., 1., 1.],
         'output_path': path2,
         'dfs': data,
-        'exp_temps': fm.output.read_from_json(''+'exp_temps_model_paper.json', dir='model_paper/')
+        'exp_temps': fm.output.read_from_json(''+'exp_temps_model_paper.json', dir='model_paper/'),
+        'media': sorted(list(set([s.split('_')[-1].split('-')[0] for s in data[1].columns]))),
     }
     calibr_setup['s_x'] = s_x
     fm.plotting.plot_parameters(param_ode, bact_all, exps, clrs1, path=path2+'optimization/')

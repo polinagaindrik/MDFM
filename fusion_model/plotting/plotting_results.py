@@ -77,7 +77,11 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
     data = prediction_setup['dfs']
     n_cl = np.shape(data[1])[0]
 
-    (df_mibi0, df_maldi0, df_ngs0, ) = dtf.filter_dataframe(exp+'_', data)
+    if len(data) == 3:
+        (df_mibi0, df_maldi0, df_ngs0, ) = dtf.filter_dataframe(exp+'_', data)
+        df_x0 = df_ngs0
+    elif len(data) == 4:
+        (df_mibi0, df_maldi0, df_ngs0, df_x0, ) = dtf.filter_dataframe(exp+'_', data)
     #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
     temp = prediction_setup['exp_temps'][exp]
     days = dtf.get_meas_days(df_mibi0, exp)
@@ -101,16 +105,16 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
 
     f_x = mdl.media_filtering(t_model, n_C, prediction_setup['s_x'], n_C0, const)
 
-    plot_opt_res_realx(df_ngs0, t_model, n_C, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
+    plot_opt_res_realx(df_x0, t_model, n_C, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
     for i in range (len(media)):
-        plot_opt_res_realx(df_ngs0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name)
+        plot_opt_res_realx(df_x0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name)
     plot_opt_res_ngs(df_ngs0, days_ngs, obs_ngs, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
     plot_opt_res_maldi(df_maldi0, days_maldi, obs_maldi, exp, media=media, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
     plot_opt_res_mibi(df_mibi0, days_mibi, obs_mibi, exp, media=media, path=path+'Param_estim_', add_name=add_name)
 
 
 def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None):
-    fig, ax = plt.subplots(figsize=(5, 4.5)) # (4.5, 5)
+    fig, ax = plt.subplots(figsize=(6, 5)) # (4.5, 5)
     fig.subplots_adjust()
     days_meas = [float(f.split('_')[3]) for f in df_ngs0.columns]
     obs_meas = np.array([df_ngs0[f] for f in df_ngs0.columns])
@@ -125,11 +129,14 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
         ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, markersize=8, label=f'{bact}') # , label=f'Data Cl. {k}'
         #ax.scatter(days_model, o_n, linewidth=2., label=f'{bact}', color='w', marker='o', s=40, edgecolors=clr)
         ax.plot(days_model, o_n, linewidth=2., color=clr)      
-    ax.set_title(f'NGS, {exp}', fontsize=15)
-    #fig, ax = set_labels(fig, ax, 'day', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
-    fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
-    ax.set_ylim(-0.05, 1.05)
+    #ax.set_title(f'NGS, {exp}', fontsize=15)
+    fig, ax = plt_templ.set_labels(fig, ax, 'Time', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
+    #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
+    #ax.set_ylim(-0.05, 1.05)
+    ax.set_ylim(-0.05, np.max(obs_meas)*(1+0.2)+0.1)
     ax.set_xlim(np.min(days_meas)-0.7, np.max(days_meas)+0.7)
+    coord_text = (0.13, 0.93)
+    ax.text(*coord_text, '(c) NGS', fontsize=15, horizontalalignment='center', verticalalignment='center', transform = ax.transAxes)
     ax.legend(fontsize=13, framealpha=0., handlelength=1.5, bbox_to_anchor=(1.,1.))# bbox_to_anchor=(1., 0.1, 0.5, 0.5))#, bbox_to_anchor=(1, 1)) # 
     plt.savefig(path+exp+add_name+'_ngs.png', bbox_inches='tight')
     plt.close(fig)
@@ -138,7 +145,7 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
 def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=[' '], path='', add_name='', clrs=None):
     #lnsts = ['solid', 'dashed', '-.']
     for j, med in enumerate(media):
-        fig, ax = plt.subplots(figsize=(5, 4.5))  # (4.5, 5)
+        fig, ax = plt.subplots(figsize=(6, 5))  # (4.5, 5)
         fig.subplots_adjust()
         days_meas = [float(f.split('_')[3]) for f in df_maldi0.filter(like=med).columns]
         obs_meas = np.array([df_maldi0.filter(like=med)[f] for f in df_maldi0.filter(like=med).columns])
@@ -152,13 +159,24 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
             if std is None:
                 std = 0.1 + o_meas*0.15
             #ax.plot(days_model, o_m, linewidth=2., label=f'{bact} ({med})', color=clr, linestyle=lnsts[j])
-            ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, markersize=8, label=f'{bact} ({med})')
+            ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, markersize=8, label=f'{bact}')
             #ax.scatter(days_model, o_m, linewidth=2., label=f'{bact} ({med})', color='w', marker='o', s=40, edgecolors=clr) #color='w'
             ax.plot(days_model, o_m, linewidth=2., color=clr)
-        ax.set_title(f'MALDI-ToF, {exp}', fontsize=15)
-        ax.set_ylim(-0.05, 1.05)
-        #fig, ax = set_labels(fig, ax, 'day', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
-        fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
+        #ax.set_title(f'MALDI-ToF, {exp}', fontsize=15)
+        #ax.set_ylim(-0.05, 1.05)
+        ax.set_ylim(-0.05, np.max(obs_meas)*(1+0.2)+0.1)
+        
+        fig, ax = plt_templ.set_labels(fig, ax, 'Time', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
+        #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
+        
+        coord_text = (0.25, 0.93)
+        if med =='PC' or media =='media1':
+            ax.text(*coord_text, '(a) MALDI, general', fontsize=15,
+                    horizontalalignment='center', verticalalignment='center', transform = ax.transAxes)
+        elif med =='MRS' or media =='media2':
+            ax.text(*coord_text, '(b) MALDI, selective', fontsize=15,
+                        horizontalalignment='center', verticalalignment='center', transform = ax.transAxes)
+
         ax.legend(fontsize=13, framealpha=0., handlelength=1.5, bbox_to_anchor=(1., 1.))#, bbox_to_anchor=(1., 0.1, 0.5, 0.5)) #, bbox_to_anchor=(1, 1)
         ax.set_xlim(np.min(days_meas)-0.7, np.max(days_meas)+0.7)
         plt.savefig(path+exp+add_name+f'_{med}'+'_maldi.png', bbox_inches='tight')
@@ -182,28 +200,32 @@ def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=['']
     ax.set_title('MiBi', fontsize=15)
     ax.set_yscale('log')
     ax.set_xlim(np.min(days_meas)-0.5, np.max(days_meas)+1)
-    #fig, ax = set_labels(fig, ax, 'day', r'log CFU mL$^{-1}$')
-    fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
+    fig, ax = plt_templ.set_labels(fig, ax, 'Time', r'log CFU mL$^{-1}$')
+    #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
     ax.legend(fontsize=13, framealpha=0., handlelength=1.5)
     plt.savefig(path+exp+add_name+'_mibi.png', bbox_inches='tight')
     plt.close(fig)
 
 
 def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None):
-    fig, ax = plt.subplots(figsize=(6, 4.5,))
+    fig, ax = plt.subplots(figsize=(6, 5))
     fig.subplots_adjust()
     bact_all = df0.T.columns
-    for k, o_n in enumerate(np.array(obs_model)):
+    #days_meas = [float(f.split('_')[3]) for f in df0.columns]
+    obs_meas = np.array([df0[f] for f in df0.columns])
+    for k, (o_n, o_meas) in enumerate(zip(np.array(obs_model), np.array(obs_meas).T)):
+    #for k, o_n in enumerate(np.array(obs_model)):
         if clrs is not None:
             clr = clrs[bact_all[k]]
         else:
             clr = plt_templ.colors_ngs[4*k]
         ax.plot(days_model, o_n, linewidth=2., label=f'{bact_all[k]}', color=clr)
+        #ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, markersize=8, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
     ax.set_yscale('log')
-    ax.set_title('Wahrer x(t)-Wert, '+exp, fontsize=15)
+    #ax.set_title('Wahrer x(t)-Wert, '+exp, fontsize=15)
     ax.set_xlim(0., np.max(days_model))
-    #fig, ax = set_labels(fig, ax, 'day', r'log CFU mL$^{-1}$')
-    fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
-    ax.legend(fontsize=13, framealpha=0., handlelength=1.5, bbox_to_anchor=(1, 1))
+    fig, ax = plt_templ.set_labels(fig, ax, 'Time', r'log $x(t)$')
+    #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
+    ax.legend(fontsize=13, framealpha=0., handlelength=1.3, ncol=len(bact_all)//4)#, bbox_to_anchor=(1, 1))
     plt.savefig(path+exp+add_name+'_realx.png', bbox_inches='tight')
     plt.close(fig)

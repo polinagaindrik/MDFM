@@ -12,6 +12,7 @@ def calc_obs_model(data, param_x0, calibr_setup, t_model):
     obs_maldi = np.zeros((len(exps), len(s_x), np.shape(df_maldi)[0], len(t_model)))
     obs_ngs = np.zeros((len(exps), np.shape(df_ngs)[0], len(t_model)))
     temps = []
+    x_count = np.zeros((len(exps) , np.shape(df_maldi)[0], len(t_model)))
     for i, exp in enumerate(exps):
         #df_mibi0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
         #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
@@ -21,13 +22,14 @@ def calc_obs_model(data, param_x0, calibr_setup, t_model):
         C0_opt = np.concatenate((10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), np.ones((n_cl+1))))
         C = model_ODE_solution(calibr_setup['model'], t_model, param_opt, C0_opt, const)
         n_C = get_bacterial_count(C, n_cl, 2)
+        x_count[i] = n_C
         n_C0 = get_bacterial_count(np.array(C0_opt).reshape(len(C0_opt), 1), n_cl, 2)
 
         obs_mibi[i] = observable_MiBi(t_model, n_C, calibr_setup['s_x'], n_C0, const, t_model)[1]
         obs_maldi[i] = observable_MALDI(t_model, n_C, calibr_setup['s_x'], n_C0, const, t_model)[1]
         obs_ngs[i] = observable_NGS(t_model, n_C, calibr_setup['T_x'], n_C0, const, t_model)[1]
         temps.append(temp)
-    return obs_mibi, obs_maldi, obs_ngs, temps
+    return x_count, obs_mibi, obs_maldi, obs_ngs, temps
 
 
 # The model solution for given ODEs

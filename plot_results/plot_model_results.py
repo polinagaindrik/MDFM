@@ -51,7 +51,7 @@ if __name__ == "__main__":
     }
 
     t_model = np.linspace(0., 17., 100)
-    obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, t_model)
+    x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, t_model)
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     #labels = ('day', r'log CFU mL$^{-1}$')
     labels = ('Tag',  r'log CFU mL$^{-1}$')

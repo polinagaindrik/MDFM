@@ -49,7 +49,7 @@ if __name__ == "__main__":
     for exp in exps_predict:
         x0_vals += x0_opt[exp]
     t_model = np.linspace(0., 17., 100)
-    obs_mibi_model, obs_maldi_model, obs_ngsi_model, _ = fm.mdl.calc_obs_model(dfs_prediction, np.concatenate((x0_vals, param_ode)), predict_setup, t_model)
+    x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, _ = fm.mdl.calc_obs_model(dfs_prediction, np.concatenate((x0_vals, param_ode)), predict_setup, t_model)
     #labels = ('day', r'log CFU mL$^{-1}$')
     labels = ('Tag',  r'log CFU mL$^{-1}$')
     for j, media in enumerate(['MRS', 'PC']):
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     x0_vals = []
     for exp in exps_predict:
        x0_vals += x0_opt[exp]
-    obs_mibi_model, obs_maldi_model, obs_ngsi_model, _ = fm.mdl.calc_obs_model(dfs_prediction, np.concatenate((x0_vals, param_ode)), predict_setup, t_model)
+    x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, _ = fm.mdl.calc_obs_model(dfs_prediction, np.concatenate((x0_vals, param_ode)), predict_setup, t_model)
     for j, media in enumerate(['MRS', 'PC']):
         fm.plotting.plot_measurements_ZL2030_Tunterbrech(dfs_prediction[0].filter(like=media), exps_predict, mtimes=t_model,
                                              mestim=obs_mibi_model[:,j, : ], dir=path2, add_name=f'MiBi_{media}_Tunterbrechung_12St')
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     x0_vals = []
     for exp in exps_predict0:
        x0_vals += x0_opt[exp]
-    obs_mibi_model0, obs_maldi_model0, obs_ngsi_model0, _ = fm.mdl.calc_obs_model(dfs_prediction0, np.concatenate((x0_vals, param_ode)), predict_setup, t_model)
+    x_count, obs_mibi_model0, obs_maldi_model0, obs_ngsi_model0, _ = fm.mdl.calc_obs_model(dfs_prediction0, np.concatenate((x0_vals, param_ode)), predict_setup, t_model)
 
     for j, media in enumerate(['MRS', 'PC']):
         fm.plotting.plot_measurements_ZL2030_Tunterbrech(dfs_prediction0[0].filter(like=media), exps_predict0, mtimes=t_model,
@@ -109,7 +109,7 @@ if __name__ == "__main__":
     param_ode = param_ode[n_cl:]
 
     t_model = np.linspace(0., 17., 100)
-    obs_mibi_model, obs_maldi_model, obs_ngs_model, _ = fm.mdl.calc_obs_model(dfs_prediction, np.concatenate((res_opt, param_ode)), predict_setup, t_model)
+    x_count, obs_mibi_model, obs_maldi_model, obs_ngs_model, _ = fm.mdl.calc_obs_model(dfs_prediction, np.concatenate((res_opt, param_ode)), predict_setup, t_model)
     #labels = ('day', r'log CFU mL$^{-1}$')
     labels = ('Tag',  r'log CFU mL$^{-1}$')
     for j, media in enumerate(['MRS', 'PC']):

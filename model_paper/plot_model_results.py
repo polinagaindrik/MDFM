@@ -8,17 +8,21 @@ import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     plt.rcParams['figure.dpi'] = 500
-    n_cl = 4
-    n_media = 2
+    n_cl = 10
+    n_media = 1
 
-    path = 'model_paper/out/'
-    path2 =f'model_paper/out/{int(n_cl)}_dim/calibration/'
-    add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
+    #path = f'model_paper/out/{int(n_cl)}_dim/calibration/' #model_paper/out/'
+    #path2 =f'model_paper/out/{int(n_cl)}_dim/calibration/'
+    #add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
+    path = f'model_paper/out/{int(n_cl)}_dim_{n_media}media_sel/calibration/'
+    path2 =f'model_paper/out/{int(n_cl)}_dim_{n_media}media_sel/calibration/'
+    add_name = f'_{int(n_cl)}dim_{int(n_media)}media_sel'
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
     data = fm.dtf.filter_dataframe_regex('V.._', data)
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in data[1].columns])))
+    df_x = pd.read_pickle(path2+f'dataframe_x{add_name}.pkl')
 
     step = 1
     optim_file2 = f"optimization_history{int(step)}.csv"
@@ -36,13 +40,19 @@ if __name__ == "__main__":
         'output_path': path2,
         'exp_temps': fm.output.read_from_json(''+'exp_temps_model_paper.json', dir='model_paper/'),
         's_x': s_x,
-        'media': media,
+        'media': media, 
     }
-
     t_model = np.linspace(0., 17., 100)
     x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, t_model)
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
-    labels = ('Tag',  r'log CFU mL$^{-1}$')
+    labels = ('Time',  r'log CFU mL$^{-1}$')
     for j, med in enumerate(media):
-        fm.plotting.plot_all([2., 10., 14.], labels, templ_meas=fm.plotting.plot_measurements_ZL2030_consttemp, df=data[0].filter(like=med),
-                 temps=temps_model, mtimes=t_model, mestim=obs_mibi_model[:,j, : ], dir=path2, add_name=f'MiBi_{med}_const_model')
+        fm.plotting.plot_all([2., 10., 14.], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med),
+                 temps=temps_model, mtimes=t_model, mestim=obs_mibi_model[:,j, : ], dir=path2, add_name=f'MiBi_{med}_const_model'+add_name, time_lim=[14, 14, 14])
+        
+    #TODO implement plotting for x(t) for different temperatures
+    for j, med in enumerate(media):
+        for i, temp in enumerate([2., 10., 14.]):
+            obs_mibi = obs_mibi_model[3*i:3*i+3,j,:]
+            fm.plotting.plot_all([temp], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med).filter(like=f'_{int(temp):02d}C_'),
+                    temps=temps_model, mtimes=t_model, mestim=obs_mibi, dir=path2, add_name=f'MiBi_{med}_const_model_{int(temp)}Grad'+add_name, time_lim=[14])

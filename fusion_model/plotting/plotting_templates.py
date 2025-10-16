@@ -108,7 +108,7 @@ def plot_all(temp_plot, labels, templ_meas=template_plot_measurements0, df=[], t
         else:
             plot_model_manytemps(ax0, temp, mtimes, mestim, exps, temps, 'solid')
         templ_meas(ax0, temp, df, c=colors_temps[i], media=media)
-        ax0.legend(fontsize=16, framealpha=0.1, ncol=ncols[i], loc='best')
+        ax0.legend(fontsize=16, framealpha=0.0, ncol=ncols[i], loc='best')
     plt.savefig(dir + f'{add_name}.png', bbox_inches='tight')
     print(dir + f'{add_name}.png')
     plt.close(fig) 
@@ -127,7 +127,7 @@ def template_fig_for_many_temps(temp_plot, xlabel, ylabel, time_lim=[]):
 
 
 def template_fig_1_temp(temp_plot, xlabel, ylabel, tcr, time_lim=[]):
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(6, 5))
     if len(time_lim) != 0:
         ax.set_xlim(-0.2, time_lim[0])
         ticks_val = [int(4*j) for j in range (int(time_lim[0]*0.25)+1)]

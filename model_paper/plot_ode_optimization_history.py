@@ -8,16 +8,17 @@ import pandas as pd
 
 
 if __name__ == "__main__":
-    n_cl = 4
+    n_cl = 10
     n_media = 2
 
-    path = 'model_paper/out/'
+    path = f'model_paper/out/{int(n_cl)}_dim/calibration/'#'model_paper/out/'
     path2 = f'model_paper/out/{int(n_cl)}_dim/calibration/'
     add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
     data = fm.dtf.filter_dataframe_regex('V.._', data)
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
+    df_x = pd.read_pickle(path2+f'dataframe_x{add_name}.pkl')
 
     bact_all = data[1].T.columns
     clrs1 = {}
@@ -31,10 +32,8 @@ if __name__ == "__main__":
     #optim_file2 = f"optimization_history{int(step)}.csv"
     optim_file2 = "optimization_history1.csv"
     df_optim2 = pd.read_csv(path+optim_file2)
-    fm.plotting.plot_cost_function(df_optim2, path=path2+'optimization/', #path, #
-                       add_name=int(step))
-                     
-
+    fm.plotting.plot_cost_function(df_optim2, path=path2+'optimization/', add_name=int(step))
+    
     T_x = [1. for _ in range (n_cl)]
     # Take optimal parameter values on last optimization step
     param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
@@ -54,5 +53,6 @@ if __name__ == "__main__":
     calibr_setup['s_x'] = s_x
     fm.plotting.plot_parameters(param_ode, bact_all, exps, clrs1, path=path2+'optimization/')
 
+    calibr_setup['dfs'] = data+[df_x]
     fm.plotting.plot_optimization_result(np.array(param_ode), calibr_setup, np.linspace(0, 17, 100),
                                     path=path2, clrs=clrs1, add_name='_calibration')

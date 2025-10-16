@@ -8,11 +8,11 @@ import pandas as pd
 
 
 if __name__ == "__main__":
-    n_cl = 10
+    n_cl = 4
     n_media = 2
 
-    path = f'model_paper/out/{int(n_cl)}_dim/calibration/'#'model_paper/out/'
-    path2 = f'model_paper/out/{int(n_cl)}_dim/calibration/'
+    path = 'model_paper/out/'#f'model_paper/out/{int(n_cl)}_dim/calibration/'#
+    path2 = f'model_paper/out/{int(n_cl)}_dim_new/calibration/'
     add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
@@ -51,8 +51,12 @@ if __name__ == "__main__":
         'media': sorted(list(set([s.split('_')[-1].split('-')[0] for s in data[1].columns]))),
     }
     calibr_setup['s_x'] = s_x
-    fm.plotting.plot_parameters(param_ode, bact_all, exps, clrs1, path=path2+'optimization/')
+    
+    res_real = fm.output.read_from_json('Result_temp_together_real.json', dir=path2)
+    param_ode_real = np.array(res_real['param_ode'])[n_cl*len(exps):-2*n_cl]
+
+    fm.plotting.plot_parameters(param_ode, bact_all, exps, clrs1, param_real=param_ode_real, path=path2+'optimization/')
 
     calibr_setup['dfs'] = data+[df_x]
     fm.plotting.plot_optimization_result(np.array(param_ode), calibr_setup, np.linspace(0, 17, 100),
-                                    path=path2, clrs=clrs1, add_name='_calibration')
+                                         path=path2, clrs=clrs1, add_name='_calibration')

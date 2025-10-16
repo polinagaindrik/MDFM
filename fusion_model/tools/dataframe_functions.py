@@ -195,6 +195,18 @@ def extract_observables_from_df_mibi(df_mibi, days, exps, media):
     return obs_mibi, std_mibi
 
 
+def extract_observables_from_df_x(df_x, days, exps, media=None):
+    obs_x = np.zeros((len(exps), np.shape(df_x)[0], len(days)))
+    for i, exp in enumerate(exps):
+        for k, d in enumerate(days):
+            df0 = df_x.filter(like=exp).filter(like=f'_{int(d):02d}_')
+            if np.shape(df0)[-1] != 0.:
+                obs_x[i, :, k] = np.array(df0.T)[0]
+            else:
+                obs_x[i, :, k] = np.nan*np.ones((np.shape(df_x)[0]))
+    return obs_x
+
+
 def extract_observables_from_df(dfs):
     (df_mibi, df_maldi, df_ngs, ) = dfs
     exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))

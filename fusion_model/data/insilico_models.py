@@ -290,7 +290,8 @@ def model_13sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
 #n_cl_max = 12
 #S_general = np.round(np.random.uniform(0.0, 1.0, size=(3, n_cl_max)), 1)
 #S_selective = np.round(np.random.uniform(0.0, 05.0, size=(n_cl_max, n_cl_max)) + np.random.uniform(0.6, 0.95, n_cl_max)*np.eye(n_cl_max), 1)
-t = np.array([0., 1., 3., 6., 10., 13.])
+#t = np.array([0., 1., 3., 6., 10., 13.,])
+t = np.linspace(0., 17., 18)
 #np.random.seed(4698517)
 
 def get_res_from_zl2030dict(n_cl, model='linear', dir=''):
@@ -341,6 +342,8 @@ def model_2media_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path=
     np.random.seed(46987)
     s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
     s_x = s_x_zl2030
+    if inhib == False:
+        param_ode[-n_cl*n_cl:] = 0.
     param_model = np.concatenate([param_ode, s_x, T_x])
     if x10 is not None:
         x0 = set_initial_vals(x10, temps, n_cl)

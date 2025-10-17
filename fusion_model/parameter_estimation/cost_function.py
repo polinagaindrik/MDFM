@@ -2,6 +2,7 @@ import numpy as np
 from scipy.stats.mstats import gmean
 from fusion_model.model.solving import model_ODE_solution, get_bacterial_count
 from fusion_model.model.solving import observable_NGS, observable_MALDI, observable_MiBi
+from fusion_model.parameter_estimation.media_matrix import S_squared_difference
 
 
 def squared_differences(param_ode, x0_vals, s_x, calibr_setup, jac_spasity=None):
@@ -42,7 +43,8 @@ def cost_withS(param, calibr_setup, jac_spasity):
     s_x = np.array(param)[-n_cl*n_media:].reshape((n_media, n_cl))
     x0_vals = param[:n_cl*len(exps)]
     ll_ngs, ll_maldi, ll_mibi = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
-    return calibr_setup['aggregation_func'](ll_ngs, ll_maldi, ll_mibi)
+    ll_s1, ll_s2 = S_squared_difference(np.concatenate((param[-n_cl*n_media:], [1.])), calibr_setup['dfs'], calibr_setup['data_array'], calibr_setup['T_x'])
+    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi, ll_s1])
 
 
 def cost_direct(param, calibr_setup, jac_spasity):
@@ -52,7 +54,7 @@ def cost_direct(param, calibr_setup, jac_spasity):
     param_ode = param[n_cl*len(exps):]
     x0_vals = param[:n_cl*len(exps)]
     ll_ngs, ll_maldi, ll_mibi = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
-    return calibr_setup['aggregation_func'](ll_ngs, ll_maldi, ll_mibi)
+    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])
 
 
 def cost_initvals(param, calibr_setup, jac_spasity):
@@ -62,7 +64,7 @@ def cost_initvals(param, calibr_setup, jac_spasity):
     s_x = calibr_setup['s_x']
     x0_vals = param[:n_cl*len(exps)]
     ll_ngs, ll_maldi, ll_mibi = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
-    return calibr_setup['aggregation_func'](ll_ngs, ll_maldi, ll_mibi)
+    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])
 
 
 def cost_initvals_lambda(param, calibr_setup, jac_spasity):
@@ -73,26 +75,23 @@ def cost_initvals_lambda(param, calibr_setup, jac_spasity):
     x0_vals = param[:n_cl*len(exps)]
     lambd = param[n_cl*len(exps):]
     ll_ngs, ll_maldi, ll_mibi = squared_differences(np.concatenate((lambd, param_ode)), x0_vals, s_x, calibr_setup)
-    return calibr_setup['aggregation_func'](ll_ngs, ll_maldi, ll_mibi)
+    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])
 
 
-def cost_logsumexp(ll_ngs, ll_maldi, ll_mibi):
+def cost_logsumexp(J_vect):#ll_ngs, ll_maldi, ll_mibi):
     a = .1
-    num_meas = np.size(ll_ngs[~np.isnan(ll_ngs)]) + np.size(ll_maldi[~np.isnan(ll_maldi)]) + np.size(ll_mibi[~np.isnan(ll_mibi)]) 
-    return np.log((np.nansum(np.exp(a*ll_ngs)) + np.nansum(np.exp(a*ll_maldi)) + np.nansum(np.exp(a*ll_mibi)))/num_meas)/a
+    num_meas = np.sum([np.size(Ji[~np.isnan(Ji)]) for Ji in J_vect])
+    return np.log(np.nansum([np.nansum(np.exp(a*Ji)) for Ji in J_vect])/num_meas)/a
 
 
-def cost_geometric_mean(ll_ngs, ll_maldi, ll_mibi):
-    num_meas = np.size(ll_ngs[~np.isnan(ll_ngs)]) + np.size(ll_maldi[~np.isnan(ll_maldi)]) + np.size(ll_mibi[~np.isnan(ll_mibi)])
-    return np.nanprod(ll_ngs**(1/num_meas))*np.nanprod(ll_maldi**(1/num_meas))*np.nanprod(ll_mibi)**(1/num_meas)
+def cost_geometric_mean(J_vect):#ll_ngs, ll_maldi, ll_mibi):
+    num_meas = np.sum([np.size(Ji[~np.isnan(Ji)]) for Ji in J_vect])
+    return np.nanprod([Ji**(1/num_meas) for Ji in J_vect])
 
 
-def cost_arithmetic_mean(ll_ngs, ll_maldi, ll_mibi):
-    return np.nanmean([np.nanmean(ll_ngs), np.nanmean(ll_maldi), np.nanmean(ll_mibi)])
+def cost_arithmetic_mean(J_vect):#ll_ngs, ll_maldi, ll_mibi):
+    return np.nanmean([np.nanmean(Ji) for Ji in J_vect])
 
 
-def cost_sum_and_geometric_mean(ll_ngs, ll_maldi, ll_mibi):
-    ngs_term = np.nansum(ll_ngs)
-    maldi_term = np.nansum(ll_maldi)
-    mibi_term = np.nansum(ll_mibi)
-    return gmean([ngs_term, maldi_term, mibi_term], nan_policy='omit', axis=None)
+def cost_sum_and_geometric_mean(J_vect):#ll_ngs, ll_maldi, ll_mibi):
+    return gmean([np.nansum(Ji) for Ji in J_vect], nan_policy='omit', axis=None)

@@ -86,12 +86,6 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
     temp = prediction_setup['exp_temps'][exp]
     days = dtf.get_meas_days(df_mibi0, exp)
     t_model = np.linspace(0., np.max(days)+0.7, 100)
-    '''
-    if temp == 10. or temp == 14.:
-        t_model = np.linspace(0., 10.+0.7, 100)
-    else:
-        t_model = np.linspace(0., 17.+0.7, 100)
-    '''
     const = [[temp], n_cl, media]
     C0_opt = np.concatenate((L0, np.ones((n_cl+1))))       
     C = mdl.model_ODE_solution(prediction_setup['model'], t_model, param_opt, C0_opt, const)
@@ -211,7 +205,7 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
     fig, ax = plt.subplots(figsize=(6, 5))
     fig.subplots_adjust()
     bact_all = df0.T.columns
-    #days_meas = [float(f.split('_')[3]) for f in df0.columns]
+    days_meas = [float(f.split('_')[3]) for f in df0.columns]
     obs_meas = np.array([df0[f] for f in df0.columns])
     for k, (o_n, o_meas) in enumerate(zip(np.array(obs_model), np.array(obs_meas).T)):
     #for k, o_n in enumerate(np.array(obs_model)):
@@ -220,7 +214,7 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
         else:
             clr = plt_templ.colors_ngs[4*k]
         ax.plot(days_model, o_n, linewidth=2., label=f'{bact_all[k]}', color=clr)
-        #ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, markersize=8, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
+        ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, markersize=8, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
     ax.set_yscale('log')
     #ax.set_title('Wahrer x(t)-Wert, '+exp, fontsize=15)
     ax.set_xlim(0., np.max(days_model))

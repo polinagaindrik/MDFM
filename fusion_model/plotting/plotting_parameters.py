@@ -114,7 +114,7 @@ def plot_lambda(lambd, bact_all, clrs1, lambd_real=None, path=''):
 def plot_kij(kij_matrix, bact_all, path=''):
     n_cl = len(bact_all)
     fig, ax = plt.subplots()
-    im = ax.imshow(kij_matrix)
+    im = ax.imshow(kij_matrix, vmin=0.02*(5e-8), vmax=3.*(5e-8))
     fig.colorbar(im, orientation='vertical')
     ax.set_title(r'Inhibitionskoeffizienten $k_{ij}$', fontsize=14)
     ax.set_xticks(np.linspace(0, n_cl-1, n_cl))
@@ -122,6 +122,7 @@ def plot_kij(kij_matrix, bact_all, path=''):
     ax.set_yticks(np.linspace(0, n_cl-1, n_cl))
     ax.set_yticklabels(bact_all, rotation=45, ha='right')
     ax.tick_params(axis='both', which='major', labelsize=12)
+    print(path+'kij.png')
     plt.savefig(path+'kij.png', bbox_inches='tight')
     plt.close(fig)
 
@@ -176,11 +177,12 @@ def plot_parameters(param_ode, bact_all, exps, clrs1, param_real=[], path=''):
 
         plot_lambda((lambd_1, lambd_exp), bact_all, clrs1, lambd_real=(lambd_1_real, lambd_exp_real), path=path)
         plot_alpha((alph0, alph1), bact_all, clrs1, alph_real=(alph0_real, alph1_real), path=path)
+        plot_kij(param_real[4*n_cl+2:].reshape(n_cl, -1)*(5e-8), bact_all, path=path+'real_')
+        plot_kij(param_real[4*n_cl+2:].reshape(n_cl, -1)*(5e-8)-kij_matrix, bact_all, path=path+'diff_')
     else:
         plot_lambda((lambd_1, lambd_exp), bact_all, clrs1, path=path)
         plot_alpha((alph0, alph1), bact_all, clrs1, path=path)
     
-
 
 def plot_cost_function(df_optim, path='', add_name=''):
     fig, ax = plt.subplots()

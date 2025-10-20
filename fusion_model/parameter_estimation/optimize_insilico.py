@@ -29,7 +29,7 @@ def param_bnds_insilico_templinear(n_cl, inhib=True):
                             [(.01,  1.) for _ in range (n_cl)] + # alph_0 
                             [(.2 ,  .6) for _ in range (n_cl)] + # alph_1 
                             [(7.5, 14.)] +      
-                            inhib_bnds), 
+                            inhib_bnds)
     return param_ode_bnds
 
 
@@ -51,10 +51,10 @@ def define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=Non
             S_bnds = []
             for i, s in enumerate(s_x_predefined.flatten()):
                 if np.isnan(s):
-                    S_bnds.append((0.05, 1.)) 
+                    S_bnds.append((0.01, 1.)) 
                 else:
                     S_bnds.append((float(s), float(s)))
         else: 
-            S_bnds = [(0.05, 1.) for _ in range (calibr_presetup['n_cl']*len(calibr_presetup['exps']))]
+            S_bnds = [(0.01, 1.) for _ in range (calibr_presetup['n_cl']*len(calibr_presetup['exps']))]
         calibr_setup['param_bnds'] = calibr_setup['param_bnds'] + tuple(S_bnds)
     return calibr_setup

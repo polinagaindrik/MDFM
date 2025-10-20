@@ -44,7 +44,7 @@ def cost_withS(param, calibr_setup, jac_spasity):
     x0_vals = param[:n_cl*len(exps)]
     ll_ngs, ll_maldi, ll_mibi = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
     ll_s1, ll_s2 = S_squared_difference(np.concatenate((param[-n_cl*n_media:], [1.])), calibr_setup['dfs'], calibr_setup['data_array'], calibr_setup['T_x'])
-    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi, ll_s1])
+    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi, ll_s1, ll_s2])
 
 
 def cost_direct(param, calibr_setup, jac_spasity):

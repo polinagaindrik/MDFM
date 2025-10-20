@@ -57,7 +57,7 @@ def calculate_prediction(cost_func, calibr_setup):
 
 # Parameter estimation using minimizstion of the negative log-likelihood function (func)
 def optimization_func(func, bnds, args=(), workers=1):
-    return differential_evolution(func, args=args, tol=1e-5, atol=1e-5, maxiter=3500, mutation=(0.3, 1.9), recombination=0.7, popsize=30,
+    return differential_evolution(func, args=args, tol=1e-6, atol=1e-6, maxiter=5000, mutation=(0.3, 1.9), recombination=0.7, popsize=30,
                                   bounds=bnds, init='latinhypercube', disp=True, polish=False, updating='deferred', workers=workers,
                                   strategy='randtobest1bin', callback=_callback_ll) #init='sobol'
 

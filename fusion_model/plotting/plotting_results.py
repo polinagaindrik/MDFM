@@ -101,7 +101,7 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
 
     plot_opt_res_realx(df_x0, t_model, n_C, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
     for i in range (len(media)):
-        plot_opt_res_realx(df_x0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name)
+        plot_opt_res_realx(df_x0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name, plot_meas=False)
     plot_opt_res_ngs(df_ngs0, days_ngs, obs_ngs, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
     plot_opt_res_maldi(df_maldi0, days_maldi, obs_maldi, exp, media=media, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
     plot_opt_res_mibi(df_mibi0, days_mibi, obs_mibi, exp, media=media, path=path+'Param_estim_', add_name=add_name)
@@ -201,7 +201,7 @@ def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=['']
     plt.close(fig)
 
 
-def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None):
+def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None, plot_meas=True):
     fig, ax = plt.subplots(figsize=(6, 5))
     fig.subplots_adjust()
     bact_all = df0.T.columns
@@ -214,7 +214,8 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
         else:
             clr = plt_templ.colors_ngs[4*k]
         ax.plot(days_model, o_n, linewidth=2., label=f'{bact_all[k]}', color=clr)
-        ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, markersize=8, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
+        if plot_meas == True:
+            ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, markersize=8, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
     ax.set_yscale('log')
     #ax.set_title('Wahrer x(t)-Wert, '+exp, fontsize=15)
     ax.set_xlim(0., np.max(days_model))

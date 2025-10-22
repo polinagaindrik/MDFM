@@ -297,7 +297,7 @@ t = np.linspace(0., 17., 18)
 def get_res_from_zl2030dict(n_cl, model='linear', dir=''):
     n_cl_zl2030 = 12
     n_exps_zl2030 = 15
-    res_zl2030 = read_from_json('Result_calibration_zl2030.json', dir=dir)
+    res_zl2030 = read_from_json('Result_calibration_zl2030_copy.json', dir=dir)
     s_x = np.round((np.array(res_zl2030['s_x'])[:, :n_cl]).flatten(), 1)
     T_x = np.array(res_zl2030['T_x'])[:n_cl]
     param_ode_zl2030 = np.round(np.array(res_zl2030['param_ode'])[n_cl_zl2030*n_exps_zl2030:-2*n_cl_zl2030], 1)
@@ -322,6 +322,8 @@ def get_res_from_zl2030dict(n_cl, model='linear', dir=''):
 def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
     s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='linear', dir='out/zl2030/linear_model/calibration/')
     s_x = s_x_zl2030
+    if inhib == False:
+        param_ode[-n_cl*n_cl:] = 0.
     param_model = np.concatenate([param_ode, s_x, T_x])
     if x10 is not None:
         x0 = set_initial_vals(x10, temps, n_cl)

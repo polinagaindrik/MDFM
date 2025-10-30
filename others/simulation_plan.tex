@@ -1,0 +1,111 @@
+\documentclass[10pt,A4paper]{article}
+\usepackage[a4paper,
+            inner=2.5cm,
+            outer=3cm
+            ]{geometry}
+\usepackage{acronym}
+\usepackage{amsmath,amssymb}
+\usepackage[aboveskip=1pt,labelfont=bf,labelsep=period,justification=raggedright,singlelinecheck=off]{caption}
+\usepackage{changepage}
+\usepackage{cite}
+\usepackage{nameref,hyperref}
+\usepackage[right]{lineno}
+\usepackage[nopatch=item]{microtype}
+
+\usepackage{xcolor}
+\usepackage{multirow}
+\usepackage{ctable} % for \specialrule command
+\usepackage{graphicx}
+\usepackage{subcaption}
+\newcommand{\chng}[1]{\textcolor{blue} {#1}}
+\newcommand{\chngn}[1]{\textcolor{teal} {#1}}
+
+\begin{document}
+
+\section{Model Complexity}
+
+\begin{table}[htbp]
+\centering
+\caption{Simulation Plan: Varying Species Number}
+\begin{tabular}{@{} cccccl @{}}
+\toprule
+\textbf{\# Sim} & 
+\textbf{\# Species} & 
+\textbf{Noise Level} & 
+\textbf{\# Media} & 
+\textbf{Type of Media} & 
+\textbf{Notes} \\
+\midrule
+1 & \chng{4}  & 0.1  & 2 & gen1 + sel1  &  \\
+2 & \chng{6}  & 0.1  & 2 & gen1 + sel1  &  \\
+3 & \chng{8}  & 0.1  & 2 & gen1 + sel1  &  \\
+4 & \chng{10} & 0.1  & 2 & gen1 + sel1  &  \\
+5 & \chng{12} & 0.1  & 2 & gen1 + sel1  &  \\
+6 & \chng{14} & 0.1  & 2 & gen1 + sel1  &  \\
+\bottomrule
+\end{tabular}
+\label{tab:simulation-plan-species}
+\end{table}
+
+\section{Noise influence}
+\begin{table}[htbp]
+\centering
+\caption{Simulation Plan: Noise vs. Species Number, 2 media (gen1 + sel1)}    
+\begin{tabular}{@{} cccccl @{}}
+\toprule
+\textbf{Noise Level} & \chngn{0} & \chngn{0.1}& \chngn{0.15} & \chngn{0.2} & \chngn{0.25} \\
+\textbf{\# Species} & & & & & \\
+\midrule
+\chng{4}  & - & X & - & - & - \\
+\chng{6}  & - & X & - & - & - \\
+\chng{8}  & - & X & - & - & - \\
+\chng{10} & - & X & - & - & - \\
+\chng{12} & - & X & - & - & - \\
+\chng{14} & - & X & - & - & - \\
+\bottomrule
+\end{tabular}
+\label{tab:simulation-plan-species-noise}
+\end{table}
+
+\section{Media vs. Noise}
+\begin{table}[htbp]
+\centering
+\caption{Simulation Plan: Noise vs. Number of Media, 6 species}    
+\begin{tabular}{@{} cccccl @{}}
+\toprule
+\textbf{Noise Level} & \chngn{0} & \chngn{0.1}& \chngn{0.15} & \chngn{0.2} & \chngn{0.25} \\
+\textbf{\# Media} & & & & & \\
+\midrule
+\chng{1 (sel1)}      & - & - & - & - & - \\
+\chng{1 (gen1)}      & - & - & - & - & - \\
+\chng{2 (sel1+sel2)} & - & - & - & - & - \\
+\chng{2 (sel1+gen1)} & - & X & - & - & - \\
+\chng{3 (sel)}       & - & - & - & - & - \\
+\chng{4 (sel)}       & - & - & - & - & - \\
+\bottomrule
+\end{tabular}
+\label{tab:simulation-plan-media-noise}
+\end{table}
+\newpage
+\section{Media vs. Number of Species}
+\begin{table}[htbp]
+\centering
+\caption{Simulation Plan: Noise vs. Number of Species, 2 media (gen1 + sel1)}    
+\begin{tabular}{@{} cccccl @{}}
+\toprule
+\textbf{\# Species} & \chngn{4} & \chngn{6}& \chngn{8} & \chngn{10} & \chngn{12} \\
+\textbf{\# Media} & & & & & \\
+\midrule
+\chng{1 (sel1)}      & - & - & - & - & - \\
+\chng{1 (gen1)}      & - & - & - & - & - \\
+\chng{2 (sel1+sel2)} & - & - & - & - & - \\
+\chng{2 (sel1+gen1)} & - & X & - & - & - \\
+\chng{3 (sel) ?}     & - & - & - & - & - \\
+\chng{4 (sel) ?}     & - & - & - & - & - \\
+\bottomrule
+\end{tabular}
+\label{tab:simulation-plan-media-species}
+\end{table}
+
+
+\end{document}

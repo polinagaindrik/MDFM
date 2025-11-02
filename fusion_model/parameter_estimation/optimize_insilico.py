@@ -27,7 +27,7 @@ def param_bnds_insilico_templinear(n_cl, inhib=True):
         inhib_bnds = [(0., 0.) for _ in range (n_cl*n_cl)]
     param_ode_bnds = tuple([(-7., -2.)  for _ in range (n_cl)] + # lambd_1
                             [(.01,  1.) for _ in range (n_cl)] + # alph_0 
-                            [(.2 ,  .6) for _ in range (n_cl)] + # alph_1 
+                            [(.1 ,  .6) for _ in range (n_cl)] + # alph_1 
                             [(7.5, 14.)] +      
                             inhib_bnds)
     return param_ode_bnds

@@ -142,7 +142,7 @@ def plot_x0(x0_vals, bact_all, exps, path=''):
     ax.tick_params(axis='both', which='major', labelsize=12)
     ax.tick_params(axis='both', which='major', labelsize=14)
     plt.savefig(path+'init_vals.png', bbox_inches='tight')
-    plt.close(fig) 
+    plt.close(fig)
 
 
 def plot_parameters(param_ode, bact_all, exps, clrs1, param_real=[], path=''):

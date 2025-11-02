@@ -53,8 +53,8 @@ if __name__ == "__main__":
     calibr_setup['s_x'] = s_x
     
     res_real = fm.output.read_from_json('Result_temp_together_real.json', dir=path2)
-    param_ode_real = np.array(res_real['param_ode'])[n_cl*len(exps):-2*n_cl]
-
+    param_ode_real = np.array(res_real['param_ode'])[n_cl*len(exps):]
+    
     fm.plotting.plot_parameters(param_ode, bact_all, exps, clrs1, param_real=param_ode_real, path=path2+'optimization/')
 
     calibr_setup['dfs'] = data+[df_x]

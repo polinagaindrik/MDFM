@@ -322,7 +322,7 @@ def get_res_from_zl2030dict(n_cl, model='linear', dir=''):
 def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
     s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='linear', dir='out/zl2030/linear_model/calibration/')
     s_x = s_x_zl2030
-    if inhib == False:
+    if not inhib:
         param_ode[-n_cl*n_cl:] = 0.
     param_model = np.concatenate([param_ode, s_x, T_x])
     if x10 is not None:
@@ -344,7 +344,7 @@ def model_2media_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path=
     np.random.seed(46987)
     s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
     s_x = s_x_zl2030
-    if inhib == False:
+    if not inhib:
         param_ode[-n_cl*n_cl:] = 0.
     param_model = np.concatenate([param_ode, s_x, T_x])
     if x10 is not None:
@@ -364,7 +364,7 @@ def model_2media_expgensel(n_cl, temps, ntr, S_matrix_setup, x10=None, path='', 
     s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
     s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_general"][0][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
-    if inhib == False:
+    if not inhib:
         param_ode[-n_cl*n_cl:] = 0.
     param_model = np.concatenate([param_ode, s_x, T_x])
     if x10 is not None:

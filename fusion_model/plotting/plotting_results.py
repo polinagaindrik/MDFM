@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
 import numpy as np
 
 from . import plotting_templates as plt_templ
@@ -202,11 +203,13 @@ def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=['']
 
 
 def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None, plot_meas=True):
-    fig, ax = plt.subplots(figsize=(6, 5))
+    fig, ax = plt.subplots(figsize=(7, 5))
     fig.subplots_adjust()
     bact_all = df0.T.columns
     days_meas = [float(f.split('_')[3]) for f in df0.columns]
     obs_meas = np.array([df0[f] for f in df0.columns])
+    temp = float(df0.columns[0].split("_")[2][:-1])
+    lines = []
     for k, (o_n, o_meas) in enumerate(zip(np.array(obs_model), np.array(obs_meas).T)):
     #for k, o_n in enumerate(np.array(obs_model)):
         if clrs is not None:
@@ -214,13 +217,30 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
         else:
             clr = plt_templ.colors_ngs[4*k]
         ax.plot(days_model, o_n, linewidth=2., label=f'{bact_all[k]}', color=clr)
-        if plot_meas == True:
+        if plot_meas:
             ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, markersize=8, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
+        
+        lines.append(mlines.Line2D([], [], color=clr, marker='o', markersize=8, linewidth=2., label=f'{bact_all[k]}'))
     ax.set_yscale('log')
     #ax.set_title('Wahrer x(t)-Wert, '+exp, fontsize=15)
-    ax.set_xlim(0., np.max(days_model))
-    fig, ax = plt_templ.set_labels(fig, ax, 'Time', r'log $x(t)$')
+    ax.set_xlim(-0.3, np.max(days_model)+0.3)
+    ax.set_ylim(np.min(obs_meas)*0.1, np.max(obs_meas)*2.5)
+    if temp != 2.0:
+        ax.set_xlim(-0.3, 10.5)
+        ax.set_ylim(np.min(obs_meas)*0.5, np.max(obs_meas)*2.5)
+    fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'log $x(t)$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
-    ax.legend(fontsize=13, framealpha=0., handlelength=1.3, ncol=len(bact_all)//4)#, bbox_to_anchor=(1, 1))
+    coord_text = (0.95, 0.07)
+    if temp == 2.0:
+        text_lbl = '(a)'
+    elif temp == 6.0:
+        text_lbl = '(b)'
+    else:
+        text_lbl = '(c)'
+    ax.text(*coord_text, text_lbl, fontsize=20, horizontalalignment='center', verticalalignment='center', transform = ax.transAxes)
+    
+    ax.legend(fontsize=13, framealpha=0., handlelength=1.5, ncol=len(bact_all)//4,
+              handles=lines)
+    #ax.legend(fontsize=13, framealpha=0., handlelength=1.3, ncol=len(bact_all)//4)#, bbox_to_anchor=(1, 1))
     plt.savefig(path+exp+add_name+'_realx.png', bbox_inches='tight')
     plt.close(fig)

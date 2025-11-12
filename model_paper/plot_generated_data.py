@@ -41,7 +41,7 @@ if __name__ == "__main__":
         's_x': s_x,
         'media': media, 
     }
-    t_model = np.linspace(0., 17., 100)
+    t_model = np.linspace(0., 18., 100)
     x_count, obs_mibi_model, obs_maldi_model, obs_ngs_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, t_model)
 
     # Plotting
@@ -52,6 +52,5 @@ if __name__ == "__main__":
         fm.plotting.plot_opt_res_mibi(df_mibi.filter(like=exp), t_model, obs_mibi_model[int(exp[1:])-1], exp, media=['sel1', 'gen1'], path=path_datagen+'Data_generation_', add_name=add_name)
             
         # Check if results are correct here?
-        fm.plotting.plot_opt_res_maldi(df_maldi.filter(like=exp), t_model, obs_maldi_model[int(exp[1:])-1], exp, media=['sel1'], path=path_datagen+'Data_generation_', add_name=add_name)
-        fm.plotting.plot_opt_res_maldi(df_maldi.filter(like=exp), t_model, obs_maldi_model[int(exp[1:])-1], exp, media=['gen1'], path=path_datagen+'Data_generation_', add_name=add_name)
+        fm.plotting.plot_opt_res_maldi(df_maldi.filter(like=exp), t_model, obs_maldi_model[int(exp[1:])-1], exp, media=['sel1', 'gen1'], path=path_datagen+'Data_generation_', add_name=add_name)
       

@@ -107,7 +107,7 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
     days = dtf.get_meas_days(df_mibi0, exp)
     t_model = np.linspace(0., np.max(days)+0.7, 100)
     const = [[temp], n_cl, media]
-    C0_opt = np.concatenate((L0, np.ones((n_cl+1))))       
+    C0_opt = np.concatenate((L0, np.ones((n_cl+1))))
     C = mdl.model_ODE_solution(prediction_setup['model'], t_model, param_opt, C0_opt, const)
 
     n_C = mdl.get_bacterial_count(C, n_cl, 2)

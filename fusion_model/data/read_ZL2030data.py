@@ -142,7 +142,7 @@ def read_mibi(exp_name, dir_data=''):
             if fspl[4] == 'REPACK':
                 f1 = "-".join([fspl[0], fspl[3], fspl[5], 'RP'])
             else:
-                f1 = "-".join([fspl[0], fspl[3], fspl[4], fspl[5]])            
+                f1 = "-".join([fspl[0], fspl[3], fspl[4], fspl[5]])
         df_select = df0[df0[df0.columns[0]] == f].iloc[:, 2:]
         df_select = df_select.values[~np.isnan(df_select.values)]
 

@@ -66,7 +66,7 @@ def observable_MiBi_woS(t, n, s_x, x0, const, t_meas, std=0.):
 def observable_MALDI(t, n, s_x, x0, const, t_meas, std=0.):
     n = np.array([xx for tt, xx in zip(t, n.T) if tt in t_meas]).T
     f_x = media_filtering(t, n, s_x, x0, const)
-    f_x = f_x + np.random.normal(0., std, size=np.shape(f_x)) 
+    f_x = f_x + np.random.normal(0., std, size=np.shape(f_x))
     f_x[f_x<=0.005] = 0
     return t_meas, np.array([f/np.sum(f, axis=0) for f in f_x])
 

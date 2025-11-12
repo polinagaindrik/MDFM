@@ -53,17 +53,17 @@ def plot_measurements_insilico(ax0, temp, df, c=['b'], lab='',  media=''):
                 horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)
         elif temp == 6:#10:
             ax0.text(*coord_text, f'(b) {round(temp)}°C, general', fontsize=20,
-                    horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)  
+                    horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)
         else:
             ax0.text(*coord_text, f'(c) {round(temp)}°C, general', fontsize=20,
-                    horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)    
+                    horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)
     elif media =='MRS' or media =='media2' or media =='sel1':
         if temp == 2:
             ax0.text(*coord_text, f'(d) {round(temp)}°C, selective', fontsize=20,
                 horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)
         elif temp == 6:#10:
             ax0.text(*coord_text, f'(e) {round(temp)}°C, selective', fontsize=20,
-                    horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)  
+                    horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)
         else:
             ax0.text(*coord_text, f'(f) {round(temp)}°C, selective', fontsize=20,
                     horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)

@@ -51,7 +51,7 @@ if __name__ == "__main__":
     for exp in exps3:
         print(exp)
         df0_o = df.filter(like=exp+'_').filter(like='_o-').filter(like='M1')
-        days_meas0_o = [float(f.split('_')[3]) for f in df0_o.columns]     
+        days_meas0_o = [float(f.split('_')[3]) for f in df0_o.columns]
         a_o0 = [df0_o[f]['a*(D65)'] for f in df0_o.columns]
         b_o0 = [df0_o[f]['b*(D65)'] for f in df0_o.columns]
         L_o0 = [df0_o[f]['L*(D65)'] for f in df0_o.columns]

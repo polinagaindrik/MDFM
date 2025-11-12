@@ -14,7 +14,7 @@ def calc_Pmatrix(data, transform_func, n_cl, n_cl_red, s_x, temps=[], workers=1,
     calibr_setup_proj={
         'param_bnds': tuple(p_bnds),
         'workers': workers, # number of threads for multiprocessing
-    }   
+    }
     if len(temps) == 0:
         Pmatrix, x0_tran, df_ngs_new, df_maldi_new = find_projection_matrix(df_ngs, df_maldi, transform_func, s_x, n_cl_red, calibr_setup_proj)
         json_dump({'P_matrix': Pmatrix.astype(list), 'x0': x0_tran.astype(list)}, 'Pmatrix_temp_together'+add_name+'.json', dir=path)

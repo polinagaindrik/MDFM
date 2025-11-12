@@ -47,23 +47,23 @@ def plot_measurements_insilico(ax0, temp, df, c=['b'], lab='',  media=''):
         if exp != 'V10':
             plt_templ.plot_measurement(ax0, df0.filter(like=exp+'_'), exp, plt_templ.exp_clrs[exp], lst[i], scatter_marker[i])
     coord_text = (0.77, 0.07)
-    if media =='PC' or media =='media1':
+    if media =='PC' or media =='media1' or media =='gen1':
         if temp == 2:
-            ax0.text(*coord_text, f'a) {round(temp)}°C, general', fontsize=20,
+            ax0.text(*coord_text, f'(a) {round(temp)}°C, general', fontsize=20,
                 horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)
         elif temp == 6:#10:
-            ax0.text(*coord_text, f'b) {round(temp)}°C, general', fontsize=20,
+            ax0.text(*coord_text, f'(b) {round(temp)}°C, general', fontsize=20,
                     horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)  
         else:
-            ax0.text(*coord_text, f'c) {round(temp)}°C, general', fontsize=20,
+            ax0.text(*coord_text, f'(c) {round(temp)}°C, general', fontsize=20,
                     horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)    
-    elif media =='MRS' or media =='media2':
+    elif media =='MRS' or media =='media2' or media =='sel1':
         if temp == 2:
-            ax0.text(*coord_text, f'd) {round(temp)}°C, selective', fontsize=20,
+            ax0.text(*coord_text, f'(d) {round(temp)}°C, selective', fontsize=20,
                 horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)
         elif temp == 6:#10:
-            ax0.text(*coord_text, f'e) {round(temp)}°C, selective', fontsize=20,
+            ax0.text(*coord_text, f'(e) {round(temp)}°C, selective', fontsize=20,
                     horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)  
         else:
-            ax0.text(*coord_text, f'f) {round(temp)}°C, selective', fontsize=20,
+            ax0.text(*coord_text, f'(f) {round(temp)}°C, selective', fontsize=20,
                     horizontalalignment='center', verticalalignment='center', transform = ax0.transAxes)

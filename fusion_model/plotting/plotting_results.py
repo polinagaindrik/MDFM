@@ -1,12 +1,31 @@
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
+from matplotlib import rcParams
 import numpy as np
 
 from . import plotting_templates as plt_templ
 from ..parameter_estimation.media_matrix import Scost_ngsterm, Scost_s0term
 import fusion_model.tools.dataframe_functions as dtf
 import fusion_model.model as mdl
-#from ..dimension_reduction import *
+
+# Set common plotting parameters for all figures
+plt.rc('text', usetex=True)
+rcParams['text.latex.preamble'] = r"\usepackage{bm} \usepackage{amsmath}"
+
+rcParams['lines.linewidth'] = 2.
+rcParams['lines.linestyle'] = 'solid' #'dashed'#
+rcParams['lines.markersize'] = 8
+rcParams['figure.figsize'] = (7, 5)
+rcParams['legend.framealpha'] = 0.
+rcParams['legend.handlelength'] = 2.
+
+rcParams['xtick.labelsize'] = 13
+rcParams['ytick.labelsize'] = 13
+rcParams['axes.labelsize'] = 15
+rcParams['legend.fontsize'] = 13
+
+rcParams['figure.dpi'] = 500
+#rcParams['savefig.format'] = 'pdf'
 
 
 def define_bacteria_colors(df_ngs, df_maldi):
@@ -31,7 +50,7 @@ def plot_filteringS2(dfs, opt_param, T_x, exps, path='', clrs=None):
             fig, ax = plt.subplots(figsize=(5, 5))
             for j, bact in enumerate(df_maldi.T.columns):
                 ax.scatter(np.array(days_total)[~np.isnan(rhs1[i, j])], rhs1[i, j][~np.isnan(rhs1[i, j])], color=plt_templ.colors_ngs[j], s=60, label=f'{bact}') # ({med})
-                ax.plot(np.array(days_total)[~np.isnan(lhs1[i, j])], lhs1[i, j][~np.isnan(lhs1[i, j])], linewidth=2., color=plt_templ.colors_ngs[j])
+                ax.plot(np.array(days_total)[~np.isnan(lhs1[i, j])], lhs1[i, j][~np.isnan(lhs1[i, j])], color=plt_templ.colors_ngs[j])
             #ax.set_title('Cost 1')
             fig, ax = plt_templ.set_labels(fig, ax, 'day', r'$J_1$')
             #ax.set_ylim(-0.01, 0.2)
@@ -42,7 +61,7 @@ def plot_filteringS2(dfs, opt_param, T_x, exps, path='', clrs=None):
         fig, ax = plt.subplots(figsize=(5, 5))
         for j, bact in enumerate(df_ngs.T.columns):
             ax.scatter(np.array(days_total)[~np.isnan(rhs2[j])], rhs2[j][~np.isnan(rhs2[j])], color=plt_templ.colors_ngs[j], s=60, label=f'{bact}') # ({med})
-            ax.plot(np.array(days_total)[~np.isnan(lhs2[j])], lhs2[j][~np.isnan(lhs2[j])], linewidth=2., color=plt_templ.colors_ngs[j])
+            ax.plot(np.array(days_total)[~np.isnan(lhs2[j])], lhs2[j][~np.isnan(lhs2[j])], color=plt_templ.colors_ngs[j])
         fig, ax = plt_templ.set_labels(fig, ax, 'day', r'$J_2$')
         ax.legend(fontsize=17, framealpha=0., handlelength=1.5, bbox_to_anchor=(1, 1)) # 
         plt.savefig(path+exp+'_cost2.png', bbox_inches='tight')
@@ -109,101 +128,106 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
 
 
 def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None):
-    fig, ax = plt.subplots(figsize=(6, 5)) # (4.5, 5)
+    fig, ax = plt.subplots()
     fig.subplots_adjust()
     days_meas = [float(f.split('_')[3]) for f in df_ngs0.columns]
     obs_meas = np.array([df_ngs0[f] for f in df_ngs0.columns])
     days_meas, obs_meas = zip(*sorted(zip(days_meas, obs_meas)))
+    lines = []
     for k, (o_n, o_meas, bact) in enumerate(zip(np.array(obs_model), np.array(obs_meas).T, df_ngs0.T.columns)):
         if std is None:
-            std = 0.1 + o_meas*0.15
+            std = o_meas*.1
         if clrs is not None:
             clr = clrs[bact]
         else:
             clr = plt_templ.colors_ngs[4*k]
-        ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, markersize=8, label=f'{bact}') # , label=f'Data Cl. {k}'
-        #ax.scatter(days_model, o_n, linewidth=2., label=f'{bact}', color='w', marker='o', s=40, edgecolors=clr)
-        ax.plot(days_model, o_n, linewidth=2., color=clr)      
+        ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, label=f'{bact}') # , label=f'Data Cl. {k}'
+        #ax.scatter(days_model, o_n,label=f'{bact}', color='w', marker='o', s=40, edgecolors=clr)
+        ax.plot(days_model, o_n, color=clr)
+        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'{bact}'))
     #ax.set_title(f'NGS, {exp}', fontsize=15)
-    fig, ax = plt_templ.set_labels(fig, ax, 'Time', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
+    fig, ax = plt_templ.set_labels(fig, ax,  r'Time, $t$', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
     #ax.set_ylim(-0.05, 1.05)
     ax.set_ylim(-0.05, np.max(obs_meas)*(1+0.2)+0.1)
-    ax.set_xlim(np.min(days_meas)-0.7, np.max(days_meas)+0.7)
-    coord_text = (0.13, 0.93)
-    ax.text(*coord_text, '(c) NGS', fontsize=15, horizontalalignment='center', verticalalignment='center', transform = ax.transAxes)
-    ax.legend(fontsize=13, framealpha=0., handlelength=1.5, bbox_to_anchor=(1.,1.))# bbox_to_anchor=(1., 0.1, 0.5, 0.5))#, bbox_to_anchor=(1, 1)) # 
+    ax.set_xlim(np.min(days_meas)-0.5, np.max(days_meas)+0.5)
+    coord_text = (0.06, 0.92)
+    ax.text(*coord_text, '(b)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+    ax.legend(handles=lines, ncol=2)
+    #ax.legend(fontsize=13, framealpha=0., handlelength=2., bbox_to_anchor=(1.,1.))# bbox_to_anchor=(1., 0.1, 0.5, 0.5))#, bbox_to_anchor=(1, 1)) # 
     plt.savefig(path+exp+add_name+'_ngs.png', bbox_inches='tight')
     plt.close(fig)
 
 
 def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=[' '], path='', add_name='', clrs=None):
-    #lnsts = ['solid', 'dashed', '-.']
     for j, med in enumerate(media):
-        fig, ax = plt.subplots(figsize=(6, 5))  # (4.5, 5)
+        fig, ax = plt.subplots()
         fig.subplots_adjust()
         days_meas = [float(f.split('_')[3]) for f in df_maldi0.filter(like=med).columns]
         obs_meas = np.array([df_maldi0.filter(like=med)[f] for f in df_maldi0.filter(like=med).columns])
         days_meas, obs_meas = zip(*sorted(zip(days_meas, obs_meas)))
-        o_model = obs_model[j]     
+        o_model = obs_model[j]
+        lines = []
         for k, (o_m, o_meas, bact) in enumerate(zip(np.array(o_model), np.array(obs_meas).T, df_maldi0.T.columns)):
             if clrs is not None:
                 clr = clrs[bact]
             else:
                 clr = plt_templ.colors_ngs[4*k]
             if std is None:
-                std = 0.1 + o_meas*0.15
-            #ax.plot(days_model, o_m, linewidth=2., label=f'{bact} ({med})', color=clr, linestyle=lnsts[j])
-            ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, markersize=8, label=f'{bact}')
-            #ax.scatter(days_model, o_m, linewidth=2., label=f'{bact} ({med})', color='w', marker='o', s=40, edgecolors=clr) #color='w'
-            ax.plot(days_model, o_m, linewidth=2., color=clr)
-        #ax.set_title(f'MALDI-ToF, {exp}', fontsize=15)
-        #ax.set_ylim(-0.05, 1.05)
-        ax.set_ylim(-0.05, np.max(obs_meas)*(1+0.2)+0.1)
-        
-        fig, ax = plt_templ.set_labels(fig, ax, 'Time', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
+                std = o_meas*0.1
+            ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, label=f'{bact}')
+            ax.plot(days_model, o_m, color=clr)
+            lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'{bact}'))
+        ax.set_ylim(-0.05, np.max([np.max(obs_meas), np.max(o_model)])*1.1)#+0.1)
+        ax.set_xlim(np.min(days_meas)-0.5, np.max(days_meas)+0.5)
+        fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         
-        coord_text = (0.25, 0.93)
-        if med =='PC' or media =='media1':
-            ax.text(*coord_text, '(a) MALDI, general', fontsize=15,
-                    horizontalalignment='center', verticalalignment='center', transform = ax.transAxes)
-        elif med =='MRS' or media =='media2':
-            ax.text(*coord_text, '(b) MALDI, selective', fontsize=15,
-                        horizontalalignment='center', verticalalignment='center', transform = ax.transAxes)
-
-        ax.legend(fontsize=13, framealpha=0., handlelength=1.5, bbox_to_anchor=(1., 1.))#, bbox_to_anchor=(1., 0.1, 0.5, 0.5)) #, bbox_to_anchor=(1, 1)
-        ax.set_xlim(np.min(days_meas)-0.7, np.max(days_meas)+0.7)
+        coord_text = (0.06, 0.92)
+        if med=='PC' or med=='media1' or med=='gen1':
+            ax.text(*coord_text, '(c)', fontsize=20,
+                    horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            ax.legend(handles=lines, bbox_to_anchor=(0.68, 0.52, 0.0, 0.0))
+        elif med =='MRS' or med =='media2' or med=='sel1':
+            ax.text(*coord_text, '(d)', fontsize=20,
+                    horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+            ax.legend(handles=lines)
+        #ax.legend(bbox_to_anchor=(1., 1.))#, bbox_to_anchor=(1., 0.1, 0.5, 0.5)) #, bbox_to_anchor=(1, 1)
         plt.savefig(path+exp+add_name+f'_{med}'+'_maldi.png', bbox_inches='tight')
         plt.close(fig)
     
 
 def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=[''], path='', add_name='', clrs=None):
-    fig, ax = plt.subplots(figsize=(5, 4.5)) # (4.5, 5)
+    fig, ax = plt.subplots()
     fig.subplots_adjust()
+    lines = []
     for j, med in enumerate(media):
+        if med ==  'PC' or med == 'media1' or med=='gen1':
+            med_label = 'general'
+        else:
+            med_label = 'selective'
         days_meas = [float(f.split('_')[3]) for f in df_mibi0.filter(like=med).columns]
         obs_meas = np.array([df_mibi0.filter(like=med)[f]['Average'] for f in df_mibi0.filter(like=med).columns])
         stds = np.array([df_mibi0.filter(like=med)[f]['Standard deviation'] for f in df_mibi0.filter(like=med).columns])
-        days_meas, obs_meas = zip(*sorted(zip(days_meas, obs_meas)))
+        stds = 0.1*obs_meas
+        days_meas, obs_meas, stds = zip(*sorted(zip(days_meas, obs_meas, stds)))
         o_model = obs_model[j]
-        #if std is None:
-        #    std = #0.01 + np.array(obs_meas)*0.1
-        ax.plot(days_model, o_model, label=f'Model (media {med})', linewidth=2.,  color=plt_templ.colors_ngs[2*j])
-        ax.errorbar(days_meas, obs_meas, yerr=stds, fmt='o', color=plt_templ.colors_ngs[2*j]) # label=f'Data (media {j+1})',
-    ax.set_title(exp)
-    ax.set_title('MiBi', fontsize=15)
+        ax.plot(days_model, o_model, color=plt_templ.colors_ngs[2*j], label=med_label+' media (model)')
+        ax.errorbar(days_meas, obs_meas, yerr=stds, fmt='o', color=plt_templ.colors_ngs[2*j], label=med_label+' media (data)')
+        lines.append(mlines.Line2D([], [], color=plt_templ.colors_ngs[2*j], marker='o', label=med_label+' media'))
+    coord_text = (0.06, 0.92)
+    ax.text(*coord_text, '(a)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     ax.set_yscale('log')
-    ax.set_xlim(np.min(days_meas)-0.5, np.max(days_meas)+1)
-    fig, ax = plt_templ.set_labels(fig, ax, 'Time', r'log CFU mL$^{-1}$')
+    ax.set_xlim(np.min(days_meas)-0.5, np.max(days_meas)+0.5)
+    fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'log CFU mL$^{-1}$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
-    ax.legend(fontsize=13, framealpha=0., handlelength=1.5)
+    ax.legend()#, handles=lines)
     plt.savefig(path+exp+add_name+'_mibi.png', bbox_inches='tight')
     plt.close(fig)
 
 
 def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None, plot_meas=True):
-    fig, ax = plt.subplots(figsize=(7, 5))
+    fig, ax = plt.subplots()
     fig.subplots_adjust()
     bact_all = df0.T.columns
     days_meas = [float(f.split('_')[3]) for f in df0.columns]
@@ -211,19 +235,16 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
     temp = float(df0.columns[0].split("_")[2][:-1])
     lines = []
     for k, (o_n, o_meas) in enumerate(zip(np.array(obs_model), np.array(obs_meas).T)):
-    #for k, o_n in enumerate(np.array(obs_model)):
         if clrs is not None:
             clr = clrs[bact_all[k]]
         else:
             clr = plt_templ.colors_ngs[4*k]
-        ax.plot(days_model, o_n, linewidth=2., label=f'{bact_all[k]}', color=clr)
+        ax.plot(days_model, o_n, label=f'{bact_all[k]}', color=clr)
         if plot_meas:
-            ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, markersize=8, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
-        
-        lines.append(mlines.Line2D([], [], color=clr, marker='o', markersize=8, linewidth=2., label=f'{bact_all[k]}'))
+            ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
+        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'{bact_all[k]}'))
     ax.set_yscale('log')
-    #ax.set_title('Wahrer x(t)-Wert, '+exp, fontsize=15)
-    ax.set_xlim(-0.3, np.max(days_model)+0.3)
+    ax.set_xlim(-0.3, np.max(days_meas)+0.3)
     ax.set_ylim(np.min(obs_meas)*0.1, np.max(obs_meas)*2.5)
     if temp != 2.0:
         ax.set_xlim(-0.3, 10.5)
@@ -237,10 +258,8 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
         text_lbl = '(b)'
     else:
         text_lbl = '(c)'
-    ax.text(*coord_text, text_lbl, fontsize=20, horizontalalignment='center', verticalalignment='center', transform = ax.transAxes)
-    
-    ax.legend(fontsize=13, framealpha=0., handlelength=1.5, ncol=len(bact_all)//4,
-              handles=lines)
-    #ax.legend(fontsize=13, framealpha=0., handlelength=1.3, ncol=len(bact_all)//4)#, bbox_to_anchor=(1, 1))
+    ax.text(*coord_text, text_lbl, fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+    ax.legend(ncol=len(bact_all)//4, handles=lines)
+    #ax.legend(handlelength=1.3, ncol=len(bact_all)//4)#, bbox_to_anchor=(1, 1))
     plt.savefig(path+exp+add_name+'_realx.png', bbox_inches='tight')
     plt.close(fig)

@@ -144,9 +144,9 @@ def template_fig_1_temp(temp_plot, xlabel, ylabel, tcr, time_lim=[]):
 
 
 def set_labels(fig, ax, xlabel, y_label):
-    ax.set_xlabel(xlabel, fontsize=17)
-    ax.tick_params(labelsize=15)
-    ax.set_ylabel(y_label, fontsize=17)
+    ax.set_xlabel(xlabel, fontsize=15)
+    ax.tick_params(labelsize=13)
+    ax.set_ylabel(y_label, fontsize=15)
     return fig, ax
 
 

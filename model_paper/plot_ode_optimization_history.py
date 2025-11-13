@@ -28,11 +28,9 @@ if __name__ == "__main__":
     clrs1['Rest'] = (160 / 255, 160 / 255, 160 / 255)
 
     # ODE estimation:
-    step = 1
-    #optim_file2 = f"optimization_history{int(step)}.csv"
     optim_file2 = "optimization_history1.csv"
     df_optim2 = pd.read_csv(path+optim_file2)
-    fm.plotting.plot_cost_function(df_optim2, path=path2+'optimization/', add_name=int(step))
+    fm.plotting.plot_cost_function(df_optim2, path=path2+'optimization/')
     
     T_x = [1. for _ in range (n_cl)]
     # Take optimal parameter values on last optimization step
@@ -57,4 +55,4 @@ if __name__ == "__main__":
     fm.plotting.plot_parameters(param_ode, bact_all, exps, clrs1, param_real=param_ode_real, path=path2+'optimization/')
     calibr_setup['dfs'] = data+[df_x]
     fm.plotting.plot_optimization_result(np.array(param_ode), calibr_setup, np.linspace(0, 17, 100),
-                                         path=path2, clrs=clrs1, add_name='_calibration')
+                                         path=path2, clrs=clrs1, add_name=add_name+'_calibration')

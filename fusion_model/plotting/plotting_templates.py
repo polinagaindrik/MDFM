@@ -6,6 +6,18 @@ import numpy as np
 plt.rcParams["font.family"] = "serif"
 plt.rc('text', usetex=True)
 plt.rcParams['text.latex.preamble'] = r"\usepackage{bm} \usepackage{amsmath}"
+plt.rcParams['lines.linewidth'] = 2.
+plt.rcParams['lines.linestyle'] = 'solid' #'dashed'#
+plt.rcParams['lines.markersize'] = 8
+plt.rcParams['figure.figsize'] = (7, 5)
+plt.rcParams['legend.framealpha'] = 0.
+plt.rcParams['legend.handlelength'] = 2.
+
+plt.rcParams['xtick.labelsize'] = 13
+plt.rcParams['ytick.labelsize'] = 13
+plt.rcParams['axes.labelsize'] = 15
+plt.rcParams['legend.fontsize'] = 15 #13
+plt.rcParams['figure.dpi'] = 500
 
 # Set some custom colors/scatter markers for plotting (mb add more or remove later)
 colors = [(0 / 255, 102 / 255, 217 / 255),
@@ -92,23 +104,23 @@ def plot_all_crittime(temp_plot, labels, templ_meas=template_plot_measurements0,
 
 
 # Plotting of model prediction and/or measurement data:
-def plot_all(temp_plot, labels, templ_meas=template_plot_measurements0, df=[], temps=[], mtimes=[], mestim=[], time_lim=[], tcr=[], dir='', add_name=''):
+def plot_all(temp_plot, labels, templ_meas=template_plot_measurements0, clrs=None, df=[], temps=[], mtimes=[], mestim=[], time_lim=[], tcr=[], dir='', add_name=''):
     ncols = [1, 1, 1,]
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df.columns])))[0]
     exps = sorted(list(set([s.split('_')[0] for s in df.columns])))
-    if len(temp_plot) == 1 or len(np.shape(temp_plot)) == 2:
+    if len(temp_plot)==1 or len(np.shape(temp_plot))==2:
         fig, ax = template_fig_1_temp(temp_plot, *labels, tcr, time_lim=time_lim)
         #mtimes, mestim = [mtimes], [mestim]
-    elif len(temp_plot) > 1 and len(np.shape(temp_plot)) == 1:
+    elif len(temp_plot)>1 and len(np.shape(temp_plot))==1:
         fig, ax = template_fig_for_many_temps(temp_plot, *labels, time_lim=time_lim)
 
     for i, (ax0, temp) in enumerate(zip(ax, temp_plot)):
         if len(temp_plot) == 1:
-            plot_model_1temp(ax0, mtimes, mestim, exps, 'solid')
+            plot_model_1temp(ax0, mtimes, mestim, exps, 'solid', clrs=clrs)
         else:
-            plot_model_manytemps(ax0, temp, mtimes, mestim, exps, temps, 'solid')
-        templ_meas(ax0, temp, df, c=colors_temps[i], media=media)
-        ax0.legend(fontsize=16, framealpha=0.0, ncol=ncols[i], loc='best')
+            plot_model_manytemps(ax0, temp, mtimes, mestim, exps, temps, 'solid', clrs=clrs)
+        templ_meas(ax0, temp, df, clrs=clrs, media=media)
+        ax0.legend(ncol=ncols[i], loc='best')
     plt.savefig(dir + f'{add_name}.png', bbox_inches='tight')
     print(dir + f'{add_name}.png')
     plt.close(fig) 
@@ -203,14 +215,15 @@ def plot_measurement(ax0, df0, exp, c, lst, scatter_marker):
     obs_meas = [df0[f]['Average'] for f in df0.columns]
     std_meas = [df0[f]['Standard deviation'] for f in df0.columns]
     days_meas, obs_meas, std_meas = zip(*sorted(zip(days_meas, obs_meas, std_meas)))
-    lab = exp
     ax0.errorbar(days_meas, np.log10(np.array(obs_meas)), fmt=scatter_marker,
                 yerr=np.abs(0.43*(0.1+0.15*np.array(obs_meas))/np.array(obs_meas)),#np.abs(0.43*np.array(std_meas)/np.array(obs_meas)),
                 linestyle=lst, linewidth=1.5,
-                markersize=7, color=c, label="{}".format(lab))
+                markersize=7, color=c, label=f'Experiment {int(exp[1:])}')
 
     
-def plot_model_1temp(ax0, t_model, obs_model, exps, lst):
+def plot_model_1temp(ax0, t_model, obs_model, exps, lst, clrs=None):
+    if clrs is not None:
+        exp_clrs = clrs
     for i, exp in enumerate(exps):
         exp_num = exp.split('-')[0]
         ax0.plot(t_model, np.log10(obs_model[i]), linestyle=lst, linewidth=2., markersize=7, color=exp_clrs[exp_num])#,
@@ -220,7 +233,9 @@ def plot_model_1temp(ax0, t_model, obs_model, exps, lst):
                 label="{}".format(exp))
         '''
                        
-def plot_model_manytemps(ax0, temp, t_model, obs_model, exps, temps, lst):
+def plot_model_manytemps(ax0, temp, t_model, obs_model, exps, temps, lst, clrs=None):
+    if clrs is not None:
+        exp_clrs = clrs
     for i, (exp, T) in enumerate(zip(exps, temps)):
         if T == temp:
             ax0.plot(t_model, np.log10(obs_model[i]), linestyle=lst, linewidth=2., markersize=7, color=exp_clrs[exp])#,

@@ -144,13 +144,12 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
         ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, label=f'{bact}') # , label=f'Data Cl. {k}'
         #ax.scatter(days_model, o_n,label=f'{bact}', color='w', marker='o', s=40, edgecolors=clr)
         ax.plot(days_model, o_n, color=clr)
-        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'{bact}'))
-    #ax.set_title(f'NGS, {exp}', fontsize=15)
+        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'Species {int(bact.split("_")[-1])+1}'))
     fig, ax = plt_templ.set_labels(fig, ax,  r'Time, $t$', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
     #ax.set_ylim(-0.05, 1.05)
     ax.set_ylim(-0.05, np.max(obs_meas)*(1+0.2)+0.1)
-    ax.set_xlim(np.min(days_meas)-0.5, np.max(days_meas)+0.5)
+    ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
     coord_text = (0.06, 0.92)
     ax.text(*coord_text, '(b)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     ax.legend(handles=lines, ncol=2)
@@ -177,9 +176,9 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
                 std = o_meas*0.1
             ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, label=f'{bact}')
             ax.plot(days_model, o_m, color=clr)
-            lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'{bact}'))
+            lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'Species {int(bact.split("_")[-1])+1}'))
         ax.set_ylim(-0.05, np.max([np.max(obs_meas), np.max(o_model)])*1.1)#+0.1)
-        ax.set_xlim(np.min(days_meas)-0.5, np.max(days_meas)+0.5)
+        ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
         fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         
@@ -187,7 +186,7 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
         if med=='PC' or med=='media1' or med=='gen1':
             ax.text(*coord_text, '(c)', fontsize=20,
                     horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-            ax.legend(handles=lines, bbox_to_anchor=(0.68, 0.52, 0.0, 0.0))
+            ax.legend(handles=lines, bbox_to_anchor=(0.72, 0.52, 0.0, 0.0))
         elif med =='MRS' or med =='media2' or med=='sel1':
             ax.text(*coord_text, '(d)', fontsize=20,
                     horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
@@ -218,7 +217,7 @@ def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=['']
     coord_text = (0.06, 0.92)
     ax.text(*coord_text, '(a)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     ax.set_yscale('log')
-    ax.set_xlim(np.min(days_meas)-0.5, np.max(days_meas)+0.5)
+    ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
     fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'log CFU mL$^{-1}$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
     ax.legend()#, handles=lines)
@@ -242,16 +241,17 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
         ax.plot(days_model, o_n, label=f'{bact_all[k]}', color=clr)
         if plot_meas:
             ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
-        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'{bact_all[k]}'))
+        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'Species {int(bact_all[k].split("_")[-1])+1}'))
     ax.set_yscale('log')
-    ax.set_xlim(-0.3, np.max(days_meas)+0.3)
+    ax.set_xlim(-0.25, np.max(days_meas)+0.3)
     ax.set_ylim(np.min(obs_meas)*0.1, np.max(obs_meas)*2.5)
     if temp != 2.0:
-        ax.set_xlim(-0.3, 10.5)
+        ax.set_xlim(-0.25, 10.5)
         ax.set_ylim(np.min(obs_meas)*0.5, np.max(obs_meas)*2.5)
     fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'log $x(t)$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
-    coord_text = (0.95, 0.07)
+    #coord_text = (0.95, 0.07)
+    coord_text = (0.06, 0.92)
     if temp == 2.0:
         text_lbl = '(a)'
     elif temp == 6.0:
@@ -259,7 +259,7 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
     else:
         text_lbl = '(c)'
     ax.text(*coord_text, text_lbl, fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-    ax.legend(ncol=len(bact_all)//4, handles=lines)
+    ax.legend(ncol=len(bact_all)//4, handles=lines, bbox_to_anchor=[0.2, 0.53], bbox_transform=fig.transFigure)
     #ax.legend(handlelength=1.3, ncol=len(bact_all)//4)#, bbox_to_anchor=(1, 1))
     plt.savefig(path+exp+add_name+'_realx.png', bbox_inches='tight')
     plt.close(fig)

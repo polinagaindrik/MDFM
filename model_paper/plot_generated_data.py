@@ -44,13 +44,20 @@ if __name__ == "__main__":
     t_model = np.linspace(0., 18., 100)
     x_count, obs_mibi_model, obs_maldi_model, obs_ngs_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, t_model)
 
+    bact_all = data[1].T.columns
+    clrs1 = {}
+    for b, c in zip(bact_all, fm.plotting.colors_ngs[1:]):
+        clrs1[b] = c
+    clrs1['Others'] = (160 / 255, 160 / 255, 160 / 255)
+    clrs1['Rest'] = (160 / 255, 160 / 255, 160 / 255)
+
     # Plotting
     exp_plot = exps#['V01', 'V04', 'V07']
     for exp in exp_plot:
-        fm.plotting.plot_opt_res_realx(df_x.filter(like=exp), t_model, x_count[int(exp[1:])-1], exp, path=path_datagen+'Data_generation_', add_name=add_name)#, clrs=clrs, add_name=add_name)  
-        fm.plotting.plot_opt_res_ngs(df_ngs.filter(like=exp), t_model, obs_ngs_model[int(exp[1:])-1], exp, path=path_datagen+'Data_generation_', add_name=add_name)
-        fm.plotting.plot_opt_res_mibi(df_mibi.filter(like=exp), t_model, obs_mibi_model[int(exp[1:])-1], exp, media=['sel1', 'gen1'], path=path_datagen+'Data_generation_', add_name=add_name)
+        fm.plotting.plot_opt_res_realx(df_x.filter(like=exp), t_model, x_count[int(exp[1:])-1], exp, path=path_datagen+'Data_generation_', add_name=add_name, clrs=clrs1)#, clrs=clrs, add_name=add_name)  
+        fm.plotting.plot_opt_res_ngs(df_ngs.filter(like=exp), t_model, obs_ngs_model[int(exp[1:])-1], exp, path=path_datagen+'Data_generation_', add_name=add_name, clrs=clrs1)
+        fm.plotting.plot_opt_res_mibi(df_mibi.filter(like=exp), t_model, obs_mibi_model[int(exp[1:])-1], exp, media=['sel1', 'gen1'], path=path_datagen+'Data_generation_', add_name=add_name, clrs=clrs1)
             
         # Check if results are correct here?
-        fm.plotting.plot_opt_res_maldi(df_maldi.filter(like=exp), t_model, obs_maldi_model[int(exp[1:])-1], exp, media=['sel1', 'gen1'], path=path_datagen+'Data_generation_', add_name=add_name)
+        fm.plotting.plot_opt_res_maldi(df_maldi.filter(like=exp), t_model, obs_maldi_model[int(exp[1:])-1], exp, media=['sel1', 'gen1'], path=path_datagen+'Data_generation_', add_name=add_name, clrs=clrs1)
       

@@ -42,18 +42,28 @@ if __name__ == "__main__":
         's_x': s_x,
         'media': media, 
     }
-    t_model = np.linspace(0., 17., 100)
+    t_model = np.linspace(0., 18., 100)
     x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, t_model)
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
+    exp_clrs = {}
+    i, j, k = 0, 0, 0
+    for exp, temp in zip(calibr_setup['exp_temps'], calibr_setup['exp_temps'].values()):
+        if temp == 2.:
+            exp_clrs[exp] =  fm.plotting.blue_colors[i]
+            i += 1
+        elif temp == 6.:
+            exp_clrs[exp] =  fm.plotting.green_colors[j]
+            j += 1
+        else:
+            exp_clrs[exp] =  fm.plotting.red_colors[k]
+            k += 1
+
     labels = ('Time',  r'log CFU mL$^{-1}$')
     for j, med in enumerate(media):
-        fm.plotting.plot_all([2., 6., 10.], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med),
-                 temps=temps_model, mtimes=t_model, mestim=obs_mibi_model[:,j, : ], dir=path2, add_name=f'MiBi_{med}_const_model'+add_name, time_lim=[18, 18, 18])
-        
-    '''
+        fm.plotting.plot_all([2., 6., 10.], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med), clrs=exp_clrs,
+                 temps=temps_model, mtimes=t_model, mestim=obs_mibi_model[:,j, : ], dir=path2, add_name=f'MiBi_{med}_const_model'+add_name, time_lim=[17.5, 17.5, 17.5])
     for j, med in enumerate(media):
-        for i, temp in enumerate([2., 10., 14.]):
+        for i, temp in enumerate([2., 6., 10.]):
             obs_mibi = obs_mibi_model[3*i:3*i+3,j,:]
             fm.plotting.plot_all([temp], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med).filter(like=f'_{int(temp):02d}C_'),
-                    temps=temps_model, mtimes=t_model, mestim=obs_mibi, dir=path2, add_name=f'MiBi_{med}_const_model_{int(temp)}Grad'+add_name, time_lim=[14])
-    '''
+                     clrs=exp_clrs,temps=temps_model, mtimes=t_model, mestim=obs_mibi, dir=path2, add_name=f'MiBi_{med}_const_model_{int(temp)}Grad'+add_name, time_lim=[17.5])

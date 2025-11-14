@@ -7,6 +7,8 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import root_mean_squared_error
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+from matplotlib import rcParams
 
 if __name__ == "__main__":
     colors_all = {
@@ -23,17 +25,36 @@ if __name__ == "__main__":
         'orange':'#ED733E',
         'pink':'#C3568A',
     }
+    # Set common plotting parameters for all figures
+    plt.rc('text', usetex=True)
+    rcParams['text.latex.preamble'] = r"\usepackage{bm} \usepackage{amsmath}"
 
-    n_cl = [4, 6, 8, 10]
+    rcParams['lines.linewidth'] = 2.
+    rcParams['lines.linestyle'] = 'dashed'#'solid' #
+    rcParams['lines.markersize'] = 8
+    rcParams['figure.figsize'] = (7, 5)
+    rcParams['legend.framealpha'] = 0.
+    rcParams['legend.handlelength'] = 2.
+
+    rcParams['xtick.labelsize'] = 13
+    rcParams['ytick.labelsize'] = 13
+    rcParams['axes.labelsize'] = 15
+    rcParams['legend.fontsize'] = 15#13
+
+    rcParams['figure.dpi'] = 500
+
+    n_cl = [4, 6, 8, 10, 12]
     n_media = 2
+    relnoise=0.1
 
     #x_real = []
     #x_model = []
     rms = []
-    x_max_val = 1#1e9
+    rms_mibi, rms_maldi, rms_ngs = [], [], []
+    x_max_val = 1e10
     for n in n_cl:
-        path = f'model_paper/out/{int(n)}_dim/calibration/'
-        path2 = f'model_paper/out/{int(n)}_dim/calibration/'
+        path = f'model_paper/out/model_complexity/{int(n)}_dim_{n_media}media_exp_{int(relnoise*100)}noise/calibration/'
+        path2 = f'model_paper/out/model_complexity/{int(n)}_dim_{n_media}media_exp_{int(relnoise*100)}noise/calibration/'
         add_name = f'_{int(n)}dim_{int(n_media)}media'
         df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
         data = [pd.read_pickle(path2+df_name) for df_name in df_names]
@@ -44,6 +65,7 @@ if __name__ == "__main__":
         # Get initial real x values from dataframe
         days_meas = [fm.dtf.get_meas_days(df_x, exp) for exp in exps]
         x_real = fm.dtf.extract_observables_from_df_x(df_x, days_meas[0], exps)
+        days_total, [obs_mibi_data, obs_maldi_data, obs_ngs_data] =fm.dtf.extract_observables_from_df(data)
 
         # Calculate optimized x values
         optim_file2 = "optimization_history1.csv"
@@ -60,13 +82,16 @@ if __name__ == "__main__":
             's_x': s_x,
             'media': media, 
         }
-        x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, days_meas[0])
+        x_count, obs_mibi_model, obs_maldi_model, obs_ngs_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, days_meas[0])
         rms.append(root_mean_squared_error(x_real.flatten()/x_max_val, x_count.flatten()/x_max_val))
+        rms_mibi.append(root_mean_squared_error(obs_mibi_model.flatten()/x_max_val, obs_mibi_data.flatten()/x_max_val))
+        rms_maldi.append(root_mean_squared_error(obs_maldi_model.flatten(), obs_maldi_data.flatten()))
+        rms_ngs.append(root_mean_squared_error(obs_ngs_model.flatten(), obs_ngs_data.flatten()))
         #print(rms)
 
+    '''
     # Now get result for 10 species for 1 different media:
     # general media
-
     n_media = 1
     rms_media = []
     media_names = ['gen', 'sel']
@@ -96,15 +121,27 @@ if __name__ == "__main__":
         }
         x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, days_meas[0])
         rms_media.append(root_mean_squared_error(x_real.flatten()/x_max_val, x_count.flatten()/x_max_val))
-
+    '''
 
     fig, ax = plt.subplots()
-    ax.scatter(n_cl, np.log(rms), s=100, label='2 media', color=colors_all['blue1'])
-    ax.scatter(n_cl[-1], np.log(rms_media[0]), s=100, label='general media', marker='X', color=colors_all['orange'])
-    ax.scatter(n_cl[-1], np.log(rms_media[1]), s=100, label='selective media', marker='x', color=colors_all['green_light'])
-    fig, ax = fm.plotting.set_labels(fig, ax, 'Number of clusters', r'log RMSE ')
+    lines = []
+    labels = [r'$x(t) \cdot 10^{-10}$', r'MiBi $\cdot 10^{-10}$', 'MALDI', 'NGS']
+    clrs = [colors_all['blue1'], colors_all['orange'], colors_all['green_light'], colors_all['brown']]
+    for res, clr, lab in zip([rms, rms_mibi, rms_maldi, rms_ngs], clrs, labels):
+        ax.plot(n_cl, res, linestyle='dotted', color=clr, marker='o')
+        lines.append(mlines.Line2D([], [], color=clr, marker='o', linestyle='dotted', label=lab))
+
+    
+    #ax.scatter(n_cl[-1], np.log(rms_media[0]), s=100, label='general media', marker='X', color=colors_all['orange'])
+    #ax.scatter(n_cl[-1], np.log(rms_media[1]), s=100, label='selective media', marker='x', color=colors_all['green_light'])
+    fig, ax = fm.plotting.set_labels(fig, ax, 'Number of bacterial species', r'RMSE ')
     #ax.set_title('RMSE depending on number of clusters', fontsize=15)
     #ax.set_yscale('log')
-    ax.legend(fontsize=15, framealpha=0)
-    plt.savefig('model_paper/plot_rmse.png', dpi=300, bbox_inches='tight')
+    ticks_val = n_cl
+    tick_label = [f'{round(n)}' for n in n_cl]
+    ax.set_xticks(ticks_val)
+    ax.set_xticklabels(tick_label)
+    ax.legend(handles=lines)
+    ax.set_xlim(np.min(n_cl)-0.2, np.max(n_cl)+0.2)
+    plt.savefig('model_paper/out/model_complexity/plot_rmse.png', bbox_inches='tight')
     plt.close()

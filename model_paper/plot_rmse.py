@@ -52,6 +52,7 @@ if __name__ == "__main__":
     rms = []
     rms_mibi, rms_maldi, rms_ngs = [], [], []
     x_max_val = 1e10
+    L_0_real = np.array(fm.data.read_from_json('model_paper/out/Initial_values_x0_paper.json')['x0'])
     for n in n_cl:
         path = f'model_paper/out/model_complexity/{int(n)}_dim_{n_media}media_exp_{int(relnoise*100)}noise/calibration/'
         path2 = f'model_paper/out/model_complexity/{int(n)}_dim_{n_media}media_exp_{int(relnoise*100)}noise/calibration/'
@@ -66,6 +67,22 @@ if __name__ == "__main__":
         days_meas = [fm.dtf.get_meas_days(df_x, exp) for exp in exps]
         x_real = fm.dtf.extract_observables_from_df_x(df_x, days_meas[0], exps)
         days_total, [obs_mibi_data, obs_maldi_data, obs_ngs_data] =fm.dtf.extract_observables_from_df(data)
+
+        # Get 'real' model parameters used for data generation
+        setup_real = fm.data.read_from_json('Result_temp_together_real.json', dir=path2)
+        param_ode_real = np.array(setup_real['param_ode'])
+        T_x_real = np.array(setup_real['T_x'])
+        s_x_real = np.array(setup_real['s_x']).reshape((n_media, -1))
+        calibr_setup_real = {
+            'model': fm.mdl.fusion_model2,
+            'T_x': T_x_real,
+            'output_path': path2,
+            'exp_temps': fm.output.read_from_json(''+'exp_temps_model_paper.json', dir='model_paper/'),
+            's_x': s_x_real,
+            'media': media, 
+        }
+        t_model = np.linspace(0, 18, 100)
+        x_real2, obs_mibi_real, obs_maldi_real, obs_ngs_real, temps_real = fm.mdl.calc_obs_model(data, param_ode_real, calibr_setup_real, t_model)
 
         # Calculate optimized x values
         optim_file2 = "optimization_history1.csv"
@@ -82,12 +99,18 @@ if __name__ == "__main__":
             's_x': s_x,
             'media': media, 
         }
-        x_count, obs_mibi_model, obs_maldi_model, obs_ngs_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, days_meas[0])
-        rms.append(root_mean_squared_error(x_real.flatten()/x_max_val, x_count.flatten()/x_max_val))
-        rms_mibi.append(root_mean_squared_error(obs_mibi_model.flatten()/x_max_val, obs_mibi_data.flatten()/x_max_val))
-        rms_maldi.append(root_mean_squared_error(obs_maldi_model.flatten(), obs_maldi_data.flatten()))
-        rms_ngs.append(root_mean_squared_error(obs_ngs_model.flatten(), obs_ngs_data.flatten()))
-        #print(rms)
+
+        #x_count, obs_mibi_model, obs_maldi_model, obs_ngs_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, days_meas[0])
+        x_count, obs_mibi_model, obs_maldi_model, obs_ngs_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, t_model)
+        #rms.append(root_mean_squared_error(x_real.flatten()/x_max_val, x_count.flatten()/x_max_val))
+        #rms_mibi.append(root_mean_squared_error(obs_mibi_model.flatten()/x_max_val, obs_mibi_data.flatten()/x_max_val))
+        #rms_maldi.append(root_mean_squared_error(obs_maldi_model.flatten(), obs_maldi_data.flatten()))
+        #rms_ngs.append(root_mean_squared_error(obs_ngs_model.flatten(), obs_ngs_data.flatten()))
+
+        rms.append(root_mean_squared_error(np.log(x_real2.flatten()), np.log(x_count.flatten())))
+        rms_mibi.append(root_mean_squared_error(np.log(obs_mibi_model.flatten()), np.log(obs_mibi_real.flatten())))
+        rms_maldi.append(root_mean_squared_error(obs_maldi_model.flatten(), obs_maldi_real.flatten()))
+        rms_ngs.append(root_mean_squared_error(obs_ngs_model.flatten(), obs_ngs_real.flatten()))
 
     '''
     # Now get result for 10 species for 1 different media:
@@ -125,7 +148,7 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots()
     lines = []
-    labels = [r'$x(t) \cdot 10^{-10}$', r'MiBi $\cdot 10^{-10}$', 'MALDI', 'NGS']
+    labels = [r'log $x(t)$', r'log Plate Count', 'MALDI', 'NGS']
     clrs = [colors_all['blue1'], colors_all['orange'], colors_all['green_light'], colors_all['brown']]
     for res, clr, lab in zip([rms, rms_mibi, rms_maldi, rms_ngs], clrs, labels):
         ax.plot(n_cl, res, linestyle='dotted', color=clr, marker='o')

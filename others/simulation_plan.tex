@@ -40,8 +40,8 @@
 2 & \chng{6}  & 0.1  & 2 & gen1 + sel1  &  X\\
 3 & \chng{8}  & 0.1  & 2 & gen1 + sel1  &  X\\
 4 & \chng{10} & 0.1  & 2 & gen1 + sel1  &  X\\
-5 & \chng{12} & 0.1  & 2 & gen1 + sel1  &  \\
-6 & \chng{14} & 0.1  & 2 & gen1 + sel1  &  \\
+5 & \chng{12} & 0.1  & 2 & gen1 + sel1  &  X\\
+6 & \chng{14} & 0.1  & 2 & gen1 + sel1  &  -\\
 \bottomrule
 \end{tabular}
 \label{tab:simulation-plan-species}
@@ -53,15 +53,15 @@
 \caption{Simulation Plan: Noise vs. Species Number, 2 media (gen1 + sel1)}    
 \begin{tabular}{@{} cccccl @{}}
 \toprule
-\textbf{Noise Level} & \chngn{0} & \chngn{0.1}& \chngn{0.15} & \chngn{0.2} & \chngn{0.25} \\
+\textbf{Noise Level} & \chngn{0} & \chngn{0.1}& \chngn{0.2} & \chngn{0.3} & \chngn{0.4} \\
 \textbf{\# Species} & & & & & \\
 \midrule
-\chng{4}  & - & X & - & - & - \\
-\chng{6}  & - & X & - & - & - \\
-\chng{8}  & - & X & - & - & - \\
-\chng{10} & - & X & - & - & - \\
-\chng{12} & - & X & - & - & - \\
-\chng{14} & - & X & - & - & - \\
+\chng{4}  & X & X & X & X & - \\
+\chng{6}  & X & X & X & X & - \\
+\chng{8}  & X & X & X & - & - \\
+\chng{10} & X & X & - & - & - \\
+\chng{12} & X & X & - & - & - \\
+\chng{14} & - & - & - & - & - \\
 \bottomrule
 \end{tabular}
 \label{tab:simulation-plan-species-noise}
@@ -80,8 +80,6 @@
 \chng{1 (gen1)}      & - & - & - & - & - \\
 \chng{2 (sel1+sel2)} & - & - & - & - & - \\
 \chng{2 (sel1+gen1)} & - & X & - & - & - \\
-\chng{3 (sel)}       & - & - & - & - & - \\
-\chng{4 (sel)}       & - & - & - & - & - \\
 \bottomrule
 \end{tabular}
 \label{tab:simulation-plan-media-noise}

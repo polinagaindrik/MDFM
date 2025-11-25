@@ -152,3 +152,14 @@ Discussion with Christian (04.06.2025):
 4.  H. Banga Conformal Predicton - ??
 
 5. To think about the paper based on the model. What to publish with what? Sections? Journals?
+
+Now running:
+ikarus: 0noise - 10 species V
+               - 12 species V (5500min = 3.8Tage, 5000steps)
+        20 noise - 10 species ...
+manjaro: 20 noise - 4 species V
+                    6 species V
+                    8 species V
+         30 noise - 4 species V
+                    6 species V
+                    8 species...

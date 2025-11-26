@@ -11,9 +11,10 @@ if __name__ == "__main__":
     workers = -1
     n_cl = 4
     n_media = 2
+    relnoise = 0.2
 
     add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
-    path_new = path+f'model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_10noise/calibration/'
+    path_new = path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
     #add_name = f'_{int(n_cl)}dim_{int(n_media)}media_gen'
     #path_new = path+f'{int (n_cl)}_dim_{n_media}media_gen/calibration/'
 
@@ -23,7 +24,7 @@ if __name__ == "__main__":
     x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=path)['x0'])[:len(temps), :n_cl]
     S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=path)
     dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, x10=x10,
-                                                                              inhib=True, noise=0., rel_noise=.1, cutoff=0., cutoff_prop=0.,
+                                                                              inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0.,
                                                                               path=path_new, add_name=add_name)
     (df_mibi, df_maldi, df_ngs) = dfs_calibr
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))

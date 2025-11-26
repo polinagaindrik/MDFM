@@ -10,9 +10,10 @@ if __name__ == "__main__":
     plt.rcParams['figure.dpi'] = 500
     n_cl = 4
     n_media = 2
+    relnoise = 0.2
 
     path = 'model_paper/out/'#f'model_paper/out/{int(n_cl)}_dim/calibration/' #
-    path2 = path+f'model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_10noise/calibration/'
+    path2 = path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
     add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
     #path = f'model_paper/out/{int(n_cl)}_dim_{n_media}media_sel/calibration/'
     #path2 =f'model_paper/out/{int(n_cl)}_dim_{n_media}media_sel/calibration/'

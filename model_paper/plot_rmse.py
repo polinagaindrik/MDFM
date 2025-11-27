@@ -39,7 +39,7 @@ if __name__ == "__main__":
     rcParams['xtick.labelsize'] = 13
     rcParams['ytick.labelsize'] = 13
     rcParams['axes.labelsize'] = 15
-    rcParams['legend.fontsize'] = 15#13
+    rcParams['legend.fontsize'] = 13#15#
 
     rcParams['figure.dpi'] = 500
 
@@ -52,6 +52,7 @@ if __name__ == "__main__":
     rms = []
     rms_mibi, rms_maldi, rms_ngs = [], [], []
     x_max_val = 1e10
+    rms_per_species = []
     L_0_real = np.array(fm.data.read_from_json('model_paper/out/Initial_values_x0_paper.json')['x0'])
     for n in n_cl:
         path = f'model_paper/out/model_complexity/{int(n)}_dim_{n_media}media_exp_{int(relnoise*100)}noise/calibration/'
@@ -106,11 +107,24 @@ if __name__ == "__main__":
         #rms_mibi.append(root_mean_squared_error(obs_mibi_model.flatten()/x_max_val, obs_mibi_data.flatten()/x_max_val))
         #rms_maldi.append(root_mean_squared_error(obs_maldi_model.flatten(), obs_maldi_data.flatten()))
         #rms_ngs.append(root_mean_squared_error(obs_ngs_model.flatten(), obs_ngs_data.flatten()))
+        rms_1_exp = []
+        for i in range(n):
+            rms_1_exp.append(root_mean_squared_error(np.log(x_real2[:, i, :]), np.log(x_count[:, i, :])))
+        rms_per_species.append(rms_1_exp)
 
         rms.append(root_mean_squared_error(np.log(x_real2.flatten()), np.log(x_count.flatten())))
         rms_mibi.append(root_mean_squared_error(np.log(obs_mibi_model.flatten()), np.log(obs_mibi_real.flatten())))
         rms_maldi.append(root_mean_squared_error(obs_maldi_model.flatten(), obs_maldi_real.flatten()))
         rms_ngs.append(root_mean_squared_error(obs_ngs_model.flatten(), obs_ngs_real.flatten()))
+    
+    rms_per_species_T = []
+    for j in range(np.max(n_cl)):
+        rms0 = []
+        for i in range(len(n_cl)):
+            if len(rms_per_species[i]) > j:
+                rms0.append(rms_per_species[i][j])
+        rms_per_species_T.append(rms0)
+
 
     '''
     # Now get result for 10 species for 1 different media:
@@ -146,15 +160,19 @@ if __name__ == "__main__":
         rms_media.append(root_mean_squared_error(x_real.flatten()/x_max_val, x_count.flatten()/x_max_val))
     '''
 
+
+    bact_all = data[1].T.columns
+    clrs1 = {}
+    for b, c in zip(bact_all, fm.plotting.colors_ngs[1:]):
+        clrs1[b] = c
+    clrs1['Others'] = (160 / 255, 160 / 255, 160 / 255)
+    clrs1['Rest'] = (160 / 255, 160 / 255, 160 / 255)
+
     fig, ax = plt.subplots()
-    lines = []
     labels = [r'log $x(t)$', r'log Plate Count', 'MALDI', 'NGS']
     clrs = [colors_all['blue1'], colors_all['orange'], colors_all['green_light'], colors_all['brown']]
     for res, clr, lab in zip([rms, rms_mibi, rms_maldi, rms_ngs], clrs, labels):
-        ax.plot(n_cl, res, linestyle='dotted', color=clr, marker='o')
-        lines.append(mlines.Line2D([], [], color=clr, marker='o', linestyle='dotted', label=lab))
-
-    
+        ax.plot(n_cl, res, linestyle='dotted', color=clr, marker='o', label=lab)
     #ax.scatter(n_cl[-1], np.log(rms_media[0]), s=100, label='general media', marker='X', color=colors_all['orange'])
     #ax.scatter(n_cl[-1], np.log(rms_media[1]), s=100, label='selective media', marker='x', color=colors_all['green_light'])
     fig, ax = fm.plotting.set_labels(fig, ax, 'Number of bacterial species', r'RMSE ')
@@ -164,7 +182,24 @@ if __name__ == "__main__":
     tick_label = [f'{round(n)}' for n in n_cl]
     ax.set_xticks(ticks_val)
     ax.set_xticklabels(tick_label)
-    ax.legend(handles=lines)
+    coord_text = (0.07, 0.92)
+    ax.text(*coord_text, '(a)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+    ax.legend(bbox_to_anchor=(0.5, 0.67, 0.0, 0.0))
     ax.set_xlim(np.min(n_cl)-0.2, np.max(n_cl)+0.2)
     plt.savefig('model_paper/out/model_complexity/plot_rmse.png', bbox_inches='tight')
+    plt.close()
+
+
+    fig, ax = plt.subplots()
+    for i, res in enumerate(rms_per_species_T):
+        ax.plot(n_cl[-len(res):], res, linestyle='dotted', marker='o', color=clrs1[bact_all[i]], label=f'Species {i+1}')
+    fig, ax = fm.plotting.set_labels(fig, ax, 'Number of bacterial species', r'RMSE ')
+    ticks_val = n_cl
+    tick_label = [f'{round(n)}' for n in n_cl]
+    ax.set_xticks(ticks_val)
+    ax.set_xticklabels(tick_label)
+    ax.text(*coord_text, '(b)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+    ax.legend(bbox_to_anchor=(0.72, 0.55, 0.0, 0.0), ncol=2)
+    ax.set_xlim(np.min(n_cl)-0.2, np.max(n_cl)+0.2)
+    plt.savefig('model_paper/out/model_complexity/plot_rmse_per_species.png', bbox_inches='tight')
     plt.close()

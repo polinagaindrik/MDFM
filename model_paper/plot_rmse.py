@@ -44,6 +44,7 @@ def calculate_rmse(n, rn, path, add_name):
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path+df_name) for df_name in df_names]
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in data[1].columns])))
+    n_media = len(media)
 
     # Get 'real' model parameters used for data generation
     setup_real = fm.data.read_from_json('Result_temp_together_real.json', dir=path)
@@ -56,7 +57,7 @@ def calculate_rmse(n, rn, path, add_name):
             'output_path': path,
             'exp_temps': fm.output.read_from_json(''+'exp_temps_model_paper.json', dir='model_paper/'),
             's_x': s_x_real,
-            'media': media, 
+            'media': media,
         } 
     t_model = np.linspace(0, 18, 100)
     x_real2, obs_mibi_real, obs_maldi_real, obs_ngs_real, temps_real = fm.mdl.calc_obs_model(data, param_ode_real, calibr_setup_real, t_model)
@@ -175,4 +176,30 @@ if __name__ == "__main__":
         ax.set_xlabel('Relative noise level', fontsize=15)
         ax.set_ylabel('Number of bacterial species', fontsize=15)
         plt.savefig(path_base+'rmse_noise_nspecies'+add+'.png', bbox_inches='tight')
+        plt.close(fig)
+
+    # RMSE for different media
+    media = ['gen1', 'sel1', 'sel2', 'gen1+sel1']
+    addn = ['_gen', '_sel', '_sel2', '']
+    n = 6
+    rn = 0.1
+    n_media = [1, 1, 1, 2]
+    path_base = 'model_paper/out/media_influence/'
+    rms, rms_mibi, rms_maldi, rms_ngs = [np.zeros((len(media))) for _ in range(4)]
+    for i, med in enumerate(media):
+        path = path_base+f'{med}_media/calibration/'
+        add_name = f'_{int(n)}dim_{int(n_media[i])}media'+addn[i]
+        data, rms[i], rms_mibi[i], rms_maldi[i], rms_ngs[i], rms_per_species0 = calculate_rmse(n, rn, path, add_name)
+    
+    addn = ['_x', '_pc', '_maldi', '_ngs']
+    for res, add in zip([rms, rms_mibi, rms_maldi, rms_ngs], addn):
+        fig, ax = plt.subplots()
+        ax.stem(media, res)
+        ax.set_xticks(np.linspace(0, len(media)-1, len(media)))
+        ax.set_ylabel('RMSE', fontsize=15)
+        ax.set_xlabel('Media', fontsize=15)
+        ax.set_xticklabels(media, ha='right')
+        ax.tick_params(axis='both', which='major', labelsize=14)
+        ax.tick_params(axis='both', which='major', labelsize=12)
+        plt.savefig(path_base+'rmse_media'+add+'.png', bbox_inches='tight')
         plt.close(fig)

@@ -373,19 +373,31 @@ def model_2media_expgensel(n_cl, temps, ntr, S_matrix_setup, **kwargs):
 def model_2media_expgen2sel2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
     s_x = np.array(S_matrix_setup["s_selective"][1][:n_cl]+S_matrix_setup["s_general"][1][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel1', 'gen1']
+    media = ['sel2', 'gen2']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_2media_expgen3sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
     s_x = np.array(S_matrix_setup["s_selective"][2][:n_cl]+S_matrix_setup["s_general"][2][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel1', 'gen1']
+    media = ['sel3', 'gen3']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_2media_expsel2sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
     s_x = np.array(S_matrix_setup["s_selective"][1][:n_cl]+S_matrix_setup["s_selective"][2][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel1', 'gen1']
+    media = ['sel2', 'sel3']
+    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
+
+def model_2media_expsel1sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_selective"][2][:n_cl])
+    T_x = S_matrix_setup["T_x"][:n_cl]
+    media = ['sel1', 'sel3']
+    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
+
+def model_2media_expsel1sel2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_selective"][1][:n_cl])
+    T_x = S_matrix_setup["T_x"][:n_cl]
+    media = ['sel1', 'sel2']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 

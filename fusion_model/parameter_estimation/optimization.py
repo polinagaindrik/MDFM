@@ -9,9 +9,12 @@ from fusion_model.tools.dataframe_functions import extract_observables_from_df
 
 
 optimization_history = []
-output_file = 'model_paper/out/optimization_history1.csv'
-output_file2 = 'model_paper/out/optimization_history2.csv'
-output_file_predict = 'model_paper/out/optimization_history_predict.csv'
+#output_file = 'model_paper/out/optimization_history1.csv'
+#output_file2 = 'model_paper/out/optimization_history2.csv'
+#output_file_predict = 'model_paper/out/optimization_history_predict.csv'
+output_file = 'out/optimization_history1.csv'
+output_file2 = 'out/optimization_history2.csv'
+output_file_predict = 'out/optimization_history_predict.csv'
 
 
 def calculate_model_params(cost_func, calibr_setup):
@@ -57,7 +60,7 @@ def calculate_prediction(cost_func, calibr_setup):
 
 # Parameter estimation using minimizstion of the negative log-likelihood function (func)
 def optimization_func(func, bnds, args=(), workers=1):
-    return differential_evolution(func, args=args, tol=1e-6, atol=1e-6, maxiter=5000, mutation=(0.3, 1.9), recombination=0.7, popsize=30,
+    return differential_evolution(func, args=args, tol=1e-3, atol=1e-3, maxiter=500, mutation=(0.3, 1.9), recombination=0.7, popsize=30,
                                   bounds=bnds, init='latinhypercube', disp=True, polish=False, updating='deferred', workers=workers,
                                   strategy='randtobest1bin', callback=_callback_ll) #init='sobol'
 
@@ -117,7 +120,7 @@ def optimization_func_1step(func, bnds, args=(), workers=1):
                                   callback=_callback_ll, strategy='randtobest1bin') #init='sobol'
 
 def optimization_func_2step(func, bnds, init=None, args=(), workers=1):
-    return differential_evolution(func, args=args, tol=1e-5, atol=1e-6, maxiter=2000, mutation=(0.3, 1.5), recombination=0.7, popsize=35,
+    return differential_evolution(func, args=args, tol=1e-5, atol=1e-6, maxiter=1000, mutation=(0.3, 1.5), recombination=0.7, popsize=35,
                                   bounds=bnds, init=init, disp=True, polish=False, updating='deferred', workers=workers,
                                   callback=_callback_ll2, strategy='best1bin') #init='sobol'
        

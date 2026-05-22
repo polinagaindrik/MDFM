@@ -63,6 +63,21 @@ def fusion_model_woR(t, x, param, x0, const):
     return np.concatenate((-x[:n_cl]*R*lambd, x[:n_cl]*R*lambd + alph*R*x[n_cl:2*n_cl]/(1+b)))
 
 
+def fusion_model_distr(t, x, param, x0, ode_args): # t, x, param, x0, const
+    #(temp_cond, n_cl, x0, media, s_x) = ode_args
+    (temp_cond, n_cl, media) = ode_args
+    lambd = param[:n_cl]
+    alph = param[n_cl:2*n_cl]
+    nmax = 10**param[2*n_cl]
+    k = param[2*n_cl+1:2*n_cl+1+n_cl*(n_cl-1)]
+    kij_matrix = np.insert(k, [i*n_cl for i in range(n_cl)], 0).reshape((n_cl, n_cl))
+    b = np.sum(kij_matrix*x[n_cl:2*n_cl], axis=1)
+    arr = [
+        -x[:n_cl]*x[-1]*lambd,
+        x[:n_cl]*x[-1]*lambd + x[n_cl:2*n_cl]*x[-1]*alph/(1+b),
+        [-(1./nmax)*np.sum(x[n_cl:2*n_cl]*x[-1]*alph/(1+b))]]
+    return np.concatenate(arr)
+
 # For polynomial T-dependence of the parameters
 def jacobian_fusion_model(t, x, param, x0, const):
     (temp_cond, n_cl, media) = const

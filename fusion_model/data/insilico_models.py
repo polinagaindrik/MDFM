@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import numpy as np
-from ..model import fusion_model2, fusion_model_linear#, jacobian_fusion_model
+from ..model import fusion_model2, fusion_model_linear, fusion_model_distr#, jacobian_fusion_model
 from .output import json_dump, read_from_json
 from .data_generation import generate_data_dfs
 from ..tools import dataframe_functions as dtf
@@ -27,8 +27,8 @@ def save_all_dfs(dfs, names=[''], path=''):
         df.to_pickle(path+f'dataframe_{n}.pkl')
 
 
-def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name=''):
-    data = insilico_model(n_cl, temps, ntr, S_matrix_setup, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name)
+def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name=''):
+    data = insilico_model(n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name)
     dfs = data[:-1]
     (df_mibi, df_maldi, df_ngs) = dfs
     df_ngs, bact_ngs = dtf.preprocess_dataframe(df_ngs, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
@@ -338,9 +338,10 @@ def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, pa
     return df_mibi, df_maldi, df_ngs, df_realx\
 
 
-def model_exp(n_cl, temps, ntr, s_x, T_x, media, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
+def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
     np.random.seed(46987)
-    _, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
+    if param_ode is None:
+        _, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
     if not inhib:
         param_ode[-n_cl*n_cl:] = 0.
     param_model = np.concatenate([param_ode, s_x, T_x])
@@ -351,7 +352,7 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, x10=None, path='', inhib=False,
     df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                  noise=noise, rel_noise=rel_noise, media=media)
     save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
-    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
+    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, f'Result_real{add_name}.json', dir=path)
     return df_mibi, df_maldi, df_ngs, df_realx
 
 

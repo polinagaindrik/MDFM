@@ -3,10 +3,10 @@ import numpy as np
 import fusion_model.model as mdl
 import fusion_model.tools.dataframe_functions as dtf
 
-def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, jac_func=None, media=['media1', 'media2'], **kwargs):
+def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, jac_func=None, media=['media1', 'media2'], exp_start_offset=0, **kwargs):
     df_mibi, df_maldi, df_ngs, df_real, df_fullx = [], [], [], [], []
     for j, temp in enumerate(temps):
-        exp_start = 1+j #1+n_traj*j
+        exp_start = exp_start_offset + 1 + j #1+n_traj*j
         if jac_func is not None:
             jac = jac_func#lambda t, x: jac_func(t, x, param[:n_cl*(3+n_cl)+1], x0, [[temp], n_cl])
         else:

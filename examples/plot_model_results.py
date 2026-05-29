@@ -14,8 +14,18 @@ if __name__ == "__main__":
 
     path = 'out/main_param_distrib/'
     path2=path
+    exp_temps = fm.output.read_from_json(''+'exp_temps_model_paper.json', dir='out/main_param_distrib/')
 
-
+    # Calibration result:
+    res = fm.output.read_from_json('Result_calibration.json', dir=path2)
+    T_x = res['T_x']
+    param_opt = res['param_ode']
+    #param_ode = param_opt[:-n_cl*n_media]
+    x0_vals = param_opt[:n_cl*len(exp_temps)]
+    lambd_opt = param_opt[n_cl*len(exp_temps):n_cl*len(exp_temps)+n_cl]
+    alph_opt = param_opt[n_cl + n_cl*len(exp_temps):n_cl + 2*n_cl*len(exp_temps)]
+    rest_ode_param = param_opt[n_cl + 2*n_cl*len(exp_temps):]
+    s_x = np.array(res['s_x']).reshape((n_media, n_cl))
 
     n_exps = 3
     for k in range (n_exps):
@@ -37,27 +47,22 @@ if __name__ == "__main__":
         s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
         param_ode = param_opt[:-n_cl*n_media]
         '''
-
-        res = fm.output.read_from_json(''+f'Result_calibration{add_name}.json', dir=path2)
-        T_x = res['T_x']
-        param_opt = res['param_ode']
-        param_ode = param_opt[:-n_cl*n_media]
-        s_x = res['s_x']
-
-
         # Plot resulting model
         calibr_setup={
-            'model': fm.mdl.fusion_model_distr,
-            'T_x': T_x,
-            'output_path': path2,
-            'exp_temps': fm.output.read_from_json(''+'exp_temps_model_paper.json', dir='out/main_param_distrib/'),
-            's_x': s_x,
-            'media': media, 
+                'model': fm.mdl.fusion_model_distr,
+                'T_x': T_x,
+                'output_path': path2,
+                'exp_temps': fm.output.read_from_json(''+'exp_temps_model_paper.json', dir='out/main_param_distrib/'),
+                's_x': s_x,
+                'media': media, 
         }
 
+        param_ode = np.concatenate((x0_vals[k*n_cl:(k+1)*n_cl], lambd_opt, alph_opt[k*n_cl:(k+1)*n_cl], rest_ode_param))
+
         t_model = np.linspace(0., 18., 100)
-        x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(data, param_ode, calibr_setup, t_model)
+        x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V0{k+1}', data), param_ode, calibr_setup, t_model)
         exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
+        
         exp_clrs = {}
         i, j, k = 0, 0, 0
         for exp, temp in zip(calibr_setup['exp_temps'], calibr_setup['exp_temps'].values()):

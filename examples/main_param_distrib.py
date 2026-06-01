@@ -50,6 +50,7 @@ def model_wotemp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, pa
 def data_generation_distribution(n_exps, n_cl, param_ode_templ, s_x, path=''):
     dfs_mibi, dfs_maldi, dfs_ngs = [], [], []
     for i in range (n_exps):
+        np.random.seed(46987*(i+1))
         add_name = f'_{i}'
         alph_sampled = np.random.lognormal(mean=0., sigma=0.5, size=n_cl)
         param_ode_templ[n_cl:n_cl*2] = alph_sampled
@@ -99,7 +100,7 @@ def data_calibration_distribution(dfs, path=''):
     calibr_setup = calibr_presetup
     calibr_setup['param_bnds'] =  x0_bnds_all + param_ode_bnds + S_bnds
 
-    
+    print('Start optimization...')
     param_opt = fm.pest.calculate_model_params(fm.pest.cost_withS_withdiffalpha, calibr_setup)[0]
     s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
     calibr_setup['s_x'] = s_x
@@ -160,9 +161,9 @@ if __name__ == "__main__":
     relnoise = 0.1
 
     add_name = ''
-    path_new = path+'main_param_distrib/'
+    path_new = path+'main_param_distrib2/'
     # 'Real' model:
-    n_exps = 3
+    n_exps = 50
     temps = [2. for _ in range (n_exps)]
     ntr = 1
 

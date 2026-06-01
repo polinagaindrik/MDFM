@@ -2,6 +2,7 @@ import os
 import sys
 sys.path.append(os.getcwd())
 import fusion_model as fm
+from scipy import stats
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -27,7 +28,8 @@ if __name__ == "__main__":
     rest_ode_param = param_opt[n_cl + 2*n_cl*len(exp_temps):]
     s_x = np.array(res['s_x']).reshape((n_media, n_cl))
 
-    n_exps = 3
+    n_exps = 9
+    alph_exps = []
     for k in range (n_exps):
         add_name = f'_{k}'
         df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
@@ -36,6 +38,11 @@ if __name__ == "__main__":
         exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
         media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in data[1].columns])))
         df_x = pd.read_pickle(path2+f'dataframe_x{add_name}.pkl')
+
+        res_exp = fm.output.read_from_json(f'Result_real_paramdistrib_{k}.json', dir=path2)
+        param_exp = np.array(res_exp['param_ode'])
+        alph_exps.append(param_exp[2*n_cl:2*n_cl+n_cl])
+
 
         '''
         step = 1
@@ -87,3 +94,24 @@ if __name__ == "__main__":
             for i, temp in enumerate([2.,]):
                 obs_mibi = obs_mibi_model[3*i:3*i+3,j,:]
                 fm.plotting.plot_all([temp], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med).filter(like=f'_{int(temp):02d}C_'), clrs=exp_clrs,temps=temps_model, mtimes=t_model, mestim=obs_mibi, dir=path2, add_name=f'MiBi_{med}_const_model_{int(temp)}Grad'+add_name, time_lim=[17.5])
+
+    # Plot alphas distribution:
+    fig, ax = plt.subplots()
+    ax.hist(alph_opt, bins=20)  # arguments are passed to np.histogram
+    plt.savefig(path2+'alph_opt_histogram.png', bbox_inches='tight')
+    plt.close(fig)
+
+    fig, ax = plt.subplots()
+    ax.hist(np.array(alph_exps).flatten(), bins=20)  # arguments are passed to np.histogram
+    plt.savefig(path2+'alph_exps_histogram.png', bbox_inches='tight')
+    plt.close(fig)
+
+    # Calculate mu sigma for alpha distributions
+    shape, loc, scale = stats.lognorm.fit(alph_opt, floc=0)
+    mu, sigma = np.log(scale), shape
+    print(f"Optimized: Mu: {mu}, Sigma: {sigma}")
+
+    # Calculate mu sigma for alpha distributions
+    shape, loc, scale = stats.lognorm.fit(np.array(alph_exps).flatten(), floc=0)
+    mu, sigma = np.log(scale), shape
+    print(f"Data: Mu: {mu}, Sigma: {sigma}")

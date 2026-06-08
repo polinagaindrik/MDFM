@@ -20,9 +20,10 @@ if __name__ == "__main__":
     plt.rcParams['figure.dpi'] = 500
     n_cl = 2
     n_media = 2
-    relnoise = 0.
+    relnoise = 0.1
+    n_exps = 5
 
-    path = 'out/main_param_distrib2/'
+    path = f'out/main_param_distrib2_{int(n_exps)}exp/'
     path2=path
     exp_temps = fm.output.read_from_json(''+'exp_temps_model_paper.json', dir=path2)
 
@@ -42,8 +43,9 @@ if __name__ == "__main__":
     print(f"n_max: {rest_ode_param[0]}")
     s_x = np.array(res['s_x']).reshape((n_media, n_cl))
 
-    n_exps = 3
+    n_exps = len(exp_temps)
     alph_exps = []
+    alph_opt_vals = []
     for k in range (n_exps):
         add_name = f'_{k}'
         df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl', f'dataframe_x{add_name}.pkl']
@@ -55,6 +57,8 @@ if __name__ == "__main__":
         param_exp = np.array(res_exp['param_ode'])
         alph_exps.append(param_exp[2*n_cl:2*n_cl+n_cl])
         lambd_exp = param_exp[n_cl:2*n_cl]
+        rest_ode_param_exp = param_exp[2*n_cl+n_cl:]
+        alph_opt_vals.append(alph_opt[k*n_cl:(k+1)*n_cl])
 
         '''
         step = 1
@@ -79,7 +83,7 @@ if __name__ == "__main__":
         param_ode = np.concatenate((x0_vals, lambd_opt, alph_opt[k*n_cl:(k+1)*n_cl], rest_ode_param))
         t_model = np.linspace(0., 18., 100)
 
-        x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V0{k+1}', data[:-1]), param_ode, calibr_setup, t_model)
+        x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V{k+1:02d}', data[:-1]), param_ode, calibr_setup, t_model)
         exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
         
         '''
@@ -133,10 +137,56 @@ if __name__ == "__main__":
 
     # Calculate mu sigma for alpha distributions
     shape, loc, scale = stats.lognorm.fit(alph_opt, floc=0)
-    mu, sigma = np.log(scale), shape
-    print(f"Optimized: Mu: {mu}, Sigma: {sigma}")
+    mu_opt, sigma_opt = np.log(scale), shape
+    print(f"Optimized: Mu: {mu_opt}, Sigma: {sigma_opt}")
 
     # Calculate mu sigma for alpha distributions
     shape, loc, scale = stats.lognorm.fit(np.array(alph_exps).flatten(), floc=0)
     mu, sigma = np.log(scale), shape
     print(f"Data: Mu: {mu}, Sigma: {sigma}")
+
+
+    fig, ax = plt.subplots()
+    x = np.linspace(0., 5, 100)
+    pdf = stats.lognorm.pdf(x, s=sigma_opt, scale=np.exp(mu_opt))
+    ax.plot(x, pdf, label=f'Estimated distribution\n (mu={mu_opt:.2f}, sigma={sigma_opt:.2f})')
+    mu, sigma = 0.5, 0.5
+    x = np.linspace(0., 5, 100)
+    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
+    ax.plot(x, pdf, label=f'"Real" distribution\n (mu={mu:.2f}, sigma={sigma:.2f})')
+    plt.xlabel('Alpha')
+    plt.legend()
+    plt.savefig(path2+'alph_distribution.png', bbox_inches='tight')
+    plt.close(fig)
+
+
+    fig, ax = plt.subplots()
+    sct_mrk = ['o', 'x', '^', 's', 'D', 'P', '*', 'h', 'v', '<', '>']
+    tick_lbls = [r'$\lambda_1$', r'$\lambda_2$', r'$n_{\max}$', r'k$_{12}$', r'k$_{21}$']
+    param_plot_opt = np.concatenate((lambd_opt, rest_ode_param))
+    param_plot_exps = np.concatenate((lambd_exp, rest_ode_param_exp))
+    ax.scatter(np.linspace(1, len(param_plot_opt), len(param_plot_opt)), param_plot_opt, marker=sct_mrk[i])
+    ax.scatter(np.linspace(1, len(param_plot_exps), len(param_plot_exps)), param_plot_exps, marker=sct_mrk[i])
+    ax.set_yscale('log')
+    plt.legend(('Optimized', 'Exps'))
+    plt.ylabel('Parameter value')
+    ticks_val = np.linspace(1, len(param_plot_opt), len(param_plot_opt))
+    ax.set_xticks(ticks_val)
+    ax.set_xticklabels(tick_lbls)
+    plt.savefig(path2+'param_opt_vs_exps.png', bbox_inches='tight')
+    plt.close(fig)
+
+    alph_exps = np.array(alph_exps)
+    alph_opt_vals = np.array(alph_opt_vals)
+    fig, ax = plt.subplots()
+    for i in range (n_cl):
+        ax.scatter(np.linspace(1, n_exps, n_exps), alph_opt_vals[:, i], marker=sct_mrk[i], label=f'Optimized {i+1} Sp.')
+        ax.scatter(np.linspace(1, n_exps, n_exps), alph_exps[:, i], marker=sct_mrk[i], label=f'Exps {i+1} Sp.')
+    ax.set_yscale('log')
+    plt.ylabel('Alpha value')
+    plt.xlabel('Experiment Number')
+    ticks_val = np.linspace(1, n_exps, n_exps)
+    ax.set_xticks(ticks_val)
+    plt.legend(framealpha=0.5, bbox_to_anchor=(1, 1.05))
+    plt.savefig(path2+'alpha_comparison_opt_vs_exps.png', bbox_inches='tight')
+    plt.close(fig)

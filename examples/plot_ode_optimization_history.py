@@ -11,9 +11,9 @@ if __name__ == "__main__":
     n_cl = 2
     n_media = 2
     relnoise = 0.1
-    n_exps = 3
+    n_exps = 20
 
-    path = f'out/main_param_distrib2/'
+    path = f'out/main_param_distrib2_{int(n_exps)}exp/'
     path2 = path
     add_name = '_0'
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']

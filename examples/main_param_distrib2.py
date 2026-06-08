@@ -213,11 +213,12 @@ if __name__ == "__main__":
     n_cl = 2
     n_media = 2
     relnoise = 0.1
+    n_exps = 20
 
     add_name = ''
-    path_new = path+'main_param_distrib2_20exp/'
+    path_new = path+f'main_param_distrib2_{int(n_exps)}exp/'
     # 'Real' model:
-    n_exps = 20
+    
     temps = [2. for _ in range (n_exps)]
     ntr = 1
 
@@ -230,7 +231,7 @@ if __name__ == "__main__":
     param_ode = np.array([  8e-4,   5e-5,   # 3e-3,
                           np.nan, np.nan,   # 1.2,
                            7.,              # identifiable at 1.3e7
-                          2.5e-8, 9.5e-8])
+                          2.5e-1, 9.5e-1])
     
     dfs_calibr = data_generation_distribution(n_exps, n_cl, param_ode, s_x, path=path_new)
     param_opt, calibr_setup = data_calibration_distribution(dfs_calibr, path=path_new)

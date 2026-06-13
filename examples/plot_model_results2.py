@@ -6,6 +6,27 @@ from scipy import stats
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+from matplotlib import rcParams
+
+# Set common plotting parameters for all figures
+plt.rc('text', usetex=True)
+rcParams['text.latex.preamble'] = r"\usepackage{bm} \usepackage{amsmath}"
+
+rcParams['lines.linewidth'] = 2.
+rcParams['lines.linestyle'] = 'solid' #'dashed'#
+rcParams['lines.markersize'] = 8
+rcParams['figure.figsize'] = (7.2, 4.5)
+rcParams['legend.framealpha'] = 0.
+rcParams['legend.handlelength'] = 2.
+
+rcParams['xtick.labelsize'] = 13
+rcParams['ytick.labelsize'] = 13
+rcParams['axes.labelsize'] = 15
+rcParams['legend.fontsize'] = 13
+
+rcParams['figure.dpi'] = 500
+#rcParams['savefig.format'] = 'pdf'
 
 
 def extract_observables_from_df(dfs):
@@ -42,7 +63,7 @@ if __name__ == "__main__":
     relnoise = 0.1
     n_exps = 5
 
-    path = f'out/main_param_distrib2_{int(n_exps)}exp/'
+    path = f'out/main_param_distrib2_{int(n_exps)}exp_divx/'
     path2=path
     exp_temps = fm.output.read_from_json(''+'exp_temps_model_paper.json', dir=path2)
 
@@ -230,3 +251,34 @@ if __name__ == "__main__":
     plt.close(fig)
 
     plot_sampled_parameter(mu, sigma, [alph_exps[1]], path=path2)
+
+
+    ## Plot comparison for different curves of alpha distribution:
+    n_exps_vals = [5, 20]
+    fig, ax = plt.subplots()
+    x = np.linspace(0., 5, 100)
+    mu, sigma = 0.5, 0.5
+    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
+    ax.plot(x, pdf, label=f'"Real" distribution\n (mu={mu:.2f}, sigma={sigma:.2f})', color='k', linewidth=3)
+    for n in n_exps_vals:
+        path = f'out/main_param_distrib2_{int(n)}exp_divx/'
+        path2=path
+        exp_temps = fm.output.read_from_json(''+'exp_temps_model_paper.json', dir=path2)
+        res = fm.output.read_from_json('Result_calibration.json', dir=path2)
+        param_opt = res['param_ode']
+        alph_opt = param_opt[n_cl + n_cl:2*n_cl + n_cl*len(exp_temps)]
+
+        # Calculate mu sigma for alpha distributions
+        shape, loc, scale = stats.lognorm.fit(alph_opt, floc=0)
+        mu_opt, sigma_opt = np.log(scale), shape
+        print(f"Optimized: Mu: {mu_opt}, Sigma: {sigma_opt}")
+
+        pdf = stats.lognorm.pdf(x, s=sigma_opt, scale=np.exp(mu_opt))
+        ax.plot(x, pdf, label=f'Estimation\n (mu={mu_opt:.2f}, sigma={sigma_opt:.2f}) {n} curves')
+    ax.set_xlabel(r'Growth rate $\alpha$')
+    ax.set_ylabel(r'Probability distribution $P(\alpha)$')
+    ax.set_xlim(0, 5)
+    plt.legend()
+    plt.savefig('out/'+'alph_distribution_comparison_n_exps.png', bbox_inches='tight')
+    plt.close(fig)
+

@@ -15,8 +15,27 @@ def extract_observables_from_df(dfs):
     x = fm.dtf.extract_observables_from_df_x(df_x, days_x, exps)
     return days_x , [x]
 
+def plot_sampled_parameter(mu, sigma, smpl_p, path=''):
+    smpl_p = np.array(smpl_p)
+    fig, ax = plt.subplots()
+    x = np.linspace(0., 5, 100)
+    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
+    ax.plot(x, pdf, label=f'Initial distribution\n (mean={mu:.2f}, Var={sigma:.2f})')#, color=fm.plotting.green_colors[0])
+    #pdf2 = stats.lognorm.pdf(smpl_p.flatten(), s=sigma, scale=np.exp(mu))
+    colors = [fm.plotting.blue_colors[2], fm.plotting.red_colors[2]]
+    for i in range (len(smpl_p.T)):
+        pdf2 = stats.lognorm.pdf(smpl_p[:, i], s=sigma, scale=np.exp(mu))
+        ax.scatter(smpl_p[:, i], pdf2, color=colors[i], label=f'Sampled value (Species {i+1})')
+    ax.set_xlim(0, 5)
+    ax.set_xlabel(r'Growth rate $\alpha$')
+    ax.set_ylabel(r'Probability distribution $P(\alpha)$')
+    plt.legend()
+    plt.savefig(path+'alph_distribution_sampled_values.pdf', bbox_inches='tight')
+    plt.close(fig)
+
 
 if __name__ == "__main__":
+    colors = [fm.plotting.blue_colors[2], fm.plotting.red_colors[2]]
     plt.rcParams['figure.dpi'] = 500
     n_cl = 2
     n_media = 2
@@ -53,6 +72,7 @@ if __name__ == "__main__":
         data = fm.dtf.filter_dataframe_regex('V.._', data)
         exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
         media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in data[1].columns])))
+
         res_exp = fm.output.read_from_json(f'Result_real_paramdistrib_{k}.json', dir=path2)
         param_exp = np.array(res_exp['param_ode'])
         alph_exps.append(param_exp[2*n_cl:2*n_cl+n_cl])
@@ -81,9 +101,12 @@ if __name__ == "__main__":
         }
 
         param_ode = np.concatenate((x0_vals, lambd_opt, alph_opt[k*n_cl:(k+1)*n_cl], rest_ode_param))
+        param_ode_init = param_exp
         t_model = np.linspace(0., 18., 100)
 
         x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V{k+1:02d}', data[:-1]), param_ode, calibr_setup, t_model)
+        
+        x_count_init, obs_mibi_model_init, obs_maldi_model_init, obs_ngsi_model_init, temps_model_init = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V{k+1:02d}', data[:-1]), param_ode_init, calibr_setup, t_model)
         exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
         
         '''
@@ -116,13 +139,28 @@ if __name__ == "__main__":
                 obs_mibi = obs_mibi_model[3*i:3*i+3,j,:]
                 fm.plotting.plot_all([temp], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med).filter(like=f'_{int(temp):02d}C_'), clrs=exp_clrs,temps=temps_model, mtimes=t_model, mestim=obs_mibi, dir=path2, add_name=f'MiBi_{med}_const_model_{int(temp)}Grad'+add_name, time_lim=[17.5])
         '''
+
         t_exp, [x_exp] = extract_observables_from_df(data)
         fig, ax = plt.subplots()
         for i in range (n_cl):
-            ax.plot(t_model, x_count[0, i], label=f'Model cl{i+1}')
-            ax.scatter(t_exp, x_exp[0, i], label=f'Exp cl{i+1}')
+            ax.plot(t_model, x_count[0, i], label=f'Model (Species {i+1})', color=colors[i])
+            ax.scatter(t_exp, x_exp[0, i], label=f'Sampled data (Species {i+1})', color=colors[i])
         ax.set_yscale('log')
+        plt.legend()
         plt.savefig(path2+f'x_count_{k}exp.png', bbox_inches='tight')
+        plt.close(fig)
+
+        t_exp, [x_exp] = extract_observables_from_df(data)
+        fig, ax = plt.subplots()
+        for i in range (n_cl):
+            ax.plot(t_model, x_count_init[0, i], label=f'Model (Species {i+1})', linestyle='dashed', color=colors[i])
+            ax.scatter(t_exp, x_exp[0, i], label=f'Sampled data (Species {i+1})', color=colors[i])
+        ax.set_yscale('log')
+        ax.set_xlim(-0.2, np.max(t_model))
+        ax.set_xlabel(r'Time, $t$')
+        ax.set_ylabel(r'Bacterial count, $x(t)$')
+        plt.legend()
+        plt.savefig(path2+f'Data_generation_paramdistrib_x_count_{k}exp.pdf', bbox_inches='tight')
         plt.close(fig) 
     # Plot alphas distribution:
     fig, ax = plt.subplots()
@@ -190,3 +228,5 @@ if __name__ == "__main__":
     plt.legend(framealpha=0.5, bbox_to_anchor=(1, 1.05))
     plt.savefig(path2+'alpha_comparison_opt_vs_exps.png', bbox_inches='tight')
     plt.close(fig)
+
+    plot_sampled_parameter(mu, sigma, [alph_exps[1]], path=path2)

@@ -142,12 +142,14 @@ if __name__ == "__main__":
             ax.plot(t_model, x_count[0, i], label=f'Model (Species {i+1})', color=colors[i])
             ax.scatter(t_exp, x_exp[0, i], label=f'Sampled data (Species {i+1})', color=colors[i])
         ax.set_yscale('log')
+        ax.set_xlim(-0.2, np.max(t_model))
+        ax.set_xlabel(r'Time, $t$')
+        ax.set_ylabel(r'Bacterial count, $x(t)$')
         plt.legend()
-        plt.savefig(path2+f'x_count_{k}exp.png', bbox_inches='tight')
+        plt.savefig(path2+f'Model_estimationx_count_{k}exp.pdf', bbox_inches='tight')
         plt.close(fig)
 
         # Plot data vs. initial model: x_count
-        t_exp, [x_exp] = extract_observables_from_df(data)
         fig, ax = plt.subplots()
         for i in range (n_cl):
             ax.plot(t_model, x_count_init[0, i], label=f'Model (Species {i+1})', linestyle='dashed', color=colors[i])
@@ -159,6 +161,7 @@ if __name__ == "__main__":
         plt.legend()
         plt.savefig(path2+f'Data_generation_paramdistrib_x_count_{k}exp.pdf', bbox_inches='tight')
         plt.close(fig) 
+        
     # Plot alphas distribution:
     fig, ax = plt.subplots()
     ax.hist(alph_opt, bins=20)  # arguments are passed to np.histogram

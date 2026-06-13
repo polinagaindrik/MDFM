@@ -6,6 +6,8 @@ import fusion_model as fm
 
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+from scipy import stats
 
 def extract_observables_from_df(dfs):
     (df_mibi, df_maldi, df_ngs, df_x ) = dfs
@@ -100,7 +102,7 @@ def model_wotemp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, pa
     return df_mibi, df_maldi, df_ngs, df_realx
 
 def data_generation_distribution(n_exps, n_cl, param_ode_templ, s_x, path=''):
-    dfs_mibi, dfs_maldi, dfs_ngs, dfs_x = [], [], [], []
+    dfs_mibi, dfs_maldi, dfs_ngs, dfs_x, smpl_alph = [], [], [], [], []
     for i in range (n_exps):
         np.random.seed(46987*(i+1))
         add_name = f'_{i}'
@@ -121,7 +123,28 @@ def data_generation_distribution(n_exps, n_cl, param_ode_templ, s_x, path=''):
         dfs_maldi.append(df_maldi)
         dfs_ngs.append(df_ngs)
         dfs_x.append(df_x)
-    return fm.dtf.merge_dfs(dfs_mibi), fm.dtf.merge_dfs(dfs_maldi), fm.dtf.merge_dfs(dfs_ngs), fm.dtf.merge_dfs(dfs_x)
+        smpl_alph.append(alph_sampled)
+    plot_sampled_parameter(0.5, 0.5, smpl_alph, path=path)
+    return [fm.dtf.merge_dfs(dfs_mibi), fm.dtf.merge_dfs(dfs_maldi), fm.dtf.merge_dfs(dfs_ngs), fm.dtf.merge_dfs(dfs_x)], smpl_alph
+
+def plot_sampled_parameter(mu, sigma, smpl_p, path=''):
+    smpl_p = np.array(smpl_p)
+    fig, ax = plt.subplots()
+    x = np.linspace(0., 5, 100)
+    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
+    ax.plot(x, pdf, label=f'Initial distribution\n (mu={mu:.2f}, sigma={sigma:.2f})', color=fm.plotting.green_colors[2])
+    #pdf2 = stats.lognorm.pdf(smpl_p.flatten(), s=sigma, scale=np.exp(mu))
+    colors = [fm.plotting.blue_colors[2], fm.plotting.red_colors[2]]
+    for i in range (len(smpl_p.T)):
+        pdf2 = stats.lognorm.pdf(smpl_p[:, i], s=sigma, scale=np.exp(mu))
+        ax.scatter(smpl_p[:, i], pdf2, color=colors[i], label=f'Sampled value (Species {i+1})')
+    ax.set_xlim(0, 5)
+    ax.set_xlabel(r'Growth rate $\alpha$')
+    ax.set_ylabel(r'Probability distribution $P(\alpha)$')
+    plt.legend()
+    plt.savefig(path+'alph_distribution_sampled_values.png', bbox_inches='tight')
+    plt.close(fig)
+
 
 def data_calibration_distribution(dfs, path=''):
     (df_mibi, df_maldi, df_ngs, df_x) = dfs
@@ -233,7 +256,8 @@ if __name__ == "__main__":
                            7.,              # identifiable at 1.3e7
                           2.5e-1, 9.5e-1])
     
-    dfs_calibr = data_generation_distribution(n_exps, n_cl, param_ode, s_x, path=path_new)
+    dfs_calibr, _ = data_generation_distribution(n_exps, n_cl, param_ode, s_x, path=path_new)
+    exit()
     param_opt, calibr_setup = data_calibration_distribution(dfs_calibr, path=path_new)
 
     '''

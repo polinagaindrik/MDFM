@@ -43,13 +43,18 @@ def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
     _, [obs_x] = calibr_setup['data_array']
     n_cl = np.shape(obs_x)[1] #np.shape(df_maldi)[0]
     exps = sorted(list(set([s.split('_')[0] for s in df_x.columns])))
-    x_max = np.nanmax(obs_x, axis=(0, 1))**2
+    #x_max = np.nanmax(obs_x, axis=(0, 1))**2
+    x_max = obs_x**2
     ll_x = np.zeros(np.shape(obs_x))
     for i, exp in enumerate(exps):
         param_ode = np.concatenate((lambd, alph[n_cl*i:n_cl*(i+1)], rest_ode_param))
-        ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals, param_ode, s_x, x_max)
+        ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals, param_ode, s_x, x_max[i])
+    ll_x_1sp = ll_x[:, 0]
+    ll_x_2sp = ll_x[:, 1]
+    ll_x_1sp = ll_x_1sp[ll_x_1sp!=0]
+    ll_x_2sp = ll_x_2sp[ll_x_2sp!=0]
     ll_x = ll_x[ll_x!=0]
-    return calibr_setup['aggregation_func']([ll_x])
+    return calibr_setup['aggregation_func']([ll_x_1sp, ll_x_2sp])
 
 def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, x_max):
     model = calibr_setup['model']
@@ -206,7 +211,7 @@ def estimate_parameter_set(param_init, s_x, n_cl, add_name='',path=''):
         'n_cl': n_cl,
         'n_media': n_media,
         'dfs': dfs_calibr,
-        'aggregation_func': fm.pest.cost_sum_and_geometric_mean,
+        'aggregation_func': fm.pest.cost_arithmetic_mean,
         'exps': exps_calibr,
         'exp_temps': {exp: temp for exp, temp in zip(exps_calibr, temps)},
         'media': media, 
@@ -257,7 +262,6 @@ if __name__ == "__main__":
                           2.5e-1, 9.5e-1])
     
     dfs_calibr, _ = data_generation_distribution(n_exps, n_cl, param_ode, s_x, path=path_new)
-    exit()
     param_opt, calibr_setup = data_calibration_distribution(dfs_calibr, path=path_new)
 
     '''

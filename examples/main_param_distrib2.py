@@ -135,7 +135,7 @@ def data_generation_distribution(n_exps, n_cl, param_ode_templ, s_x, path=''):
 def plot_sampled_parameter(mu, sigma, smpl_p, path=''):
     smpl_p = np.array(smpl_p)
     fig, ax = plt.subplots()
-    x = np.linspace(0., 5, 100)
+    x = np.linspace(0., 6, 100)
     pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
     ax.plot(x, pdf, label=f'Initial distribution\n (mu={mu:.2f}, sigma={sigma:.2f})', color=fm.plotting.green_colors[2])
     #pdf2 = stats.lognorm.pdf(smpl_p.flatten(), s=sigma, scale=np.exp(mu))
@@ -175,7 +175,7 @@ def data_calibration_distribution(dfs, path=''):
     x0_bnds_all = tuple([(1., 4.5) for _ in range (calibr_presetup['n_cl'])])
     inhib_bnds = [(0.02, 3.) for _ in range (n_cl*(n_cl-1))]
     param_ode_bnds = tuple([(1e-6, 1e-2) for _ in range (n_cl)] + # lambd
-                            [(.01,  4.) for _ in range (n_cl) for _ in range (len(calibr_presetup['exps']))]  + # alph
+                            [(.01,  5.) for _ in range (n_cl) for _ in range (len(calibr_presetup['exps']))]  + # alph
                             [(6., 12.)]                         + # N_max
                             inhib_bnds)
     S_bnds = tuple([(0.01, 1.) for _ in range (calibr_presetup['n_cl']*n_media)])
@@ -189,6 +189,7 @@ def data_calibration_distribution(dfs, path=''):
     fm.output.json_dump({'param_ode': param_opt[:-n_cl*n_media].astype(list), 's_x': s_x.flatten(), 'T_x': T_x}, 'Result_calibration.json', dir=path_new)
     return param_opt, calibr_setup
 
+'''
 def estimate_parameter_set(param_init, s_x, n_cl, add_name='',path=''):
     temps = [2.,]
     ntr = 1
@@ -224,7 +225,7 @@ def estimate_parameter_set(param_init, s_x, n_cl, add_name='',path=''):
     #              for j in range (n_cl)]
     inhib_bnds = [(0.02, 3.) for _ in range (n_cl*(n_cl-1))]
     param_ode_bnds = tuple([(1e-6, 1e-2) for _ in range (n_cl)] + # lambd
-                           [(.01,  4.) for _ in range (n_cl)]   +  # alph
+                           [(.01,  5.) for _ in range (n_cl)]   +  # alph
                            [(6., 12.)]                          + # N_max
                             inhib_bnds)
     #S_bnds = tuple([(0.01, 1.) for _ in range (calibr_presetup['n_cl']*n_media)])
@@ -233,18 +234,19 @@ def estimate_parameter_set(param_init, s_x, n_cl, add_name='',path=''):
     calibr_setup['param_bnds'] =  x0_bnds_all + param_ode_bnds# + S_bnds
     param_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_setup)[0]
     return param_opt, calibr_setup
+'''
 
 if __name__ == "__main__":
     # Calculate x and estimate from here
     path = 'out/'
-    workers = -1
+    workers = 46
     n_cl = 2
     n_media = 2
-    relnoise = 0.1
-    n_exps = 20
+    relnoise = 0.0
+    n_exps = 50
 
     add_name = ''
-    path_new = path+f'main_param_distrib2_{int(n_exps)}exp/'
+    path_new = path+f'main_param_distrib2_{int(n_exps)}exp_divx/'
     # 'Real' model:
     
     temps = [2. for _ in range (n_exps)]

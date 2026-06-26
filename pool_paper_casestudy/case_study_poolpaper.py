@@ -5,13 +5,69 @@ sys.path.append(os.getcwd())
 import fusion_model as fm
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 
+########### In-silico data generation ############
+def data_generation_poolpaper(n_cl, param_ode, x10, path=''):
+    dfs_ode = []
+    np.random.seed(46987*(i+1))
+    add_name = f'_{i}'
+    temps = [2.,]
+    ntr = 1
+    df_ode = model_wotemp(n_cl, temps, ntr, param_ode=param_ode, x10=x10, add_name=add_name,path=path, exp_start_offset=i*ntr)
+    dfs_ode.append(df_ode)
+    return df_ode
+
+def model_wotemp(n_cl, temps, ntr, param_ode=None, x10=None, path='',add_name='', exp_start_offset=0):
+    np.random.seed(46987)
+    t = np.linspace(0., 17., 18)
+    if param_ode is None:
+       print('No parameter vector provided.')
+       exit()
+    if x10 is not None:
+        x0 = fm.data.set_initial_vals(x10, temps, n_cl)      
+    else:
+        x10, x0 = fm.data.get_random_initial_vals(temps, n_cl)
+    df_ode = generate_data_dfs(ode_model_coculture, t, np.array(param_ode), x0, temps, n_cl, n_traj=ntr, exp_start_offset=exp_start_offset)
+    fm.data.save_all_dfs([df_ode], names=[f'poolpaper{add_name}'], path=path)
+    print(add_name, param_ode, '\n')
+    fm.data.json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode)}, f'Generated_param{add_name}.json', dir=path)
+    return df_ode
+
+def set_initial_vals(x10, temps, n_cl):
+    return [[10**L0 for L0 in x10[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
+
+
+def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, exp_start_offset=0):
+    df_ode = []
+    for j, temp in enumerate(temps):
+        exp_start = exp_start_offset + 1 + j
+        const = [[temp], n_cl]
+        x0_exp = np.asarray(x0[j], dtype=float)
+        param_ode = np.asarray(param[:n_cl*(4+n_cl)+2])
+        x = fm.mdl.model_ODE_solution(model, t, param_ode, x0_exp, const)#, jac=jac)
+        bacteria_name = ['Ls', 'Lm']
+        df_ode0 = fm.dtf.merge_dfs([create_df_poolpaper(t, x, [f'V{j+exp_start:02d}',f'{int(const[0][0]):02d}C'], bacteria_name, stds=0.) for j in range(n_traj)], sort=False)
+        df_ode.append(df_ode0)
+    return fm.dtf.merge_dfs(df_ode, sort=False)
+
+def create_df_poolpaper(days, obs, name_part, bact_name, stds=0):
+    n_cl = len(bact_name)
+    n_states = 1
+    data = {"Measurement": ['x_'+bact_name[i]+f'_State_{j:02d}' for i in range (n_cl) for j in range (n_states)]+['m_Resource', 'm_BAC', 'm_LA']}
+    for d, o in zip(days, obs.T):
+        data["_".join(name_part + [f'{int(d):02d}', 'poolpaper'])] = o
+    df = pd.DataFrame(data=data).set_index('Measurement') 
+    #df = pd.DataFrame(data=data).groupby('Measurement', sort=False).sum()
+    return df
+
+###############################################################################################33
 
 def extract_observables_from_df(dfs):
     (df_x,) = dfs
     exps = sorted(list(set([s.split("_")[0] for s in df_x.columns])))
-    days_x = sorted(set([float(f.split("_")[3]) for f in df_x.columns]))
+    days_x = sorted(set([float(f.split("_")[-2]) for f in df_x.columns]))
     obs_x = np.zeros((len(exps), np.shape(df_x)[0], len(days_x)))
     for i, exp in enumerate(exps):
         for k, d in enumerate(days_x):
@@ -174,6 +230,7 @@ if __name__ == "__main__":
             10**-9,         # k_LA_ls
             0.5 * 10**-9,   # k_LA_lm
     ]
+    x10_bact = [[5., 3.1]]
     x_sol = fm.mdl.model_ODE_solution(
         ode_model_coculture, t_test, param_ode_test, x0_test, [temps, n_cl]
     )
@@ -200,3 +257,9 @@ if __name__ == "__main__":
     plt.legend()
     plt.savefig(path_new + "LA.png", bbox_inches="tight")
     plt.close(fig)
+
+    df_ode = data_generation_poolpaper(n_cl, param_ode_test, x10_bact, path=path_new)
+    days_x, [obs_x] = extract_observables_from_df([df_ode])
+    print(df_ode)
+    print(days_x)
+    print(obs_x)

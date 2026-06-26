@@ -11,11 +11,10 @@ import matplotlib.pyplot as plt
 ########### In-silico data generation ############
 def data_generation_poolpaper(n_cl, param_ode, x10, path=''):
     dfs_ode = []
-    np.random.seed(46987*(i+1))
-    add_name = f'_{i}'
+    add_name = ''
     temps = [2.,]
     ntr = 1
-    df_ode = model_wotemp(n_cl, temps, ntr, param_ode=param_ode, x10=x10, add_name=add_name,path=path, exp_start_offset=i*ntr)
+    df_ode = model_wotemp(n_cl, temps, ntr, param_ode=param_ode, x10=x10, add_name=add_name,path=path, exp_start_offset=0)
     dfs_ode.append(df_ode)
     return df_ode
 
@@ -106,7 +105,7 @@ def cost(param, calibr_setup, jac_spasity):
     rest_ode_param = param[n_cl*n_exps + n_cl + n_cl:]
     x0_vals = param[:n_cl*n_exps]
 
-    (df_x) = calibr_setup["dfs"]
+    (df_x, ) = calibr_setup["dfs"]
     _, [obs_x] = calibr_setup["data_array"]
     n_cl = np.shape(obs_x)[1]  # np.shape(df_maldi)[0]
     exps = sorted(list(set([s.split("_")[0] for s in df_x.columns])))
@@ -128,16 +127,15 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
     model = calibr_setup["model"]
     days, [obs_x] = calibr_setup["data_array"]
     temp = calibr_setup["exp_temps"][exp]
-    const = [[temp], n_cl, calibr_setup["media"]]
+    const = [[temp], n_cl]
 
     C0 = np.concatenate((10 ** np.array(x0), np.array([1., 0., 0.])))
     C = fm.mdl.model_ODE_solution(model, days, param_ode, C0, const)
-    n_C = C[:2]
-    ll_x0 = (obs_x[i] - n_C) ** 2 / x_max
+    ll_x0 = (obs_x[i] - C) ** 2 / x_max
     return ll_x0
 
 
-def data_calibration(dfs, path=""):
+def data_calibration_poolpaper(dfs, path=""):
     exps_calibr = sorted(list(set([s.split("_")[0] for s in dfs[0].columns])))
     calibr_presetup = {
         "model": ode_model_coculture,
@@ -200,10 +198,37 @@ def ode_model_monoculture(t, x, param, x0, ode_args):
         k_LA * x
     ]
 
+############## Plotting ######################333
+def plot_all_curves(t, param_ode, x10, path='', add_name=''):
+    x0 = fm.data.set_initial_vals(x10, temps, n_cl)[0]
+    x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [temps, n_cl])
+    lbls = ["ls", "lm", "R", "BAC", "LA"]
+    fig, ax = plt.subplots()
+    for i in range(3):
+        ax.plot(t, x_sol[i], label=lbls[i])
+    # ax.plot(t, x_sol[2], label='R')
+    ax.set_yscale("log")
+    ax.set_ylim(10**-3, 10**9)
+    plt.legend()
+    plt.savefig(path + f"x_sol_R{add_name}.png", bbox_inches="tight")
+    plt.close(fig)
+
+    fig, ax = plt.subplots()
+    ax.plot(t, x_sol[-2], label=lbls[-2])
+    plt.legend()
+    plt.savefig(path + f"BAC{add_name}.png", bbox_inches="tight")
+    plt.close(fig)
+
+    fig, ax = plt.subplots()
+    ax.plot(t, x_sol[-1], label=lbls[-1])
+    plt.legend()
+    plt.savefig(path + f"LA{add_name}.png", bbox_inches="tight")
+    plt.close(fig)
+
 
 if __name__ == "__main__":
     path = "pool_paper_casestudy/out/"
-    workers = -1
+    workers = 2
     n_cl = 2
     # relnoise = 0.1
     n_exps = 1
@@ -220,46 +245,20 @@ if __name__ == "__main__":
     t_test = np.linspace(0.0, 55.0, 100)  # hours
     x0_test = np.array([10**5., 10**3.1, 1.0, 0.0, 0.0])
     param_ode_test = [
-            0.38,           # mu_ls
-            0.32,           # mu_lm
-            0.001,          # omega_ls
-            0.001,          # omega_lm
-            10**4,          # omegaT_lm
-            8.3,            # N_texp
-            10**-5,         # k_T
-            10**-9,         # k_LA_ls
-            0.5 * 10**-9,   # k_LA_lm
-    ]
+                        0.38,           # mu_ls
+                        0.32,           # mu_lm
+                        0.001,          # omega_ls
+                        0.001,          # omega_lm
+                        10**4,          # omegaT_lm
+                        8.3,            # N_texp
+                        10**-5,         # k_T
+                        10**-9,         # k_LA_ls
+                        0.5 * 10**-9,   # k_LA_lm
+                     ]
     x10_bact = [[5., 3.1]]
-    x_sol = fm.mdl.model_ODE_solution(
-        ode_model_coculture, t_test, param_ode_test, x0_test, [temps, n_cl]
-    )
-
-    lbls = ["ls", "lm", "R", "BAC", "LA"]
-    fig, ax = plt.subplots()
-    for i in range(3):
-        ax.plot(t_test, x_sol[i], label=lbls[i])
-    # ax.plot(t_test, x_sol[2], label='R')
-    ax.set_yscale("log")
-    ax.set_ylim(10**-3, 10**9)
-    plt.legend()
-    plt.savefig(path_new + "x_sol_R.png", bbox_inches="tight")
-    plt.close(fig)
-
-    fig, ax = plt.subplots()
-    ax.plot(t_test, x_sol[-2], label=lbls[-2])
-    plt.legend()
-    plt.savefig(path_new + "BAC.png", bbox_inches="tight")
-    plt.close(fig)
-
-    fig, ax = plt.subplots()
-    ax.plot(t_test, x_sol[-1], label=lbls[-1])
-    plt.legend()
-    plt.savefig(path_new + "LA.png", bbox_inches="tight")
-    plt.close(fig)
+    plot_all_curves(t_test, param_ode_test, x10_bact, path=path_new, add_name='_init')
 
     df_ode = data_generation_poolpaper(n_cl, param_ode_test, x10_bact, path=path_new)
     days_x, [obs_x] = extract_observables_from_df([df_ode])
-    print(df_ode)
-    print(days_x)
-    print(obs_x)
+    param_opt, calibr_setup = data_calibration_poolpaper([df_ode], path=path_new)
+    plot_all_curves(t_test, param_opt[n_cl*len(temps):], [param_opt[:n_cl*len(temps)]], path=path_new, add_name='_estim')

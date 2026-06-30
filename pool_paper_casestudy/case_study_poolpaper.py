@@ -26,9 +26,7 @@ def model_wotemp(n_cl, temps, ntr, param_ode=None, x10=None, path='',add_name=''
        print('No parameter vector provided.')
        exit()
     if x10 is not None:
-        x0 = fm.data.set_initial_vals(x10, temps, n_cl)      
-    else:
-        x10, x0 = fm.data.get_random_initial_vals(temps, n_cl)
+        x0 = set_initial_vals(x10, temps, n_cl)
     df_ode = generate_data_dfs(ode_model_coculture, t, np.array(param_ode), x0, temps, n_cl, n_traj=ntr, exp_start_offset=exp_start_offset)
     fm.data.save_all_dfs([df_ode], names=[f'poolpaper{add_name}'], path=path)
     print(add_name, param_ode, '\n')
@@ -36,7 +34,7 @@ def model_wotemp(n_cl, temps, ntr, param_ode=None, x10=None, path='',add_name=''
     return df_ode
 
 def set_initial_vals(x10, temps, n_cl):
-    return [[10**L0 for L0 in x10[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
+    return [[10**L0 for L0 in x10[i]] + [1., 0., 0., 6.] for i in range (len(temps))]
 
 
 def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, exp_start_offset=0):
@@ -245,9 +243,9 @@ def ode_model_monoculture(t, x, param, x0, ode_args):
 
 ############## Plotting ######################333
 def plot_all_curves(t, param_ode, x10, path='', add_name=''):
-    x0 = fm.data.set_initial_vals(x10, temps, n_cl)[0]
+    x0 = set_initial_vals(x10, temps, n_cl)[0]
     x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [temps, n_cl])
-    lbls = ["ls", "lm", "R", "BAC", "LA"]
+    lbls = ["ls", "lm", "R", "BAC", "LA", "pH"]
     fig, ax = plt.subplots()
     for i in range(3):
         ax.plot(t, x_sol[i], label=lbls[i])
@@ -259,21 +257,22 @@ def plot_all_curves(t, param_ode, x10, path='', add_name=''):
     plt.close(fig)
 
     fig, ax = plt.subplots()
-    ax.plot(t, x_sol[-2], label=lbls[-2])
+    ax.plot(t, x_sol[3], label=lbls[3])
     plt.legend()
     plt.savefig(path + f"BAC{add_name}.png", bbox_inches="tight")
     plt.close(fig)
 
     fig, ax = plt.subplots()
-    ax.plot(t, x_sol[-1], label=lbls[-1])
+    ax.plot(t, x_sol[4], label=lbls[4])
+    ax.plot(t, x_sol[5], label=lbls[5])
     plt.legend()
-    plt.savefig(path + f"LA{add_name}.png", bbox_inches="tight")
+    plt.savefig(path + f"LA_pH{add_name}.png", bbox_inches="tight")
     plt.close(fig)
 
 
 if __name__ == "__main__":
     path = "pool_paper_casestudy/out/"
-    workers = 2
+    workers = 4
     n_cl = 2
     # relnoise = 0.1
     n_exps = 1
@@ -290,15 +289,14 @@ if __name__ == "__main__":
     skip_rows = [8, 34, 58, 83, 109]
     LA_sheetnames = ['R9_494_LA_prod', 'R9_23K_LA_prod', 'R9_1034_LA_prod', 'R9_494co_LA_prod', 'R9_23Kco_LA_prod']
 
-    for n, nr, las in zip(names, skip_rows, LA_sheetnames):
-        print(n)
-        df = experimental_values(n, skiprows=nr, LA_sheetname=las)
-    exit()
+    #for n, nr, las in zip(names, skip_rows, LA_sheetnames):
+    #    print(n)
+    #    df = experimental_values(n, skiprows=nr, LA_sheetname=las)
 
     
     ## Test the model results:
     t_test = np.linspace(0.0, 55.0, 100)  # hours
-    x0_test = np.array([10**5., 10**3.1, 1.0, 0.0, 0.0])
+    x0_test = np.array([10**5., 10**3.1, 1.0, 0.0, 0.0, 6.0])
     param_ode_test = [
                         0.38,           # mu_ls
                         0.32,           # mu_lm

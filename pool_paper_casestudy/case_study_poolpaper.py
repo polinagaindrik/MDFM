@@ -7,6 +7,7 @@ import fusion_model as fm
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+#from math import floor
 
 ########### In-silico data generation ############
 def data_generation_poolpaper(n_cl, param_ode, x10, path=''):
@@ -47,19 +48,61 @@ def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, exp_start_offs
         param_ode = np.asarray(param[:n_cl*(4+n_cl)+2])
         x = fm.mdl.model_ODE_solution(model, t, param_ode, x0_exp, const)#, jac=jac)
         bacteria_name = ['Ls', 'Lm']
-        df_ode0 = fm.dtf.merge_dfs([create_df_poolpaper(t, x, [f'V{j+exp_start:02d}',f'{int(const[0][0]):02d}C'], bacteria_name, stds=0.) for j in range(n_traj)], sort=False)
+        df_ode0 = fm.dtf.merge_dfs([create_df_poolpaper(t, x, [f'V{j+exp_start:02d}'], bacteria_name, stds=0.) for j in range(n_traj)], sort=False)
         df_ode.append(df_ode0)
     return fm.dtf.merge_dfs(df_ode, sort=False)
 
 def create_df_poolpaper(days, obs, name_part, bact_name, stds=0):
     n_cl = len(bact_name)
     n_states = 1
-    data = {"Measurement": ['x_'+bact_name[i]+f'_State_{j:02d}' for i in range (n_cl) for j in range (n_states)]+['m_Resource', 'm_BAC', 'm_LA']}
+    data = {"Measurement": ['x_'+bact_name[i]+f'_State_{j:02d}' for i in range (n_cl) for j in range (n_states)]+['m_Resource', 'm_BAC', 'm_LA', 'pH']}
     for d, o in zip(days, obs.T):
         data["_".join(name_part + [f'{int(d):02d}', 'poolpaper'])] = o
     df = pd.DataFrame(data=data).set_index('Measurement') 
     #df = pd.DataFrame(data=data).groupby('Measurement', sort=False).sum()
     return df
+
+############### Read data from excel ######################3
+# TODO pack this all in df: how to deal with missing times for LA and BAC
+def experimental_values(name, skiprows=0, LA_sheetname=''):
+    filename = 'CCD_results_counts_Part 2.xlsx'
+    df_counts = pd.read_excel("pool_paper_casestudy/data/" + filename, keep_default_na=True, sheet_name='R9_rep', skiprows=skiprows, usecols='A:F', nrows=16)
+    # TODO: temporal solution to round all t to the round number: maybe not accurate: what else to do?
+    time_count = round(df_counts['Time'])
+   
+    Ls = np.array(df_counts['LAB (cfu/mL)'])
+    Lm = np.array(df_counts['LM (cfu/mL)'])
+    pH = np.array(df_counts['pH'])
+
+    if name == 'Ls23K' or 'Lm' or 'Ls23K_Lm':
+        time_BAC = time_count
+        BAC = np.array([0. for t in time_BAC])
+    else:
+        df_BAC = pd.read_excel("pool_paper_casestudy/data/8_BA/BA_09.xlsx", keep_default_na=True, sheet_name='BA_prod', skiprows=19, usecols='M:Q', nrows=16)
+        time_BAC = round(df_BAC['Time, h (1)'])
+        BAC = np.array(df_BAC['BA (10^3 AU/mL)'])*10**3
+
+    df_LA = pd.read_excel("pool_paper_casestudy/data/7_LA/RUN_09.xlsx", keep_default_na=True, sheet_name=LA_sheetname, skiprows=19, usecols='M:Q', nrows=16)
+    time_LA = round(df_LA['Time, h (1)'])
+    # Restore missing measurements of LA
+    time_all = sorted(set(list(time_count) + list(time_BAC) + list(time_LA)))
+    df_LA_new = df_LA.T
+    j = 0
+    for t in time_all:
+        if not np.any(np.abs(df_LA['Time, h (1)'] - t) <= 0.3):
+            j = j+1
+            df_LA_new[len(df_LA['Time, h (1)'])+j] = [t]+ [np.nan for _ in range (len(df_LA.columns)-1)]
+    df_LA = df_LA_new.T.sort_values(by=['Time, h (1)'], ascending=True)
+    LA = np.array(df_LA['LA (mg/mL)'])
+
+    Resource = [np.nan for _ in range (len(time_all))]
+    print(time_all)
+    print(len(Ls), len(Lm), len(Resource), len(BAC), len(LA), len(pH))
+    print(df_LA)
+    obs = np.array([Ls, Lm, Resource, BAC, LA, pH])
+    exp_start = 1
+
+    return create_df_poolpaper(time_all, obs, [f'V{exp_start:02d}'], ['Ls', 'Lm'])
 
 ###############################################################################################33
 
@@ -129,7 +172,7 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
     temp = calibr_setup["exp_temps"][exp]
     const = [[temp], n_cl]
 
-    C0 = np.concatenate((10 ** np.array(x0), np.array([1., 0., 0.])))
+    C0 = np.concatenate((10 ** np.array(x0), np.array([1., 0., 0., 6.])))
     C = fm.mdl.model_ODE_solution(model, days, param_ode, C0, const)
     ll_x0 = (obs_x[i] - C) ** 2 / x_max
     return ll_x0
@@ -150,6 +193,7 @@ def data_calibration_poolpaper(dfs, path=""):
     fm.output.json_dump(calibr_presetup["exp_temps"], "exp_temps_model_paper.json", dir=path)
 
     # TODO Change  model so that bounds are on the same scale
+    # TODO are LA0, BAC0, pH0 also needed to be estimated
     x0_bnds_all = tuple([(2., 6.) for _ in range(calibr_presetup["n_cl"])])
     param_ode_bnds = tuple(
         [(0.01, 1.) for _ in range(n_cl) for _ in range (len(exps_calibr))] +   # mu
@@ -169,11 +213,11 @@ def data_calibration_poolpaper(dfs, path=""):
 
 
 def ode_model_coculture(t, x, param, x0, ode_args):
-    (temp_cond, n_cl,) = ode_args
+    (pH_cond, n_cl,) = ode_args
     (mu_ls, mu_lm, omega_ls, omega_lm, omegaT_lm, N_texp, k_T, k_LA_ls, k_LA_lm, ) = param
     # TODO add pH dependence of mu
-    (x_ls0, x_lm0, R0, T0, LA0) = x0
-    (x_ls, x_lm, R, T, LA) = x
+    (x_ls0, x_lm0, R0, T0, LA0, pH0) = x0
+    (x_ls, x_lm, R, T, LA, pH) = x
     N_t = 10**N_texp
     return [
         (mu_ls * R - omega_ls) * x_ls,
@@ -181,6 +225,7 @@ def ode_model_coculture(t, x, param, x0, ode_args):
         -(mu_ls / N_t) * R * x_ls - (mu_lm / N_t) * R * x_lm,
         k_T * x_ls * R,  #  ??
         k_LA_ls * x_ls + k_LA_lm * x_lm,  # *R but wo R the curves look better
+        0. # TODO pH evolution with time
     ]
 
 def ode_model_monoculture(t, x, param, x0, ode_args):
@@ -241,6 +286,16 @@ if __name__ == "__main__":
     # dfs_calibr = read_exp_data()
     # param_opt, calibr_setup = data_calibration(dfs_calibr, path=path_new)
 
+    names = ['LsCTC494', 'Ls23K', 'Lm', 'LsCTC494_Lm', 'Ls23K_Lm']
+    skip_rows = [8, 34, 58, 83, 109]
+    LA_sheetnames = ['R9_494_LA_prod', 'R9_23K_LA_prod', 'R9_1034_LA_prod', 'R9_494co_LA_prod', 'R9_23Kco_LA_prod']
+
+    for n, nr, las in zip(names, skip_rows, LA_sheetnames):
+        print(n)
+        df = experimental_values(n, skiprows=nr, LA_sheetname=las)
+    exit()
+
+    
     ## Test the model results:
     t_test = np.linspace(0.0, 55.0, 100)  # hours
     x0_test = np.array([10**5., 10**3.1, 1.0, 0.0, 0.0])

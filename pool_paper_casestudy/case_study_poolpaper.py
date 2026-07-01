@@ -66,7 +66,7 @@ def experimental_values(name, skiprows=0, LA_sheetname=''):
     filename = 'CCD_results_counts_Part 2.xlsx'
     df_counts = pd.read_excel("pool_paper_casestudy/data/" + filename, keep_default_na=True, sheet_name='R9_rep', skiprows=skiprows, usecols='A:F', nrows=16)
     # TODO: temporal solution to round all t to the round number: maybe not accurate: what else to do?
-    time_count = round(df_counts['Time'])
+    time_count = df_counts['Time'].astype(int)
    
     Ls = np.array(df_counts['LAB (cfu/mL)'])
     Lm = np.array(df_counts['LM (cfu/mL)'])
@@ -77,13 +77,14 @@ def experimental_values(name, skiprows=0, LA_sheetname=''):
         BAC = np.array([0. for t in time_BAC])
     else:
         df_BAC = pd.read_excel("pool_paper_casestudy/data/8_BA/BA_09.xlsx", keep_default_na=True, sheet_name='BA_prod', skiprows=19, usecols='M:Q', nrows=16)
-        time_BAC = round(df_BAC['Time, h (1)'])
+        time_BAC = df_BAC['Time, h (1)'].astype(int)
         BAC = np.array(df_BAC['BA (10^3 AU/mL)'])*10**3
 
     df_LA = pd.read_excel("pool_paper_casestudy/data/7_LA/RUN_09.xlsx", keep_default_na=True, sheet_name=LA_sheetname, skiprows=19, usecols='M:Q', nrows=16)
-    time_LA = round(df_LA['Time, h (1)'])
+    time_LA = df_LA['Time, h (1)'].astype(int)
     # Restore missing measurements of LA
     time_all = sorted(set(list(time_count) + list(time_BAC) + list(time_LA)))
+    df_LA["Time, h (1)"] = df_LA["Time, h (1)"].astype(int)
     df_LA_new = df_LA.T
     j = 0
     for t in time_all:
@@ -94,12 +95,8 @@ def experimental_values(name, skiprows=0, LA_sheetname=''):
     LA = np.array(df_LA['LA (mg/mL)'])
 
     Resource = [np.nan for _ in range (len(time_all))]
-    print(time_all)
-    print(len(Ls), len(Lm), len(Resource), len(BAC), len(LA), len(pH))
-    print(df_LA)
     obs = np.array([Ls, Lm, Resource, BAC, LA, pH])
     exp_start = 1
-
     return create_df_poolpaper(time_all, obs, [f'V{exp_start:02d}'], ['Ls', 'Lm'])
 
 ###############################################################################################33
@@ -152,6 +149,7 @@ def cost(param, calibr_setup, jac_spasity):
     exps = sorted(list(set([s.split("_")[0] for s in df_x.columns])))
     # TODO not clear, should just we compare logaritms?
     x_max = obs_x**2
+    x_max[x_max <= 1.0] = 1.0
     ll_x = np.zeros(np.shape(obs_x))
     for i, exp in enumerate(exps):
         param_ode = np.concatenate((lambd, alph, rest_ode_param))
@@ -272,7 +270,7 @@ def plot_all_curves(t, param_ode, x10, path='', add_name=''):
 
 if __name__ == "__main__":
     path = "pool_paper_casestudy/out/"
-    workers = 4
+    workers = 5
     n_cl = 2
     # relnoise = 0.1
     n_exps = 1
@@ -289,11 +287,17 @@ if __name__ == "__main__":
     skip_rows = [8, 34, 58, 83, 109]
     LA_sheetnames = ['R9_494_LA_prod', 'R9_23K_LA_prod', 'R9_1034_LA_prod', 'R9_494co_LA_prod', 'R9_23Kco_LA_prod']
 
-    #for n, nr, las in zip(names, skip_rows, LA_sheetnames):
-    #    print(n)
-    #    df = experimental_values(n, skiprows=nr, LA_sheetname=las)
+    for n, nr, las in zip(names, skip_rows, LA_sheetnames):
+        df_exp = experimental_values(n, skiprows=nr, LA_sheetname=las)
 
     
+    param_opt, calibr_setup = data_calibration_poolpaper([df_exp], path=path_new)
+    
+    t_test = np.linspace(0.0, 55.0, 100)  # hours
+    plot_all_curves(t_test, param_opt[n_cl*len(temps):], [param_opt[:n_cl*len(temps)]], path=path_new, add_name='_estim_realdata')
+
+    '''
+    # Test with in-siilico data generation and calibration
     ## Test the model results:
     t_test = np.linspace(0.0, 55.0, 100)  # hours
     x0_test = np.array([10**5., 10**3.1, 1.0, 0.0, 0.0, 6.0])
@@ -315,3 +319,4 @@ if __name__ == "__main__":
     days_x, [obs_x] = extract_observables_from_df([df_ode])
     param_opt, calibr_setup = data_calibration_poolpaper([df_ode], path=path_new)
     plot_all_curves(t_test, param_opt[n_cl*len(temps):], [param_opt[:n_cl*len(temps)]], path=path_new, add_name='_estim')
+    '''

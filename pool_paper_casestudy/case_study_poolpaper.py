@@ -151,7 +151,8 @@ def cost(param, calibr_setup, jac_spasity):
     # TODO not clear, should just we compare logaritms?
     x_max = obs_x**2
     x_max[x_max <= 1.0] = 1.0
-    ll_x = np.zeros(np.shape(obs_x))
+    #ll_x = np.zeros(np.shape(obs_x))
+    ll_x = np.zeros(np.shape(obs_x[:, :-1]))
     for i, exp in enumerate(exps):
         param_ode = np.concatenate((lambd, alph, rest_ode_param))
         ll_x[i] = sq_diff_oneexp(
@@ -171,7 +172,7 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
 
     C0 = np.concatenate((10 ** np.array(x0), np.array([1., 0., 0., 6.])))
     C = fm.mdl.model_ODE_solution(model, days, param_ode, C0, const)
-    ll_x0 = (obs_x[i] - C) ** 2 / x_max
+    ll_x0 = (obs_x[i][:-1] - C[:-1]) ** 2 / x_max[:-1]
     return ll_x0
 
 
@@ -298,7 +299,7 @@ if __name__ == "__main__":
     temps = [2.0 for _ in range(n_exps)]
     ntr = 1
     path_new = path + "test/"
-
+    '''
     names = ['LsCTC494', 'Ls23K', 'Lm', 'LsCTC494_Lm', 'Ls23K_Lm']
     skip_rows = [8, 34, 58, 83, 109]
     LA_sheetnames = ['R9_494_LA_prod', 'R9_23K_LA_prod', 'R9_1034_LA_prod', 'R9_494co_LA_prod', 'R9_23Kco_LA_prod']
@@ -334,4 +335,4 @@ if __name__ == "__main__":
     days_x, [obs_x] = extract_observables_from_df([df_ode])
     param_opt, calibr_setup = data_calibration_poolpaper([df_ode], path=path_new)
     plot_all_curves(t_test, param_opt[n_cl*len(temps):], [param_opt[:n_cl*len(temps)]], path=path_new, add_name='_estim')
-    ''' 
+     

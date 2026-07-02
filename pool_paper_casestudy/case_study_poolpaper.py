@@ -61,8 +61,7 @@ def create_df_poolpaper(days, obs, name_part, bact_name, stds=0):
     return df
 
 ############### Read data from excel ######################3
-# TODO pack this all in df: how to deal with missing times for LA and BAC
-def experimental_values(name, skiprows=0, LA_sheetname=''):
+def experimental_values(name, skiprows=0, LA_sheetname='', path=''):
     filename = 'CCD_results_counts_Part 2.xlsx'
     df_counts = pd.read_excel("pool_paper_casestudy/data/" + filename, keep_default_na=True, sheet_name='R9_rep', skiprows=skiprows, usecols='A:F', nrows=16)
     # TODO: temporal solution to round all t to the round number: maybe not accurate: what else to do?
@@ -72,13 +71,13 @@ def experimental_values(name, skiprows=0, LA_sheetname=''):
     Lm = np.array(df_counts['LM (cfu/mL)'])
     pH = np.array(df_counts['pH'])
 
-    if name == 'Ls23K' or 'Lm' or 'Ls23K_Lm':
+    if name == 'Ls23K' or name == 'Lm' or name == 'Ls23K_Lm':
         time_BAC = time_count
         BAC = np.array([0. for t in time_BAC])
     else:
         df_BAC = pd.read_excel("pool_paper_casestudy/data/8_BA/BA_09.xlsx", keep_default_na=True, sheet_name='BA_prod', skiprows=19, usecols='M:Q', nrows=16)
         time_BAC = df_BAC['Time, h (1)'].astype(int)
-        BAC = np.array(df_BAC['BA (10^3 AU/mL)'])*10**3
+        BAC = np.array(df_BAC['BA (10^3 AU/mL)'])*10**3     
 
     df_LA = pd.read_excel("pool_paper_casestudy/data/7_LA/RUN_09.xlsx", keep_default_na=True, sheet_name=LA_sheetname, skiprows=19, usecols='M:Q', nrows=16)
     time_LA = df_LA['Time, h (1)'].astype(int)
@@ -95,9 +94,11 @@ def experimental_values(name, skiprows=0, LA_sheetname=''):
     LA = np.array(df_LA['LA (mg/mL)'])
 
     Resource = [np.nan for _ in range (len(time_all))]
-    obs = np.array([Ls, Lm, Resource, BAC, LA, pH])
+    obs = np.array([Ls[:-1], Lm[:-1], Resource[:-1], BAC[:-1], LA[:-1], pH[:-1]])
     exp_start = 1
-    return create_df_poolpaper(time_all, obs, [f'V{exp_start:02d}'], ['Ls', 'Lm'])
+    df = create_df_poolpaper(time_all[:-1], obs, [f'V{exp_start:02d}'], ['Ls', 'Lm'])
+    fm.data.save_all_dfs([df], names=['poolpaper_' + name], path=path)
+    return df
 
 ###############################################################################################33
 
@@ -191,6 +192,10 @@ def data_calibration_poolpaper(dfs, path=""):
     # TODO Change  model so that bounds are on the same scale
     # TODO are LA0, BAC0, pH0 also needed to be estimated
     x0_bnds_all = tuple([(2., 6.) for _ in range(calibr_presetup["n_cl"])])
+
+    x0_vals = [dfs[0].T['x_Ls_State_00']['V01_01_poolpaper'], dfs[0].T['x_Lm_State_00']['V01_01_poolpaper']]
+    x0_bnds_all = ((np.log10(x0_vals[0]), np.log10(x0_vals[0])), (np.log10(x0_vals[1]), np.log10(x0_vals[1])))
+
     param_ode_bnds = tuple(
         [(0.01, 1.) for _ in range(n_cl) for _ in range (len(exps_calibr))] +   # mu
         [(0., 1.) for _ in range(n_cl)]   +   # omega
@@ -240,13 +245,17 @@ def ode_model_monoculture(t, x, param, x0, ode_args):
     ]
 
 ############## Plotting ######################333
-def plot_all_curves(t, param_ode, x10, path='', add_name=''):
+def plot_all_curves(t, param_ode, x10, data=None, path='', add_name=''):
+    if data is not None:
+        days, [obs_x] = extract_observables_from_df([data])
     x0 = set_initial_vals(x10, temps, n_cl)[0]
     x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [temps, n_cl])
     lbls = ["ls", "lm", "R", "BAC", "LA", "pH"]
     fig, ax = plt.subplots()
     for i in range(3):
         ax.plot(t, x_sol[i], label=lbls[i])
+        if data is not None:
+            ax.scatter(days, obs_x[0][i], label=lbls[i]+'_data', marker='x')
     # ax.plot(t, x_sol[2], label='R')
     ax.set_yscale("log")
     ax.set_ylim(10**-3, 10**9)
@@ -256,6 +265,8 @@ def plot_all_curves(t, param_ode, x10, path='', add_name=''):
 
     fig, ax = plt.subplots()
     ax.plot(t, x_sol[3], label=lbls[3])
+    if data is not None:
+        ax.scatter(days, obs_x[0][3], label=lbls[3]+'_data', marker='x')
     plt.legend()
     plt.savefig(path + f"BAC{add_name}.png", bbox_inches="tight")
     plt.close(fig)
@@ -263,6 +274,9 @@ def plot_all_curves(t, param_ode, x10, path='', add_name=''):
     fig, ax = plt.subplots()
     ax.plot(t, x_sol[4], label=lbls[4])
     ax.plot(t, x_sol[5], label=lbls[5])
+    if data is not None:
+        ax.scatter(days, obs_x[0][4], label=lbls[4]+'_data', marker='x')
+        ax.scatter(days, obs_x[0][5], label=lbls[5]+'_data', marker='x')
     plt.legend()
     plt.savefig(path + f"LA_pH{add_name}.png", bbox_inches="tight")
     plt.close(fig)
@@ -279,22 +293,17 @@ if __name__ == "__main__":
     ntr = 1
     path_new = path + "test/"
 
-    dfs_calibr = 1
-    # dfs_calibr = read_exp_data()
-    # param_opt, calibr_setup = data_calibration(dfs_calibr, path=path_new)
-
     names = ['LsCTC494', 'Ls23K', 'Lm', 'LsCTC494_Lm', 'Ls23K_Lm']
     skip_rows = [8, 34, 58, 83, 109]
     LA_sheetnames = ['R9_494_LA_prod', 'R9_23K_LA_prod', 'R9_1034_LA_prod', 'R9_494co_LA_prod', 'R9_23Kco_LA_prod']
 
+    df_exps = []
     for n, nr, las in zip(names, skip_rows, LA_sheetnames):
-        df_exp = experimental_values(n, skiprows=nr, LA_sheetname=las)
-
-    
-    param_opt, calibr_setup = data_calibration_poolpaper([df_exp], path=path_new)
+        df_exps.append(experimental_values(n, skiprows=nr, LA_sheetname=las, path=path_new))
+    param_opt, calibr_setup = data_calibration_poolpaper([df_exps[3]], path=path_new)
     
     t_test = np.linspace(0.0, 55.0, 100)  # hours
-    plot_all_curves(t_test, param_opt[n_cl*len(temps):], [param_opt[:n_cl*len(temps)]], path=path_new, add_name='_estim_realdata')
+    plot_all_curves(t_test, param_opt[n_cl*len(temps):], [param_opt[:n_cl*len(temps)]], data=df_exps[3], path=path_new, add_name='_estim_realdata')
 
     '''
     # Test with in-siilico data generation and calibration

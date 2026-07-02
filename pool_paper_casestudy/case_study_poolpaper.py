@@ -10,18 +10,18 @@ import matplotlib.pyplot as plt
 #from math import floor
 
 ########### In-silico data generation ############
-def data_generation_poolpaper(n_cl, param_ode, x10, path=''):
+def data_generation_poolpaper(n_cl, param_ode, x10, times, path=''):
     dfs_ode = []
     add_name = ''
     temps = [2.,]
     ntr = 1
-    df_ode = model_wotemp(n_cl, temps, ntr, param_ode=param_ode, x10=x10, add_name=add_name,path=path, exp_start_offset=0)
+    df_ode = model_wotemp(n_cl, temps, ntr, times, param_ode=param_ode, x10=x10, add_name=add_name,path=path, exp_start_offset=0)
     dfs_ode.append(df_ode)
     return df_ode
 
-def model_wotemp(n_cl, temps, ntr, param_ode=None, x10=None, path='',add_name='', exp_start_offset=0):
+def model_wotemp(n_cl, temps, ntr, times, param_ode=None, x10=None, path='',add_name='', exp_start_offset=0):
     np.random.seed(46987)
-    t = np.linspace(0., 17., 18)
+    t = times
     if param_ode is None:
        print('No parameter vector provided.')
        exit()
@@ -315,7 +315,7 @@ if __name__ == "__main__":
     x10_bact = [[5., 3.1]]
     plot_all_curves(t_test, param_ode_test, x10_bact, path=path_new, add_name='_init')
 
-    df_ode = data_generation_poolpaper(n_cl, param_ode_test, x10_bact, path=path_new)
+    df_ode = data_generation_poolpaper(n_cl, param_ode_test, x10_bact, t_test, path=path_new)
     days_x, [obs_x] = extract_observables_from_df([df_ode])
     param_opt, calibr_setup = data_calibration_poolpaper([df_ode], path=path_new)
     plot_all_curves(t_test, param_opt[n_cl*len(temps):], [param_opt[:n_cl*len(temps)]], path=path_new, add_name='_estim')

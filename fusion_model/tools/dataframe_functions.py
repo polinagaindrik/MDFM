@@ -99,8 +99,8 @@ def get_cluster_dataframe(df, clusters):
     return pd.DataFrame(data=d).groupby('Clusters').sum()#.apply(calc_proportion) ## ???? (do we need to recalculate)
 
 
-def merge_dfs(dfs):
-    return pd.concat(dfs).groupby(level=0).sum()
+def merge_dfs(dfs, sort=True):
+    return pd.concat(dfs).groupby(level=0, sort=sort).sum()
 
 
 def get_meas_days(df, exp):

@@ -197,12 +197,12 @@ def data_calibration_poolpaper(dfs, path=""):
     x0_bnds_all = ((np.log10(x0_vals[0]), np.log10(x0_vals[0])), (np.log10(x0_vals[1]), np.log10(x0_vals[1])))
 
     param_ode_bnds = tuple(
-        [(0.01, 1.) for _ in range(n_cl) for _ in range (len(exps_calibr))] +   # mu
-        [(0., 1.) for _ in range(n_cl)]   +   # omega
-        [(1., 10**6)] + # omegaT
-        [(7.0, 10.0)] + # N_max
-        [(10**-6, 2*10**-5)] + # k_T
-        [(10**-10, 10**-8) for _ in range(n_cl)] # k_LA
+        [(0.1, 1.), (0.1, 1.)] + # mu
+        [(-4., -2.) for _ in range(n_cl)] +  # omega
+        [(3., 5.)] +            # omegaT_exp
+        [(8.0, 10.0)] +         # N_max_exp
+        [(-6, -4)] +  # k_T
+        [(-10, -8) for _ in range(n_cl)] # k_LA
     )
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds
@@ -215,14 +215,20 @@ def data_calibration_poolpaper(dfs, path=""):
 
 def ode_model_coculture(t, x, param, x0, ode_args):
     (pH_cond, n_cl,) = ode_args
-    (mu_ls, mu_lm, omega_ls, omega_lm, omegaT_lm, N_texp, k_T, k_LA_ls, k_LA_lm, ) = param
+    (mu_ls, mu_lm, omega_ls_exp, omega_lm_exp, omegaT_lm_exp, N_texp, k_T_exp, k_LA_ls_exp, k_LA_lm_exp, ) = param
     # TODO add pH dependence of mu
     (x_ls0, x_lm0, R0, T0, LA0, pH0) = x0
     (x_ls, x_lm, R, T, LA, pH) = x
     N_t = 10**N_texp
+    omega_ls = 10**omega_ls_exp
+    omega_lm = 10**omega_lm_exp
+    omegaT_lm = 10**omegaT_lm_exp
+    k_T = 10**k_T_exp
+    k_LA_ls = 10**k_LA_ls_exp
+    k_LA_lm = 10**k_LA_lm_exp
     return [
         (mu_ls * R - omega_ls) * x_ls,
-        (mu_lm * R) * x_lm - omega_lm * x_lm - omegaT_lm / (N_t) * T * x_lm,
+        (mu_lm * R - omega_lm) * x_lm - omegaT_lm / (N_t) * T * x_lm,
         -(mu_ls / N_t) * R * x_ls - (mu_lm / N_t) * R * x_lm,
         k_T * x_ls * R,  #  ??
         k_LA_ls * x_ls + k_LA_lm * x_lm,  # *R but wo R the curves look better
@@ -284,7 +290,7 @@ def plot_all_curves(t, param_ode, x10, data=None, path='', add_name=''):
 
 if __name__ == "__main__":
     path = "pool_paper_casestudy/out/"
-    workers = 5
+    workers = -1
     n_cl = 2
     # relnoise = 0.1
     n_exps = 1
@@ -311,15 +317,15 @@ if __name__ == "__main__":
     t_test = np.linspace(0.0, 55.0, 100)  # hours
     x0_test = np.array([10**5., 10**3.1, 1.0, 0.0, 0.0, 6.0])
     param_ode_test = [
-                        0.38,           # mu_ls
-                        0.32,           # mu_lm
-                        0.001,          # omega_ls
-                        0.001,          # omega_lm
-                        10**4,          # omegaT_lm
-                        8.3,            # N_texp
-                        10**-5,         # k_T
-                        10**-9,         # k_LA_ls
-                        0.5 * 10**-9,   # k_LA_lm
+                        0.38,       # mu_ls
+                        0.32,       # mu_lm
+                        -3,         # omega_ls
+                        -3,         # omega_lm
+                        4.,         # omegaT_lm
+                        8.3,        # N_texp
+                        -5,         # k_T
+                        -9,         # k_LA_ls
+                        -9.1,       # k_LA_lm
                      ]
     x10_bact = [[5., 3.1]]
     plot_all_curves(t_test, param_ode_test, x10_bact, path=path_new, add_name='_init')
@@ -328,4 +334,4 @@ if __name__ == "__main__":
     days_x, [obs_x] = extract_observables_from_df([df_ode])
     param_opt, calibr_setup = data_calibration_poolpaper([df_ode], path=path_new)
     plot_all_curves(t_test, param_opt[n_cl*len(temps):], [param_opt[:n_cl*len(temps)]], path=path_new, add_name='_estim')
-    '''
+    ''' 

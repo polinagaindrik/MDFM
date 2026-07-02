@@ -198,12 +198,12 @@ def data_calibration_poolpaper(dfs, path=""):
     x0_bnds_all = ((np.log10(x0_vals[0]), np.log10(x0_vals[0])), (np.log10(x0_vals[1]), np.log10(x0_vals[1])))
 
     param_ode_bnds = tuple(
-        [(0.1, 1.), (0.1, 1.)] + # mu
-        [(-4., -2.) for _ in range(n_cl)] +  # omega
-        [(3., 5.)] +            # omegaT_exp
+        [(0.3, 1.), (0.2, 1.)] + # mu
+        [(-5., -4.) for _ in range(n_cl)] +  # omega
+        [(3., 4.5)] +            # omegaT_exp
         [(8.0, 10.0)] +         # N_max_exp
-        [(-6, -4)] +  # k_T
-        [(-10, -8) for _ in range(n_cl)] # k_LA
+        [(-5.4, -4.)] +  # k_T
+        [(-10, -6) for _ in range(n_cl)] # k_LA
     )
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds
@@ -299,7 +299,7 @@ if __name__ == "__main__":
     temps = [2.0 for _ in range(n_exps)]
     ntr = 1
     path_new = path + "test/"
-    '''
+    
     names = ['LsCTC494', 'Ls23K', 'Lm', 'LsCTC494_Lm', 'Ls23K_Lm']
     skip_rows = [8, 34, 58, 83, 109]
     LA_sheetnames = ['R9_494_LA_prod', 'R9_23K_LA_prod', 'R9_1034_LA_prod', 'R9_494co_LA_prod', 'R9_23Kco_LA_prod']
@@ -335,4 +335,4 @@ if __name__ == "__main__":
     days_x, [obs_x] = extract_observables_from_df([df_ode])
     param_opt, calibr_setup = data_calibration_poolpaper([df_ode], path=path_new)
     plot_all_curves(t_test, param_opt[n_cl*len(temps):], [param_opt[:n_cl*len(temps)]], path=path_new, add_name='_estim')
-     
+    '''     

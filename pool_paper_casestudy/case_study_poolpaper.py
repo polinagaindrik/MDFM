@@ -92,6 +92,7 @@ def experimental_values(name, skiprows=0, LA_sheetname='', path=''):
             df_LA_new[len(df_LA['Time, h (1)'])+j] = [t]+ [np.nan for _ in range (len(df_LA.columns)-1)]
     df_LA = df_LA_new.T.sort_values(by=['Time, h (1)'], ascending=True)
     LA = np.array(df_LA['LA (mg/mL)'])
+    LA[LA <= 0.0] = 0.0
 
     Resource = [np.nan for _ in range (len(time_all))]
     obs = np.array([Ls[:-1], Lm[:-1], Resource[:-1], BAC[:-1], LA[:-1], pH[:-1]])
@@ -150,7 +151,7 @@ def cost(param, calibr_setup, jac_spasity):
     exps = sorted(list(set([s.split("_")[0] for s in df_x.columns])))
     # TODO not clear, should just we compare logaritms?
     x_max = obs_x**2
-    x_max[x_max <= 1.0] = 1.0
+    x_max[x_max <= 0.1] = 1.0
     #ll_x = np.zeros(np.shape(obs_x))
     ll_x = np.zeros(np.shape(obs_x[:, :-1]))
     for i, exp in enumerate(exps):

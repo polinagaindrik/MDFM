@@ -168,8 +168,9 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
     # + pH instead of temp?
     model = calibr_setup["model"]
     days, [obs_x] = calibr_setup["data_array"]
-    temp = calibr_setup["exp_temps"][exp]
-    const = [[temp], n_cl]
+    #temp = calibr_setup["exp_temps"][exp]
+    pH_series = np.array([obs_x[i][-1], days]).T
+    const = [pH_series, n_cl]
 
     C0 = np.concatenate((10 ** np.array(x0), np.array([1., 0., 0., 6.])))
     C = fm.mdl.model_ODE_solution(model, days, param_ode, C0, const)
@@ -205,13 +206,23 @@ def data_calibration_poolpaper(dfs, path=""):
     x0_vals = [dfs[0].T['x_Ls_State_00']['V01_01_poolpaper'], dfs[0].T['x_Lm_State_00']['V01_01_poolpaper']]
     x0_bnds_all = ((np.log10(x0_vals[0]), np.log10(x0_vals[0])), (np.log10(x0_vals[1]), np.log10(x0_vals[1])))
 
+    #param_ode_bnds = tuple(
+    #    [(0.3, 1.), (0.2, 1.)] + # mu
+    #    [(-5., -4.) for _ in range(n_cl)] +  # omega
+    #    [(3., 4.2)] +           # omegaT_exp
+    #    [(8.0, 10.0)] +         # N_max_exp
+    #    [(-5.2, -4.)] +         # k_T
+    #    [(-10, -6) for _ in range(n_cl)] # k_LA
+    #)
     param_ode_bnds = tuple(
         [(0.3, 1.), (0.2, 1.)] + # mu
+        [(0., 8.), (3., 8.), (0., 8.), (3., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
+        # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
         [(-5., -4.) for _ in range(n_cl)] +  # omega
-        [(3., 4.5)] +            # omegaT_exp
+        [(3., 4.2)] +           # omegaT_exp
         [(8.0, 10.0)] +         # N_max_exp
-        [(-5.4, -4.)] +  # k_T
-        [(-10, -6) for _ in range(n_cl)] # k_LA
+        [(-6., -4.)] +         # k_T
+        [(-11, -6) for _ in range(n_cl)] # k_LA
     )
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds
@@ -224,10 +235,18 @@ def data_calibration_poolpaper(dfs, path=""):
 
 def ode_model_coculture(t, x, param, x0, ode_args):
     (pH_cond, n_cl,) = ode_args
-    (mu_ls, mu_lm, omega_ls_exp, omega_lm_exp, omegaT_lm_exp, N_texp, k_T_exp, k_LA_ls_exp, k_LA_lm_exp, ) = param
+    pH = pH_func(t, pH_cond)
+
+    (mu_ls_opt, mu_lm_opt, pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt,
+    omega_ls_exp, omega_lm_exp, omegaT_lm_exp, N_texp, k_T_exp, k_LA_ls_exp, k_LA_lm_exp, ) = param
     # TODO add pH dependence of mu
     (x_ls0, x_lm0, R0, T0, LA0, pH0) = x0
     (x_ls, x_lm, R, T, LA, pH) = x
+
+    mu_ls = mu_ls_opt * (pH - pH_ls_min) / (pH_ls_opt - pH_ls_min)
+    mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)
+
+
     N_t = 10**N_texp
     omega_ls = 10**omega_ls_exp
     omega_lm = 10**omega_lm_exp
@@ -244,6 +263,13 @@ def ode_model_coculture(t, x, param, x0, ode_args):
         0. # TODO pH evolution with time
     ]
 
+def pH_func(t, pH_series):
+    # pH_series = [[pH1, t1], [pH2, t2], [pH3, t3], ...] (n_times x 2)
+    pH_arr, time_arr = np.array(pH_series).T
+    diff = time_arr - t
+    return pH_arr[np.argmin(np.abs(diff))]
+
+'''
 def ode_model_monoculture(t, x, param, x0, ode_args):
     (temp_cond, n_cl,) = ode_args
     (mu, omega, omegaT, N_t, k_T, k_LA, ) = param
@@ -258,13 +284,30 @@ def ode_model_monoculture(t, x, param, x0, ode_args):
         k_T * x * R,  #  ??
         k_LA * x
     ]
+'''
+
+########### pH(LA) # function
+def pH_LA_dependence(days, LA_data, pH_data, add_name='', path=''):
+    pH0 = pH_data[0]
+    K_a = 1.38*10**(-4)
+    pH = pH0 + np.log(- K_a + np.sqrt(K_a**2 + 4 * K_a*LA_data)/2)
+    #print(- K_a + np.sqrt(K_a**2 + 4 * K_a*LA_data))
+    fig, ax = plt.subplots()
+    ax.scatter(days, pH, label='pH(LA)')
+    ax.scatter(days, pH_data, label='pH_data', marker='x')
+    ax.scatter(days, LA_data, label='LA_data', marker='x')
+    plt.legend()
+    plt.savefig(path + f"LA_pH{add_name}.png", bbox_inches="tight")
+    plt.close(fig)
+    return pH
 
 ############## Plotting ######################333
 def plot_all_curves(t, param_ode, x10, data=None, path='', add_name=''):
     if data is not None:
         days, [obs_x] = extract_observables_from_df([data])
     x0 = set_initial_vals(x10, temps, n_cl)[0]
-    x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [temps, n_cl])
+    pH_series = np.array([obs_x[0][-1], days]).T
+    x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [pH_series, n_cl])
     lbls = ["ls", "lm", "R", "BAC", "LA", "pH"]
     fig, ax = plt.subplots()
     for i in range(3):
@@ -315,6 +358,11 @@ if __name__ == "__main__":
     df_exps = []
     for n, nr, las in zip(names, skip_rows, LA_sheetnames):
         df_exps.append(experimental_values(n, skiprows=nr, LA_sheetname=las, path=path_new))
+
+    # Test pH(LA) dependence
+    days, [obs_x] = extract_observables_from_df([df_exps[3]])
+    pH_LA_dependence(days, obs_x[0][4], obs_x[0][5], add_name='_test_direct_calulation', path=path_new)
+
     param_opt, calibr_setup = data_calibration_poolpaper([df_exps[3]], path=path_new)
     
     t_test = np.linspace(0.0, 55.0, 100)  # hours

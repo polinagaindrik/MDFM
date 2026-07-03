@@ -9,10 +9,17 @@ import matplotlib.pyplot as plt
 
 def ode_model_coculture(t, x, param, x0, ode_args):
     (pH_cond, n_cl,) = ode_args
-    (mu_ls, mu_lm, omega_ls_exp, omega_lm_exp, omegaT_lm_exp, N_texp, k_T_exp, k_LA_ls_exp, k_LA_lm_exp, ) = param
+    pH = pH_func(t, pH_cond)
+
+    (mu_ls_opt, mu_lm_opt, pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt,
+    omega_ls_exp, omega_lm_exp, omegaT_lm_exp, N_texp, k_T_exp, k_LA_ls_exp, k_LA_lm_exp, ) = param
     # TODO add pH dependence of mu
     (x_ls0, x_lm0, R0, T0, LA0, pH0) = x0
     (x_ls, x_lm, R, T, LA, pH) = x
+
+    mu_ls = mu_ls_opt * (pH - pH_ls_min) / (pH_ls_opt - pH_ls_min)
+    mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)
+
     N_t = 10**N_texp
     omega_ls = 10**omega_ls_exp
     omega_lm = 10**omega_lm_exp
@@ -28,6 +35,12 @@ def ode_model_coculture(t, x, param, x0, ode_args):
         k_LA_ls * x_ls + k_LA_lm * x_lm,  # *R but wo R the curves look better
         0. # TODO pH evolution with time
     ]
+
+def pH_func(t, pH_series):
+    # pH_series = [[pH1, t1], [pH2, t2], [pH3, t3], ...] (n_times x 2)
+    pH_arr, time_arr = np.array(pH_series).T
+    diff = time_arr - t
+    return pH_arr[np.argmin(np.abs(diff))]
 
 
 def extract_observables_from_df(dfs):
@@ -51,7 +64,8 @@ def plot_all_curves(t, param_ode, x10, data=None, path='', add_name=''):
     if data is not None:
         days, [obs_x] = extract_observables_from_df([data])
     x0 = set_initial_vals(x10, temps, n_cl)[0]
-    x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [temps, n_cl])
+    pH_series = np.array([obs_x[0][-1], days]).T
+    x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [pH_series, n_cl])
     lbls = ["ls", "lm", "R", "BAC", "LA", "pH"]
     fig, ax = plt.subplots()
     for i in range(3):
@@ -83,6 +97,52 @@ def plot_all_curves(t, param_ode, x10, data=None, path='', add_name=''):
     plt.savefig(path + f"LA_pH{add_name}.png", bbox_inches="tight")
     plt.close(fig)
 
+def cost_res(param, calibr_setup):
+    n_cl = calibr_setup["n_cl"]
+    exps = calibr_setup["exps"]
+    n_exps = len(exps)
+    lambd = param[n_cl*n_exps : n_cl*n_exps + n_cl]
+    alph = param[n_cl*n_exps + n_cl : n_cl*n_exps + n_cl + n_cl]
+    rest_ode_param = param[n_cl*n_exps + n_cl + n_cl:]
+    x0_vals = param[:n_cl*n_exps]
+
+    (df_x, ) = calibr_setup["dfs"]
+    _, [obs_x] = calibr_setup["data_array"]
+    n_cl = np.shape(obs_x)[1]  # np.shape(df_maldi)[0]
+    exps = sorted(list(set([s.split("_")[0] for s in df_x.columns])))
+    # TODO not clear, should just we compare logaritms?
+    x_max = obs_x**2
+    x_max[x_max <= 0.1] = 1.0
+    #ll_x = np.zeros(np.shape(obs_x))
+    ll_x = np.zeros(np.shape(obs_x[:, :-1]))
+    for i, exp in enumerate(exps):
+        param_ode = np.concatenate((lambd, alph, rest_ode_param))
+        ll_x[i] = sq_diff_oneexp(
+            calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
+    ll_x = ll_x[ll_x != 0]
+    return 1
+
+def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
+    # TODO mb: do we need to fit also data for BAC, LA (pH)
+    # Then obs_x -> obs_x+m
+    # + pH instead of temp?
+    model = calibr_setup["model"]
+    days, [obs_x] = calibr_setup["data_array"]
+    temp = calibr_setup["exp_temps"][exp]
+    pH_series = np.array([obs_x[i][-1], days]).T
+    const = [pH_series, n_cl]
+
+    C0 = np.concatenate((10 ** np.array(x0), np.array([1., 0., 0., 6.])))
+    C = fm.mdl.model_ODE_solution(model, days, param_ode, C0, const)
+    #ll_x0 = (obs_x[i][:-1] - C[:-1]) ** 2 / x_max[:-1]
+    ll_x0 = [
+        (obs_x[i][0] - C[0]) ** 2 / x_max[0],
+        (obs_x[i][1] - C[1]) ** 2 / x_max[1],
+        (obs_x[i][2] - C[2]) ** 2,
+        (obs_x[i][3] - C[3]) ** 2,
+        (obs_x[i][4] - C[4]) ** 2,
+    ]
+    return np.array(ll_x0)
 
 if __name__ == "__main__":
     n_cl = 2
@@ -105,8 +165,21 @@ if __name__ == "__main__":
 
     names = ['LsCTC494', 'Ls23K', 'Lm', 'LsCTC494_Lm', 'Ls23K_Lm']
 
-    #df_name = f'dataframe_poolpaper_{names[3]}.pkl'
-    df_name = f'dataframe_poolpaper.pkl'
+    df_name = f'dataframe_poolpaper_{names[3]}.pkl'
+    #df_name = f'dataframe_poolpaper.pkl'
     data = pd.read_pickle(path2+df_name)
 
     plot_all_curves(t_test, param_opt[n_cl*len(temps):], [param_opt[:n_cl*len(temps)]], data=data, path=path2, add_name='_estim_realdata')
+    exps = sorted(list(set([s.split("_")[0] for s in data.columns])))
+    calibr_setup = {
+        "model": ode_model_coculture,
+        "output_path": path2,
+        "n_cl": n_cl,
+        "dfs": [data],
+        "aggregation_func": fm.pest.cost_arithmetic_mean,
+        "exps": exps,
+        "exp_temps": {exp: temp for exp, temp in zip(exps, temps)},
+    }
+    data_array = extract_observables_from_df(calibr_setup["dfs"])
+    calibr_setup["data_array"] = data_array
+    cost_res(param_opt, calibr_setup)

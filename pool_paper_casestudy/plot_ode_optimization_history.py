@@ -23,7 +23,7 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     omega_ls = 10**omega_ls_exp
     omega_lm = 10**omega_lm_exp
     omegaT_lm = 10**omegaT_lm_exp
-    k_T = 10**(-6) * k_T_0
+    k_T = 10**(-5) * k_T_0
     k_LA_ls = 10**k_LA_ls_exp
     k_LA_lm = 10**k_LA_lm_exp
 
@@ -141,8 +141,7 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
         (obs_x[i][3] - C[3]) ** 2,
         (obs_x[i][4] - C[4]) ** 2,
     ]
-    print(C)
-    exit()
+    print(i, ll_x0)
     return np.array(ll_x0)
 
 if __name__ == "__main__":

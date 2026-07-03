@@ -34,8 +34,7 @@ def model_wotemp(n_cl, temps, ntr, times, param_ode=None, x10=None, path='',add_
     return df_ode
 
 def set_initial_vals(x10, temps, n_cl):
-    return [[10**L0 for L0 in x10[i]] + [1., 0., 0., 6.] for i in range (len(temps))]
-
+    return [[L0 for L0 in x10[i]] + [1., 0., 0., 6.] for i in range (len(temps))]
 
 def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, exp_start_offset=0):
     df_ode = []
@@ -61,7 +60,7 @@ def create_df_poolpaper(days, obs, name_part, bact_name, stds=0):
     return df
 
 ############### Read data from excel ######################3
-def experimental_values(name, skiprows=0, LA_sheetname='', path=''):
+def experimental_values(name, skiprows=0, LA_sheetname='', path='', exp_start_offset=0):
     filename = 'CCD_results_counts_Part 2.xlsx'
     df_counts = pd.read_excel("pool_paper_casestudy/data/" + filename, keep_default_na=True, sheet_name='R9_rep', skiprows=skiprows, usecols='A:F', nrows=16)
     # TODO: temporal solution to round all t to the round number: maybe not accurate: what else to do?
@@ -70,6 +69,11 @@ def experimental_values(name, skiprows=0, LA_sheetname='', path=''):
     Ls = np.array(df_counts['LAB (cfu/mL)'])
     Lm = np.array(df_counts['LM (cfu/mL)'])
     pH = np.array(df_counts['pH'])
+
+    if name == 'Lm':
+        Ls = np.array([0. for _ in range(len(Lm))])
+    elif name == 'Ls23K' or name == 'LsCTC494':
+        Lm = np.array([0. for _ in range(len(Ls))])
 
     if name == 'Ls23K' or name == 'Lm' or name == 'Ls23K_Lm':
         time_BAC = time_count
@@ -96,7 +100,7 @@ def experimental_values(name, skiprows=0, LA_sheetname='', path=''):
 
     Resource = [np.nan for _ in range (len(time_all))]
     obs = np.array([Ls[:-1], Lm[:-1], Resource[:-1], BAC[:-1], LA[:-1], pH[:-1]])
-    exp_start = 1
+    exp_start = exp_start_offset + 1
     df = create_df_poolpaper(time_all[:-1], obs, [f'V{exp_start:02d}'], ['Ls', 'Lm'])
     fm.data.save_all_dfs([df], names=['poolpaper_' + name], path=path)
     return df
@@ -117,7 +121,6 @@ def extract_observables_from_df(dfs):
                 obs_x[i, :, k] = np.nan * np.ones((np.shape(df_x)[0]))
     return days_x, [obs_x]
 
-
 def calculate_model_params(cost_func, calibr_setup):
     output_file = "out/optimization_history1.csv"
     with open(output_file, "w") as f:
@@ -135,19 +138,19 @@ def calculate_model_params(cost_func, calibr_setup):
     )
     return np.array(optim_output.x), optim_output.fun
 
-
 def cost(param, calibr_setup, jac_spasity):
     n_cl = calibr_setup["n_cl"]
     exps = calibr_setup["exps"]
     n_exps = len(exps)
-    lambd = param[n_cl*n_exps : n_cl*n_exps + n_cl]
-    alph = param[n_cl*n_exps + n_cl : n_cl*n_exps + n_cl + n_cl]
-    rest_ode_param = param[n_cl*n_exps + n_cl + n_cl:]
+
+    param_ode_1 = param[n_cl*n_exps:n_cl*n_exps+10]
+    k_T = param[n_cl*n_exps+10:n_cl*n_exps+10+n_exps]
+    param_ode_2 = param[n_cl*n_exps+10+n_exps:]
     x0_vals = param[:n_cl*n_exps]
 
     (df_x, ) = calibr_setup["dfs"]
     _, [obs_x] = calibr_setup["data_array"]
-    n_cl = np.shape(obs_x)[1]  # np.shape(df_maldi)[0]
+    n_cl = calibr_setup['n_cl']  # np.shape(df_maldi)[0]
     exps = sorted(list(set([s.split("_")[0] for s in df_x.columns])))
     # TODO not clear, should just we compare logaritms?
     x_max = obs_x**2
@@ -155,7 +158,7 @@ def cost(param, calibr_setup, jac_spasity):
     #ll_x = np.zeros(np.shape(obs_x))
     ll_x = np.zeros(np.shape(obs_x[:, :-1]))
     for i, exp in enumerate(exps):
-        param_ode = np.concatenate((lambd, alph, rest_ode_param))
+        param_ode = np.concatenate((param_ode_1, k_T[i:i+1], param_ode_2))
         ll_x[i] = sq_diff_oneexp(
             calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
     ll_x = ll_x[ll_x != 0]
@@ -172,7 +175,7 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
     pH_series = np.array([obs_x[i][-1], days]).T
     const = [pH_series, n_cl]
 
-    C0 = np.concatenate((10 ** np.array(x0), np.array([1., 0., 0., 6.])))
+    C0 = np.concatenate((np.array(x0), np.array([1., 0., 0., 6.])))
     C = fm.mdl.model_ODE_solution(model, days, param_ode, C0, const)
     #ll_x0 = (obs_x[i][:-1] - C[:-1]) ** 2 / x_max[:-1]
     ll_x0 = [
@@ -195,16 +198,13 @@ def data_calibration_poolpaper(dfs, path=""):
         "dfs": dfs,
         "aggregation_func": fm.pest.cost_arithmetic_mean,
         "exps": exps_calibr,
-        "exp_temps": {exp: temp for exp, temp in zip(exps_calibr, temps)},
     }
-    fm.output.json_dump(calibr_presetup["exp_temps"], "exp_temps_model_paper.json", dir=path)
 
     # TODO Change  model so that bounds are on the same scale
     # TODO are LA0, BAC0, pH0 also needed to be estimated
     x0_bnds_all = tuple([(2., 6.) for _ in range(calibr_presetup["n_cl"])])
 
-    x0_vals = [dfs[0].T['x_Ls_State_00']['V01_01_poolpaper'], dfs[0].T['x_Lm_State_00']['V01_01_poolpaper']]
-    x0_bnds_all = ((np.log10(x0_vals[0]), np.log10(x0_vals[0])), (np.log10(x0_vals[1]), np.log10(x0_vals[1])))
+    x0_bnds_all  = tuple([(dfs[0].T[species][f'{exp}_01_poolpaper'],dfs[0].T[species][f'{exp}_01_poolpaper']) for exp in calibr_presetup["exps"] for species in ['x_Ls_State_00', 'x_Lm_State_00'] ])
 
     #param_ode_bnds = tuple(
     #    [(0.3, 1.), (0.2, 1.)] + # mu
@@ -221,7 +221,7 @@ def data_calibration_poolpaper(dfs, path=""):
         [(-5., -4.) for _ in range(n_cl)] +  # omega
         [(3., 4.2)] +           # omegaT_exp
         [(8.0, 10.0)] +         # N_max_exp
-        [(-6., -4.)] +         # k_T
+        [(.1, 10.), (0., 0.), (0., 0.), (.1, 10.), (0., 0.)] + # k_T x N_exps
         [(-11, -6) for _ in range(n_cl)] # k_LA
     )
     calibr_setup = calibr_presetup
@@ -238,22 +238,21 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     pH = pH_func(t, pH_cond)
 
     (mu_ls_opt, mu_lm_opt, pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt,
-    omega_ls_exp, omega_lm_exp, omegaT_lm_exp, N_texp, k_T_exp, k_LA_ls_exp, k_LA_lm_exp, ) = param
-    # TODO add pH dependence of mu
+    omega_ls_exp, omega_lm_exp, omegaT_lm_exp, N_texp, k_T_0, k_LA_ls_exp, k_LA_lm_exp, ) = param
     (x_ls0, x_lm0, R0, T0, LA0, pH0) = x0
     (x_ls, x_lm, R, T, LA, pH) = x
 
     mu_ls = mu_ls_opt * (pH - pH_ls_min) / (pH_ls_opt - pH_ls_min)
     mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)
 
-
     N_t = 10**N_texp
     omega_ls = 10**omega_ls_exp
     omega_lm = 10**omega_lm_exp
     omegaT_lm = 10**omegaT_lm_exp
-    k_T = 10**k_T_exp
+    k_T = 10**(-5) * k_T_0
     k_LA_ls = 10**k_LA_ls_exp
     k_LA_lm = 10**k_LA_lm_exp
+
     return [
         (mu_ls * R - omega_ls) * x_ls,
         (mu_lm * R - omega_lm) * x_lm - omegaT_lm / (N_t) * T * x_lm,
@@ -356,17 +355,25 @@ if __name__ == "__main__":
     LA_sheetnames = ['R9_494_LA_prod', 'R9_23K_LA_prod', 'R9_1034_LA_prod', 'R9_494co_LA_prod', 'R9_23Kco_LA_prod']
 
     df_exps = []
-    for n, nr, las in zip(names, skip_rows, LA_sheetnames):
-        df_exps.append(experimental_values(n, skiprows=nr, LA_sheetname=las, path=path_new))
+    for i, (n, nr, las) in enumerate(zip(names, skip_rows, LA_sheetnames)):
+        df_exps.append(experimental_values(n, skiprows=nr, LA_sheetname=las, path=path_new, exp_start_offset=i))
+    dfs = fm.dtf.merge_dfs(df_exps, sort=False)
+    fm.data.save_all_dfs([dfs], names=['poolpaper_all'], path=path_new)
 
     # Test pH(LA) dependence
     days, [obs_x] = extract_observables_from_df([df_exps[3]])
     pH_LA_dependence(days, obs_x[0][4], obs_x[0][5], add_name='_test_direct_calulation', path=path_new)
 
-    param_opt, calibr_setup = data_calibration_poolpaper([df_exps[3]], path=path_new)
-    
+    param_opt, calibr_setup = data_calibration_poolpaper([dfs], path=path_new)
+    param_ode_1 = param_opt[n_cl*n_exps:n_cl*n_exps+10]
+    k_T = param_opt[n_cl*n_exps+10:n_cl*n_exps+10+n_exps]
+    param_ode_2 = param_opt[n_cl*n_exps+10+n_exps:]
+    x0_vals = param_opt[:n_cl*n_exps]
+
     t_test = np.linspace(0.0, 55.0, 100)  # hours
-    plot_all_curves(t_test, param_opt[n_cl*len(temps):], [param_opt[:n_cl*len(temps)]], data=df_exps[3], path=path_new, add_name='_estim_realdata')
+    for i in range (len(df_exps)):
+        param_ode = np.concatenate((param_ode_1, k_T[i:i+1], param_ode_2))
+        plot_all_curves(t_test, param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=df_exps[i], path=path_new, add_name=f'_estim_realdata_{names[i]}')
 
     '''
     # Test with in-siilico data generation and calibration

@@ -173,8 +173,15 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
 
     C0 = np.concatenate((10 ** np.array(x0), np.array([1., 0., 0., 6.])))
     C = fm.mdl.model_ODE_solution(model, days, param_ode, C0, const)
-    ll_x0 = (obs_x[i][:-1] - C[:-1]) ** 2 / x_max[:-1]
-    return ll_x0
+    #ll_x0 = (obs_x[i][:-1] - C[:-1]) ** 2 / x_max[:-1]
+    ll_x0 = [
+        (obs_x[i][0] - C[0]) ** 2 / x_max[0],
+        (obs_x[i][1] - C[1]) ** 2 / x_max[1],
+        (obs_x[i][2] - C[2]) ** 2,
+        (obs_x[i][3] - C[3]) ** 2,
+        (obs_x[i][4] - C[4]) ** 2,
+    ]
+    return np.array(ll_x0)
 
 
 def data_calibration_poolpaper(dfs, path=""):

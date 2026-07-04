@@ -102,7 +102,8 @@ def cost_res(param, calibr_setup):
     n_cl = calibr_setup["n_cl"]
     exps = calibr_setup["exps"]
     n_exps = len(exps)
-    param_ode = list(param[n_cl*n_exps:])
+    param_ode = param[n_cl*n_exps:]
+    param_ode_new = np.copy(param_ode)
     x0_vals = param[:n_cl*n_exps]
 
     (df_x, ) = calibr_setup["dfs"]
@@ -115,10 +116,12 @@ def cost_res(param, calibr_setup):
     #ll_x = np.zeros(np.shape(obs_x))
     ll_x = np.zeros(np.shape(obs_x[:, :-1]))
     for i, exp in enumerate(exps):
-        if exp != 'LsCTC494' or exp != 'LsCTC494-Lm' or exp != 'V01' or exp != 'V04':
+        if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V04':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode[n_cl*3 + n_cl + 2] = 0.
-        ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
+            param_ode_new[n_cl*3 + n_cl + 2] = 0.
+            ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
+        else:
+            ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
     ll_x = ll_x[ll_x != 0]
     return 1
 
@@ -175,11 +178,14 @@ if __name__ == "__main__":
 
     x0_vals = param_opt[:n_cl*n_exps]
     param_ode = list(param_opt[n_cl*n_exps:])
+    param_ode_new = np.copy(param_ode)
     for i in range (len(data)):
-        if exps[i] != 'LsCTC494' or exps[i] != 'LsCTC494-Lm' or exps[i] != 'V01' or exps[i] != 'V04':
+        if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V04':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode[n_cl*3 + n_cl + 2] = 0.
-        plot_all_curves(t_test, param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
+            param_ode_new[n_cl*3 + n_cl + 2] = 0.
+            plot_all_curves(t_test, param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
+        else:
+            plot_all_curves(t_test, param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
     
     calibr_setup = {
         "model": ode_model_coculture,
@@ -192,4 +198,4 @@ if __name__ == "__main__":
     }
     data_array = extract_observables_from_df(calibr_setup["dfs"])
     calibr_setup["data_array"] = data_array
-    #cost_res(param_opt, calibr_setup)
+    cost_res(param_opt, calibr_setup)

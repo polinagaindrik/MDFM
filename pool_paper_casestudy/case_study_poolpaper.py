@@ -75,13 +75,13 @@ def experimental_values(name, skiprows=0, LA_sheetname='', path='', exp_start_of
     elif name == 'Ls23K' or name == 'LsCTC494':
         Lm = np.array([0. for _ in range(len(Ls))])
 
-    if name == 'Ls23K' or name == 'Lm' or name == 'Ls23K_Lm':
+    if name == 'Ls23K' or name == 'Lm' or name == 'Ls23K-Lm':
         time_BAC = time_count
         BAC = np.array([0. for t in time_BAC])
     else:
         df_BAC = pd.read_excel("pool_paper_casestudy/data/8_BA/BA_09.xlsx", keep_default_na=True, sheet_name='BA_prod', skiprows=19, usecols='M:Q', nrows=16)
         time_BAC = df_BAC['Time, h (1)'].astype(int)
-        BAC = np.array(df_BAC['BA (10^3 AU/mL)'])*10**3     
+        BAC = np.array(df_BAC['BA (10^3 AU/mL)'])*10**3
 
     df_LA = pd.read_excel("pool_paper_casestudy/data/7_LA/RUN_09.xlsx", keep_default_na=True, sheet_name=LA_sheetname, skiprows=19, usecols='M:Q', nrows=16)
     time_LA = df_LA['Time, h (1)'].astype(int)
@@ -101,11 +101,11 @@ def experimental_values(name, skiprows=0, LA_sheetname='', path='', exp_start_of
     Resource = [np.nan for _ in range (len(time_all))]
     obs = np.array([Ls[:-1], Lm[:-1], Resource[:-1], BAC[:-1], LA[:-1], pH[:-1]])
     exp_start = exp_start_offset + 1
-    df = create_df_poolpaper(time_all[:-1], obs, [name], ['Ls', 'Lm'])
+    df = create_df_poolpaper(time_all[:-1], obs, [f'V{exp_start:02d}'], ['Ls', 'Lm'])
     fm.data.save_all_dfs([df], names=['poolpaper_' + name], path=path)
     return df
 
-###############################################################################################33
+###############################################################################################
 
 def extract_observables_from_df(dfs):
     (df_x,) = dfs
@@ -143,6 +143,7 @@ def cost(param, calibr_setup, jac_spasity):
     exps = calibr_setup["exps"]
     n_exps = len(exps)
     param_ode = param[n_cl*n_exps:]
+    param_ode_new = np.copy(param_ode)
     x0_vals = param[:n_cl*n_exps]
 
     (df_x, ) = calibr_setup["dfs"]
@@ -155,10 +156,12 @@ def cost(param, calibr_setup, jac_spasity):
     #ll_x = np.zeros(np.shape(obs_x))
     ll_x = np.zeros(np.shape(obs_x[:, :-1]))
     for i, exp in enumerate(exps):
-        if exp != 'LsCTC494' or exp != 'LsCTC494-Lm' or exp != 'V01' or exp != 'V04':
+        if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V04':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode[n_cl*3 + n_cl + 2] = 0.
-        ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
+            param_ode_new[n_cl*3 + n_cl + 2] = 0.
+            ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
+        else:
+            ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
     ll_x = ll_x[ll_x != 0]
     return calibr_setup["aggregation_func"]([ll_x])
 
@@ -213,10 +216,10 @@ def data_calibration_poolpaper(dfs, path=""):
     #    [(-10, -6) for _ in range(n_cl)] # k_LA
     #)
     param_ode_bnds = tuple(
-        [(0.3, 1.), (0.2, 1.)] + # mu
-        [(0., 8.), (3., 8.), (0., 8.), (3., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
+        [(0.1, 1.), (0.1, 1.)] + # mu
+        [(3., 8.), (3., 8.), (3., 8.), (3., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
         [(-5., -4.) for _ in range(n_cl)] +  # omega
-        [(3., 4.5)] +           # omegaT_exp
+        [(3., 4.3)] +           # omegaT_exp
         [(8.0, 10.0)] +         # N_max_exp
         [(.1, 10.)] + # k_T x N_exps
         [(-11, -6) for _ in range(n_cl)] # k_LA
@@ -326,7 +329,7 @@ def plot_all_curves(t, param_ode, x10, data=None, path='', add_name=''):
         ax.scatter(days, obs_x[0][3], label=lbls[3]+'_data', marker='x')
     plt.legend()
     plt.savefig(path + f"BAC{add_name}.png", bbox_inches="tight")
-    plt.close(fig)
+    plt.slose(fig)
 
     fig, ax = plt.subplots()
     ax.plot(t, x_sol[4], label=lbls[4])

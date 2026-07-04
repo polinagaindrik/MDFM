@@ -368,16 +368,19 @@ if __name__ == "__main__":
     pH_LA_dependence(days, obs_x[0][4], obs_x[0][5], add_name='_test_direct_calulation', path=path_new)
 
     param_opt, calibr_setup = data_calibration_poolpaper([dfs], path=path_new)
-    param_ode_1 = param_opt[n_cl*n_exps:n_cl*n_exps+10]
-    k_T = param_opt[n_cl*n_exps+10:n_cl*n_exps+10+n_exps]
-    param_ode_2 = param_opt[n_cl*n_exps+10+n_exps:]
-    x0_vals = param_opt[:n_cl*n_exps]
 
     t_test = np.linspace(0.0, 55.0, 100)  # hours
-    for i in range (len(df_exps)):
-        param_ode = np.concatenate((param_ode_1, k_T[i:i+1], param_ode_2))
-        plot_all_curves(t_test, param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=df_exps[i], path=path_new, add_name=f'_estim_realdata_{names[i]}')
-
+    x0_vals = param_opt[:n_cl*n_exps]
+    param_ode = list(param_opt[n_cl*n_exps:])
+    param_ode_new = np.copy(param_ode)
+    for i in range (len(data)):
+        if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V04':
+            # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
+            param_ode_new[n_cl*3 + n_cl + 2] = 0.
+            plot_all_curves(t_test, param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
+        else:
+            plot_all_curves(t_test, param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
+    
     '''
     # Test with in-siilico data generation and calibration
     ## Test the model results:

@@ -12,12 +12,15 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     pH = pH_func(t, pH_cond)
 
     (mu_ls_opt, mu_lm_opt, pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt,
+    #(mu_ls_opt, mu_lm_opt, pH_ls_min, pH_lm_min,
     omega_ls_exp, omega_lm_exp, omegaT_lm_exp, N_texp, k_T_0, k_LA_ls_exp, k_LA_lm_exp, ) = param
     (x_ls0, x_lm0, R0, T0, LA0, pH0) = x0
     (x_ls, x_lm, R, T, LA, pH) = x
 
     mu_ls = mu_ls_opt * (pH - pH_ls_min) / (pH_ls_opt - pH_ls_min)
     mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)
+    #mu_ls = mu_ls_opt**2 * (pH - pH_ls_min)**2
+    #mu_lm = mu_lm_opt**2 * (pH - pH_lm_min)**2
 
     N_t = 10**N_texp
     omega_ls = 10**omega_ls_exp
@@ -32,7 +35,7 @@ def ode_model_coculture(t, x, param, x0, ode_args):
         (mu_lm * R - omega_lm) * x_lm - omegaT_lm / (N_t) * T * x_lm,
         -(mu_ls / N_t) * R * x_ls - (mu_lm / N_t) * R * x_lm,
         k_T * x_ls * R,  #  ??
-        k_LA_ls * x_ls + k_LA_lm * x_lm,  # *R but wo R the curves look better
+        k_LA_ls * x_ls+ k_LA_lm * x_lm,  # *R but wo R the curves look better
         0. # TODO pH evolution with time
     ]
 
@@ -99,10 +102,7 @@ def cost_res(param, calibr_setup):
     n_cl = calibr_setup["n_cl"]
     exps = calibr_setup["exps"]
     n_exps = len(exps)
-
-    param_ode_1 = param[n_cl*n_exps:n_cl*n_exps+10]
-    k_T = param[n_cl*n_exps+10:n_cl*n_exps+10+n_exps]
-    param_ode_2 = param[n_cl*n_exps+10+n_exps:]
+    param_ode = list(param[n_cl*n_exps:])
     x0_vals = param[:n_cl*n_exps]
 
     (df_x, ) = calibr_setup["dfs"]
@@ -115,9 +115,10 @@ def cost_res(param, calibr_setup):
     #ll_x = np.zeros(np.shape(obs_x))
     ll_x = np.zeros(np.shape(obs_x[:, :-1]))
     for i, exp in enumerate(exps):
-        param_ode = np.concatenate((param_ode_1, k_T[i:i+1], param_ode_2))
-        ll_x[i] = sq_diff_oneexp(
-            calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
+        if exp != 'LsCTC494' or exp != 'LsCTC494-Lm' or exp != 'V01' or exp != 'V04':
+            # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
+            param_ode[n_cl*3 + n_cl + 2] = 0.
+        ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
     ll_x = ll_x[ll_x != 0]
     return 1
 
@@ -172,14 +173,13 @@ if __name__ == "__main__":
     dfs = pd.read_pickle(path2+f'dataframe_poolpaper_all.pkl')
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
 
-    param_ode_1 = param_opt[n_cl*n_exps:n_cl*n_exps+10]
-    k_T = param_opt[n_cl*n_exps+10:n_cl*n_exps+10+n_exps]
-    param_ode_2 = param_opt[n_cl*n_exps+10+n_exps:]
     x0_vals = param_opt[:n_cl*n_exps]
+    param_ode = list(param_opt[n_cl*n_exps:])
     for i in range (len(data)):
-        param_ode = np.concatenate((param_ode_1, k_T[i:i+1], param_ode_2))
+        if exps[i] != 'LsCTC494' or exps[i] != 'LsCTC494-Lm' or exps[i] != 'V01' or exps[i] != 'V04':
+            # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
+            param_ode[n_cl*3 + n_cl + 2] = 0.
         plot_all_curves(t_test, param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
-
     
     calibr_setup = {
         "model": ode_model_coculture,
@@ -192,4 +192,4 @@ if __name__ == "__main__":
     }
     data_array = extract_observables_from_df(calibr_setup["dfs"])
     calibr_setup["data_array"] = data_array
-    cost_res(param_opt, calibr_setup)
+    #cost_res(param_opt, calibr_setup)

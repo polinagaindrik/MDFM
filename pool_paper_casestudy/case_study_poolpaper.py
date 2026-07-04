@@ -101,7 +101,7 @@ def experimental_values(name, skiprows=0, LA_sheetname='', path='', exp_start_of
     Resource = [np.nan for _ in range (len(time_all))]
     obs = np.array([Ls[:-1], Lm[:-1], Resource[:-1], BAC[:-1], LA[:-1], pH[:-1]])
     exp_start = exp_start_offset + 1
-    df = create_df_poolpaper(time_all[:-1], obs, [f'V{exp_start:02d}'], ['Ls', 'Lm'])
+    df = create_df_poolpaper(time_all[:-1], obs, [name], ['Ls', 'Lm'])
     fm.data.save_all_dfs([df], names=['poolpaper_' + name], path=path)
     return df
 
@@ -142,10 +142,7 @@ def cost(param, calibr_setup, jac_spasity):
     n_cl = calibr_setup["n_cl"]
     exps = calibr_setup["exps"]
     n_exps = len(exps)
-
-    param_ode_1 = param[n_cl*n_exps:n_cl*n_exps+10]
-    k_T = param[n_cl*n_exps+10:n_cl*n_exps+10+n_exps]
-    param_ode_2 = param[n_cl*n_exps+10+n_exps:]
+    param_ode = param[n_cl*n_exps:]
     x0_vals = param[:n_cl*n_exps]
 
     (df_x, ) = calibr_setup["dfs"]
@@ -158,9 +155,10 @@ def cost(param, calibr_setup, jac_spasity):
     #ll_x = np.zeros(np.shape(obs_x))
     ll_x = np.zeros(np.shape(obs_x[:, :-1]))
     for i, exp in enumerate(exps):
-        param_ode = np.concatenate((param_ode_1, k_T[i:i+1], param_ode_2))
-        ll_x[i] = sq_diff_oneexp(
-            calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
+        if exp != 'LsCTC494' or exp != 'LsCTC494-Lm' or exp != 'V01' or exp != 'V04':
+            # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
+            param_ode[n_cl*3 + n_cl + 2] = 0.
+        ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
     ll_x = ll_x[ll_x != 0]
     return calibr_setup["aggregation_func"]([ll_x])
 
@@ -217,11 +215,10 @@ def data_calibration_poolpaper(dfs, path=""):
     param_ode_bnds = tuple(
         [(0.3, 1.), (0.2, 1.)] + # mu
         [(0., 8.), (3., 8.), (0., 8.), (3., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
-        # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
         [(-5., -4.) for _ in range(n_cl)] +  # omega
-        [(3., 4.2)] +           # omegaT_exp
+        [(3., 4.5)] +           # omegaT_exp
         [(8.0, 10.0)] +         # N_max_exp
-        [(.1, 10.), (0., 0.), (0., 0.), (.1, 10.), (0., 0.)] + # k_T x N_exps
+        [(.1, 10.)] + # k_T x N_exps
         [(-11, -6) for _ in range(n_cl)] # k_LA
     )
     calibr_setup = calibr_presetup
@@ -238,12 +235,15 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     pH = pH_func(t, pH_cond)
 
     (mu_ls_opt, mu_lm_opt, pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt,
+    #(mu_ls_opt, mu_lm_opt, pH_ls_min, pH_lm_min,
     omega_ls_exp, omega_lm_exp, omegaT_lm_exp, N_texp, k_T_0, k_LA_ls_exp, k_LA_lm_exp, ) = param
     (x_ls0, x_lm0, R0, T0, LA0, pH0) = x0
     (x_ls, x_lm, R, T, LA, pH) = x
 
     mu_ls = mu_ls_opt * (pH - pH_ls_min) / (pH_ls_opt - pH_ls_min)
     mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)
+    #mu_ls = mu_ls_opt**2 * (pH - pH_ls_min)**2
+    #mu_lm = mu_lm_opt**2 * (pH - pH_lm_min)**2
 
     N_t = 10**N_texp
     omega_ls = 10**omega_ls_exp
@@ -350,7 +350,7 @@ if __name__ == "__main__":
     ntr = 1
     path_new = path + "test/"
     
-    names = ['LsCTC494', 'Ls23K', 'Lm', 'LsCTC494_Lm', 'Ls23K_Lm']
+    names = ['LsCTC494', 'Ls23K', 'Lm', 'LsCTC494-Lm', 'Ls23K-Lm']
     skip_rows = [8, 34, 58, 83, 109]
     LA_sheetnames = ['R9_494_LA_prod', 'R9_23K_LA_prod', 'R9_1034_LA_prod', 'R9_494co_LA_prod', 'R9_23Kco_LA_prod']
 

@@ -61,12 +61,13 @@ def extract_observables_from_df(dfs):
     return days_x, [obs_x]
 
 
-def plot_all_curves(t, param_ode, x10, data=None, path='', add_name=''):
+def plot_all_curves(param_ode, x10, data=None, path='', add_name=''):
     if data is not None:
         days, [obs_x] = extract_observables_from_df([data])
+    t = np.linspace(days[0], days[-1], 100)
     x0 = [x10[0], x10[1], 1., 0., 0., 6.]
     pH_series = np.array([obs_x[0][-1], days]).T
-    x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [pH_series, n_cl])
+    x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [pH_series, n_cl], t0=t[0])
     lbls = ["ls", "lm", "R", "BAC", "LA", "pH"]
     fig, ax = plt.subplots()
     for i in range(3):
@@ -162,8 +163,7 @@ if __name__ == "__main__":
 
 
     param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
-    #x0_vals = param_opt[:n_cl]
-    t_test = np.linspace(0.0, 55.0, 100)
+    #x0_vals = param_opt[:n_cl] 
 
 
     names = ['LsCTC494', 'Ls23K', 'Lm', 'LsCTC494_Lm', 'Ls23K_Lm']
@@ -183,9 +183,9 @@ if __name__ == "__main__":
         if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V04':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
             param_ode_new[n_cl*3 + n_cl + 2] = 0.
-            plot_all_curves(t_test, param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
+            plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
         else:
-            plot_all_curves(t_test, param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
+            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
     
     calibr_setup = {
         "model": ode_model_coculture,

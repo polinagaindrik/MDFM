@@ -177,7 +177,7 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
     const = [pH_series, n_cl]
 
     C0 = np.concatenate((np.array(x0), np.array([1., 0., 0., 6.])))
-    C = fm.mdl.model_ODE_solution(model, days, param_ode, C0, const)
+    C = fm.mdl.model_ODE_solution(model, days, param_ode, C0, const, t0=days[0])
     #ll_x0 = (obs_x[i][:-1] - C[:-1]) ** 2 / x_max[:-1]
     ll_x0 = [
         (obs_x[i][0] - C[0]) ** 2 / x_max[0],
@@ -304,9 +304,10 @@ def pH_LA_dependence(days, LA_data, pH_data, add_name='', path=''):
     return pH
 
 ############## Plotting ######################333
-def plot_all_curves(t, param_ode, x10, data=None, path='', add_name=''):
+def plot_all_curves(param_ode, x10, data=None, path='', add_name=''):
     if data is not None:
         days, [obs_x] = extract_observables_from_df([data])
+    t = np.linspace(days[0], days[-1], 100)
     x0 = set_initial_vals(x10, temps, n_cl)[0]
     pH_series = np.array([obs_x[0][-1], days]).T
     x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [pH_series, n_cl])
@@ -364,12 +365,11 @@ if __name__ == "__main__":
     fm.data.save_all_dfs([dfs], names=['poolpaper_all'], path=path_new)
 
     # Test pH(LA) dependence
-    days, [obs_x] = extract_observables_from_df([df_exps[3]])
-    pH_LA_dependence(days, obs_x[0][4], obs_x[0][5], add_name='_test_direct_calulation', path=path_new)
+    #days, [obs_x] = extract_observables_from_df([df_exps[3]])
+    #pH_LA_dependence(days, obs_x[0][4], obs_x[0][5], add_name='_test_direct_calulation', path=path_new)
 
     param_opt, calibr_setup = data_calibration_poolpaper([dfs], path=path_new)
 
-    t_test = np.linspace(0.0, 55.0, 100)  # hours
     x0_vals = param_opt[:n_cl*n_exps]
     param_ode = list(param_opt[n_cl*n_exps:])
     param_ode_new = np.copy(param_ode)
@@ -379,9 +379,9 @@ if __name__ == "__main__":
         if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V04':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
             param_ode_new[n_cl*3 + n_cl + 2] = 0.
-            plot_all_curves(t_test, param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path_new, add_name=f'_estim_realdata_{names[i]}')
+            plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path_new, add_name=f'_estim_realdata_{names[i]}')
         else:
-            plot_all_curves(t_test, param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path_new, add_name=f'_estim_realdata_{names[i]}')
+            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path_new, add_name=f'_estim_realdata_{names[i]}')
     
     '''
     # Test with in-siilico data generation and calibration

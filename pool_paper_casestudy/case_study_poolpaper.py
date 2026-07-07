@@ -220,7 +220,7 @@ def data_calibration_poolpaper(dfs, path=""):
         #[(0.1, 5.), (0.1, 5.)]  + # m0
         #[(0.01, 1.), (0.01, 1.)] + # mu1
         [(0.1, 1.), (0.1, 1.)] + # mu_opt
-        [(3., 5.), (5., 8.), (3., 5.), (5., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
+        [(2., 5.), (5., 8.), (2., 5.), (5., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
         #[(0., 0.) for _ in range(n_cl)] + 
         [(0.1, 10.) for _ in range(n_cl)] +  # omega
         [(0.1, 10.)] +           # omegaT_exp
@@ -267,8 +267,8 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     omega_lm = 10**(-3) * omega_lm_exp
     #omega_ls = 10**omega_ls_exp
     #omega_lm = 10**omega_lm_exp
-    omegaT_lm= 10**(-4) * omegaT_lm_exp
-    k_T = 10**(-6) * k_T_0
+    omegaT_lm = 10**(-4) * omegaT_lm_exp
+    k_T = 10**(-5) * k_T_0
     k_LA_ls = 10**k_LA_ls_exp
     k_LA_lm = 10**k_LA_lm_exp
 

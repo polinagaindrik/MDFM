@@ -40,8 +40,8 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     omega_lm = 10**(-3) * omega_lm_exp
     #omega_ls = 10**omega_ls_exp
     #omega_lm = 10**omega_lm_exp
-    omegaT_lm= 10**(-4) * omegaT_lm_exp
-    k_T = 10**(-6) * k_T_0
+    omegaT_lm = 10**(-4) * omegaT_lm_exp
+    k_T = 10**(-5) * k_T_0
     k_LA_ls = 10**k_LA_ls_exp
     k_LA_lm = 10**k_LA_lm_exp
 

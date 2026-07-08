@@ -340,7 +340,7 @@ def plot_all_curves(param_ode, x10, data=None, path='', add_name=''):
     if data is not None:
         days, [obs_x] = extract_observables_from_df([data])
     t = np.linspace(days[0], days[-1], 100)
-    x0 = set_initial_vals(x1s0, None, n_cl, pH0=obs_xs[0][-1][0])
+    x0 = set_initial_vals(x10, None, n_cl, pH0=obs_x[0][-1][0])
     pH_series = np.array([obs_x[0][-1], days]).T
     x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [pH_series, n_cl])
     obs_model = observable(days, x_sol)

@@ -43,7 +43,6 @@ def ode_model_coculture(t, x, param, x0, ode_args):
 
     k_T_inhib = 10**(-4) * k_T_inhib0
     gamma_BAC = 1 / (1 + k_T_inhib * T)
-    print(kappa_LA_lm)
 
     return [
         (mu_ls * R - omega_ls) * x_ls,

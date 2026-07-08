@@ -182,8 +182,8 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
     ll_x0 = [
         (obs_x[i][0] - C[0]) ** 2 / x_max[0], # L + G
         (obs_x[i][1] - C[1]) ** 2 / x_max[1],
-        (obs_x[i][4] - C[4]) ** 2 / np.max(x_max[4]), # BAC
-        #(obs_x[i][5] - C[5]) ** 2 #/ x_max[3], # LA
+        (obs_x[i][2] - C[2]) ** 2,# / np.max(x_max[2]), # BAC
+        #(obs_x[i][3] - C[3]) ** 2 #/ x_max[3], # LA
     ]
     return np.array(ll_x0)
 
@@ -218,7 +218,8 @@ if __name__ == "__main__":
     param_ode = list(param_opt[n_cl*n_exps:])
     param_ode_new = np.copy(param_ode)
     for i in range (len(data)):
-        if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V05':
+        #if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V05':
+        if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
             param_ode_new[n_cl*3 + n_cl + 2] = 0.
             plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')

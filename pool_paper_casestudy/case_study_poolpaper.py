@@ -76,7 +76,7 @@ def experimental_values(name, skiprows=0, LA_sheetname='', path='', exp_start_of
     elif name == 'Ls23K' or name == 'LsCTC494':
         Lm = np.array([0. for _ in range(len(Ls))])
 
-    if name == 'Ls23K' or name == 'Lm' or name == 'Ls23K-Lm':# or name == 'LsCTC494': # ???
+    if name == 'Ls23K' or name == 'Lm' or name == 'Ls23K-Lm' or name == 'LsCTC494': # ???
         time_BAC = time_count
         BAC = np.array([0. for t in time_BAC])
     else:
@@ -158,8 +158,8 @@ def cost(param, calibr_setup, jac_spasity):
     #ll_x = np.zeros(np.shape(obs_x))
     ll_x = np.zeros(np.shape(obs_x[:, :-2]))
     for i, exp in enumerate(exps):
-        if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
-        #if exp != 'LsCTC494-Lm' and exp != 'V05':
+        #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
+        if exp != 'LsCTC494-Lm' and exp != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
             param_ode_new[n_cl*3 + n_cl + 2] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
@@ -187,8 +187,8 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
     ll_x0 = [
         (obs_x[i][0] - C[0]) ** 2 / x_max[0], # L + G
         (obs_x[i][1] - C[1]) ** 2 / x_max[1],
-        (obs_x[i][4] - C[4]) ** 2 / np.max(x_max[4]), # BAC
-        #(obs_x[i][5] - C[5]) ** 2 #/ x_max[3], # LA
+        (obs_x[i][2] - C[2]) ** 2 / np.max(x_max[2]), # BAC
+        #(obs_x[i][3] - C[3]) **ss 2 #/ x_max[3], # LA
     ]
     return np.array(ll_x0)
 

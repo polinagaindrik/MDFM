@@ -33,9 +33,8 @@ def model_wotemp(n_cl, temps, ntr, times, param_ode=None, x10=None, path='',add_
     fm.data.json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode)}, f'Generated_param{add_name}.json', dir=path)
     return df_ode
 
-def set_initial_vals(x10, temps, n_cl):
-    #return [[L0 for L0 in x10[i]] + [1., 0., 0., 6.] for i in range (len(temps))]
-    return np.concatenate((x10, [1., 0., 0., 6.]))
+def set_initial_vals(x10, temps, n_cl, pH0=6.):
+    return np.concatenate((x10, [1., 0., 0., pH0]))
 
 def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, exp_start_offset=0):
     df_ode = []
@@ -75,6 +74,8 @@ def experimental_values(name, skiprows=0, LA_sheetname='', path='', exp_start_of
         Ls = np.array([0. for _ in range(len(Lm))])
     elif name == 'Ls23K' or name == 'LsCTC494':
         Lm = np.array([0. for _ in range(len(Ls))])
+    elif name == 'LsCTC494-Lm':
+        Lm[-1] = np.nan
 
     if name == 'Ls23K' or name == 'Lm' or name == 'Ls23K-Lm' or name == 'LsCTC494': # ???
         time_BAC = time_count
@@ -97,13 +98,12 @@ def experimental_values(name, skiprows=0, LA_sheetname='', path='', exp_start_of
             df_LA_new[len(df_LA['Time, h (1)'])+j] = [t]+ [np.nan for _ in range (len(df_LA.columns)-1)]
     df_LA = df_LA_new.T.sort_values(by=['Time, h (1)'], ascending=True)
     LA = np.array(df_LA['LA (mg/mL)'])
-    LA[LA <= 0.0] = 0.0
-
+    #LA[LA <= 0.0] = 0.0
     
     #Resource = [np.nan for _ in range (len(time_all))]
-    obs = np.array([Ls[:-1], Lm[:-1], BAC[:-1], LA[:-1], pH[:-1]])
+    obs = np.array([Ls, Lm, BAC, LA, pH])
     exp_start = exp_start_offset + 1
-    df = create_df_poolpaper(time_all[:-1], obs, [f'V{exp_start:02d}'], ['Ls', 'Lm'])
+    df = create_df_poolpaper(time_all, obs, [f'V{exp_start:02d}'], ['Ls', 'Lm'])
     fm.data.save_all_dfs([df], names=['poolpaper_' + name], path=path)
     return df
 
@@ -156,12 +156,12 @@ def cost(param, calibr_setup, jac_spasity):
     x_max = obs_x**2
     x_max[x_max == 0.0] = 1.0
     #ll_x = np.zeros(np.shape(obs_x))
-    ll_x = np.zeros(np.shape(obs_x[:, :-2]))
+    ll_x = np.zeros(np.shape(obs_x[:, :-1]))
     for i, exp in enumerate(exps):
         #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
         if exp != 'LsCTC494-Lm' and exp != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode_new[n_cl*3 + n_cl + 2] = 0.
+            param_ode_new[2*3 + 2 + 2] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
@@ -179,16 +179,17 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
     pH_series = np.array([obs_x[i][-1], days]).T
     const = [pH_series, n_cl]
 
-    C0 = set_initial_vals(x0, None, n_cl)
+    C0 = set_initial_vals(x0, None, n_cl, pH0=obs_x[i][-1][0])
     #np.concatenate((np.array(x0), np.array([0., 0.]), np.array([1., 0., 0., 6.])))
     C = fm.mdl.model_ODE_solution(model, days, param_ode, C0, const, t0=days[0])
     obs_model = observable(days, C)
     #ll_x0 = (obs_x[i][:-1] - C[:-1]) ** 2 / x_max[:-1]
     ll_x0 = [
-        (obs_x[i][0] - C[0]) ** 2 / x_max[0], # L + G
-        (obs_x[i][1] - C[1]) ** 2 / x_max[1],
-        (obs_x[i][2] - C[2]) ** 2 / np.max(x_max[2]), # BAC
-        #(obs_x[i][3] - C[3]) **ss 2 #/ x_max[3], # LA
+        (obs_x[i][0] - obs_model[0]) ** 2 / x_max[0], #  G
+        (obs_x[i][1] - obs_model[1]) ** 2 / x_max[1],
+        (obs_x[i][2] - obs_model[2]) ** 2 / np.max(x_max[2]), # BAC
+        (obs_x[i][3] - obs_model[3]) ** 2 / np.max(x_max[3]), #/ x_max[3], # LA
+        #(obs_x[i][4] - obs_model[4]) ** 2 / np.max(x_max[4]), #/ x_max[3], # LA
     ]
     return np.array(ll_x0)
 
@@ -209,25 +210,32 @@ def data_calibration_poolpaper(dfs, path=""):
     # TODO are LA0, BAC0, pH0 also needed to be estimated
     x0_bnds_all = tuple([(2., 6.) for _ in range(calibr_presetup["n_cl"])])
 
-    x0_bnds_all  = tuple([
-        (dfs[0].T[species][f'{exp}_01_poolpaper'] - 0.2*dfs[0].T[species][f'{exp}_01_poolpaper'],
-         dfs[0].T[species][f'{exp}_01_poolpaper'] + 0.2*dfs[0].T[species][f'{exp}_01_poolpaper'])
-    for exp in calibr_presetup["exps"]
-    for species in ['x_Ls_State_00', 'x_Lm_State_00'] ])
+    x0_bnds_all = []
+    for exp in calibr_presetup["exps"]:
+        add =  [(dfs[0].T['x_Ls_State_00'][f'{exp}_01_poolpaper'] - 0.2*dfs[0].T['x_Ls_State_00'][f'{exp}_01_poolpaper'],
+         dfs[0].T['x_Ls_State_00'][f'{exp}_01_poolpaper'] + 0.2*dfs[0].T['x_Ls_State_00'][f'{exp}_01_poolpaper']),
+         (0., dfs[0].T['x_Lm_State_00'][f'{exp}_01_poolpaper'] + 0.2*dfs[0].T['x_Lm_State_00'][f'{exp}_01_poolpaper']),
+         #(0., dfs[0].T['x_Lm_State_00'][f'{exp}_01_poolpaper'] + 0.2*dfs[0].T['x_Lm_State_00'][f'{exp}_01_poolpaper']) # with resistant bacteria
+         (0., 0.) # if no resistant bacteria
+         ]
+        x0_bnds_all += add
+    x0_bnds_all = tuple(x0_bnds_all)
 
     param_ode_bnds = tuple(
-        #[(0.01, 100.), (0.01, 100.)] + # lambda
-        #[(0.1, 5.), (0.1, 5.)]  + # m0
-        #[(0.01, 1.), (0.01, 1.)] + # mu1
         [(0.1, 1.), (0.1, 1.)] + # mu_opt
         [(2., 5.), (5., 8.), (2., 5.), (5., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
-        #[(0., 0.) for _ in range(n_cl)] + 
-        [(0.1, 10.) for _ in range(n_cl)] +  # omega
-        [(0.1, 10.)] +           # omegaT_exp
+        #[(0., 0.) for _ in range(2)] + 
+        [(0.1, 10.) for _ in range(2)] +  # omega
+        [(0., 0.)] +           # omegaT_exp
+        #[(0.1, 10.)] +           # omegaT_exp
         [(8.0, 10.0)] +         # N_max_exp
-        [(.1, 1.)] + # k_T
-        [(-10, -10) for _ in range(n_cl)]
-        #[(-11, -6) for _ in range(n_cl)] # k_LA
+        #[(.1, 1.)] + # kappa_T
+        [(0., 0.)] + # kappa_T
+        #[(-10, -10) for _ in range(2)] +
+        [(-10, -9)] + [(-9.5, -8.)] + [(-10., -9.)] + # kappa_LA all
+        [(0., 0.)] + # inhibitiory effect of BAC #(0.01, 10.)
+        [(0., 0.)] # q_acid
+        #[(10**(-3), 6*10**(-3))] # q_acid
     )
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds
@@ -242,21 +250,18 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     (pH_cond, n_cl,) = ode_args
     pH = pH_func(t, pH_cond)
 
-    #(lambda_ls_exp, lambda_lm_exp,
-    #mu0_ls, mu0_lm, mu1_ls, mu1_lm, 
-    (mu_ls_opt, mu_lm_opt, pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt,
+    (mu_ls_opt, mu_lm_opt,
+    pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt,
     #(mu_ls_opt, mu_lm_opt, pH_ls_min, pH_lm_min,
-    omega_ls_exp, omega_lm_exp, omegaT_lm_exp, N_texp, k_T_0, k_LA_ls_exp, k_LA_lm_exp, ) = param
-    #(L_ls0, L_lm0, x_ls0, x_lm0, R0, T0, LA0, pH0) = x0
-    #(L_ls, L_lm, x_ls, x_lm, R, T, LA, pH) = x
-    (x_ls0, x_lm0, R0, T0, LA0, pH0) = x0
-    (x_ls, x_lm, R, T, LA, pH) = x
+    omega_ls_exp, omega_lm_exp, omegaT_lm_exp,
+    N_texp,
+    kappa_T_0, kappa_LA_ls_exp, kappa_LA_ls_2_exp, kappa_LA_lm_exp,
+    k_T_inhib0,
+    q_acid) = param
 
-    #lambda_ls = lambda_ls_exp
-    #lambda_lm = lambda_lm_exp
+    (x_ls0, x_lm_sen0, x_lm_res0, R0, T0, LA0, pH0) = x0
+    (x_ls, x_lm_sen, x_lm_res, R, T, LA, pH) = x
 
-    #mu_ls = - mu0_ls + mu1_ls * pH
-    #mu_lm = - mu0_lm + mu1_lm * pH
     mu_ls = mu_ls_opt * (pH - pH_ls_min) / (pH_ls_opt - pH_ls_min)
     mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)
     #mu_ls = mu_ls_opt**2 * (pH - pH_ls_min)**2
@@ -265,31 +270,29 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     N_t = 10**N_texp
     omega_ls = 10**(-3) * omega_ls_exp
     omega_lm = 10**(-3) * omega_lm_exp
-    #omega_ls = 10**omega_ls_exp
-    #omega_lm = 10**omega_lm_exp
     omegaT_lm = 10**(-4) * omegaT_lm_exp
-    k_T = 10**(-5) * k_T_0
-    k_LA_ls = 10**k_LA_ls_exp
-    k_LA_lm = 10**k_LA_lm_exp
+    kappa_T = 10**(-5) * kappa_T_0
+    kappa_LA_ls = 10**kappa_LA_ls_exp
+    kappa_LA_ls_2 = 10**kappa_LA_ls_2_exp
+    kappa_LA_lm = 10**kappa_LA_lm_exp
+
+    k_T_inhib = 10**(-4) * k_T_inhib0
+    gamma_BAC = 1 / (1 + k_T_inhib * T)
 
     return [
-        #- lambda_ls * L_ls,
-        #- lambda_lm * L_lm,
-        # lambda_ls * L_ls + (mu_ls * R - omega_ls) * x_ls,
-        # lambda_lm * L_lm + (mu_lm * R - omega_lm) * x_lm - omegaT_lm / (N_t) * T * x_lm,
         (mu_ls * R - omega_ls) * x_ls,
-        (mu_lm * R  - omega_lm) * x_lm - omegaT_lm * T * x_lm, #
-        -(mu_ls / N_t) * R * x_ls - (mu_lm / N_t) * R * x_lm,
-        k_T * x_ls * R,  #  ??
-        k_LA_ls * x_ls + k_LA_lm * x_lm,  # *R but wo R the curves look better
-        0. # TODO pH evolution with times
+        (mu_lm * R  - omega_lm) * x_lm_sen - omegaT_lm * T * x_lm_sen,
+        (mu_lm * R  - omega_lm) * x_lm_res,
+        -(mu_ls / N_t) * R * x_ls - (mu_lm / N_t) * R * x_lm_sen - (mu_lm / N_t) * R * x_lm_res,
+        kappa_T * x_ls * R,  #  ??
+        kappa_LA_ls * x_ls + kappa_LA_ls_2 * R* x_ls + kappa_LA_lm  * (x_lm_sen+x_lm_res),  # *R but wo R the curves look better
+        0.#- q_acid * LA
     ]
 
+    
 def observable(t, x):
-    n_cl = 2
-    n_states = 1
-    n = fm.mdl.get_bacterial_count(x, n_cl, n_states)
-    obs = np.concatenate((n, x[n_cl*n_states+1:-1])) # mb add pH
+    n = np.array([x[0], x[1]+x[2]])
+    obs = np.concatenate((n, x[4:])) # mb add pH
     return obs
 
 
@@ -333,11 +336,11 @@ def pH_LA_dependence(days, LA_data, pH_data, add_name='', path=''):
 
 ############## Plotting ######################333
 def plot_all_curves(param_ode, x10, data=None, path='', add_name=''):
+    n_cl = 3
     if data is not None:
         days, [obs_x] = extract_observables_from_df([data])
     t = np.linspace(days[0], days[-1], 100)
-    x0 = set_initial_vals(x10, None, n_cl)
-    #x0 = np.concatenate((x10, [0., 0., 1., 0., 0., 6.]))
+    x0 = set_initial_vals(x1s0, None, n_cl, pH0=obs_xs[0][-1][0])
     pH_series = np.array([obs_x[0][-1], days]).T
     x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [pH_series, n_cl])
     obs_model = observable(days, x_sol)
@@ -348,6 +351,10 @@ def plot_all_curves(param_ode, x10, data=None, path='', add_name=''):
         if data is not None:
             ax.scatter(days, obs_x[0][i], label=lbls[i]+'_data', marker='x')
     # ax.plot(t, x_sol[2], label='R')
+
+    ax.plot(t, x_sol[4], label='R', linestyle='dotted')
+    ax.plot(t, x_sol[1], label='lm_sen', linestyle='dotted')
+    ax.plot(t, x_sol[2], label='lm_res', linestyle='dotted')
     ax.set_yscale("log")
     #ax.set_ylim(10**-3, 10**9)
     plt.legend()
@@ -375,7 +382,8 @@ def plot_all_curves(param_ode, x10, data=None, path='', add_name=''):
 if __name__ == "__main__":
     path = "pool_paper_casestudy/out/"
     workers = -1
-    n_cl = 2
+    n_cl = 3
+    n_states = 1
     # relnoise = 0.1
     add_name = ""
     ntr = 1
@@ -408,7 +416,7 @@ if __name__ == "__main__":
         data = dfs.filter(like=f'V{i+1:02d}')
         if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode_new[n_cl*3 + n_cl + 2] = 0.
+            param_ode_new[2*3 + 2 + 2] = 0.
             plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
         else:
             plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')

@@ -42,11 +42,11 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     k_T_inhib = k_T_inhib0
     #gamma_BAC = 1 / (1 + k_T_inhib * T)
 
+    #print(pH_ls_opt, pH_lm_opt)
+
     #n = 2 
-    toxin_death = omegaT_lm * x_lm_sen * T**n / (k_T_inhib**n +T**n)
-
-    print(toxin_death,  x_lm_sen, T, k_T_inhib, omegaT_lm)
-
+    #k_T_inhib, omegaT_lm = 1., 0.
+    toxin_death = omegaT_lm * x_lm_sen * T # omegaT_lm * x_lm_sen * T**n / (k_T_inhib**n +T**n) #
     return [
         (mu_ls * R - omega_ls) * x_ls23K,
         (mu_ls * R - omega_ls) * x_lsCTC494,
@@ -104,9 +104,9 @@ def plot_all_curves(param_ode, x10, data=None, path='', add_name=''):
             ax.scatter(days, obs_x[0][i], label=lbls[i]+'_data', marker='x')
     # ax.plot(t, x_sol[2], label='R')
 
-    ax.plot(t, x_sol[4], label='R', linestyle='dotted')
-    ax.plot(t, x_sol[1], label='lm_sen', linestyle='dotted')
-    ax.plot(t, x_sol[2], label='lm_res', linestyle='dotted')
+    #ax.plot(t, x_sol[4], label='R', linestyle='dotted')
+    ax.plot(t, x_sol[2], label='lm_sen', linestyle='dotted')
+    ax.plot(t, x_sol[3], label='lm_res', linestyle='dotted')
     ax.set_yscale("log")
     #ax.set_ylim(10**-3, 10**9)
     plt.legend()
@@ -149,15 +149,12 @@ def cost_res(param, calibr_setup):
     #ll_x = np.zeros(np.shape(obs_x))
     ll_x = np.zeros(np.shape(obs_x[:, :]))
     for i, exp in enumerate(exps):
-        '''
         if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
             param_ode_new[2*3 + 2 + 2] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
-        '''
-        ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
     print(np.shape(ll_x), np.sum(ll_x, axis=(0, 2)))
     ll_x = ll_x[ll_x != 0]
     return calibr_setup["aggregation_func"]([ll_x])
@@ -182,7 +179,7 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
         (obs_x[i][1] - obs_model[1]) ** 2 / x_max[1],
         (obs_x[i][2] - obs_model[2]) ** 2 / np.max(x_max[2]), # BAC
         (obs_x[i][3] - obs_model[3]) ** 2, #/ x_max[3], # LA
-        (obs_x[i][4] - obs_model[4]) ** 2, #/ x_max[3], # LA
+        (obs_x[i][4] - obs_model[4]) ** 2, #/ x_max[3], # pH
     ]
     return np.array(ll_x0)
 
@@ -217,7 +214,6 @@ if __name__ == "__main__":
     param_ode = list(param_opt[n_cl*n_exps:])
     param_ode_new = np.copy(param_ode)
     for i in range (len(data)):
-        '''
         #if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V05':
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
@@ -225,8 +221,6 @@ if __name__ == "__main__":
             plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
         else:
             plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
-        '''
-        plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
 
     calibr_setup = {
         "model": ode_model_coculture,

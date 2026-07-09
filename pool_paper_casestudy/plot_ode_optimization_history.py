@@ -15,17 +15,17 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     (pH_cond, n_cl,) = ode_args
     pH = pH_func(t, pH_cond)
 
+    (x_ls23K0, x_lsCTC4940, x_lm_sen0, x_lm_res0, R0, T0, LA0, pH0) = x0
+    (x_ls23K, x_lsCTC494, x_lm_sen, x_lm_res, R, T, LA, pH) = x
+
     (mu_ls_opt, mu_lm_opt,
     pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt,
-    #(mu_ls_opt, mu_lm_opt, pH_ls_min, pH_lm_min,
     omega_ls_exp, omega_lm_exp, omegaT_lm_exp,
     N_texp,
-    kappa_T_0, kappa_LA_ls_exp, kappa_LA_ls_2_exp, kappa_LA_lm_exp,
-    k_T_inhib0,
+    kappa_T_0, k_T_inhib0, n,
+    kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp,
     q_acid) = param
 
-    (x_ls0, x_lm_sen0, x_lm_res0, R0, T0, LA0, pH0) = x0
-    (x_ls, x_lm_sen, x_lm_res, R, T, LA, pH) = x
 
     mu_ls = mu_ls_opt * (pH - pH_ls_min) / (pH_ls_opt - pH_ls_min)
     mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)
@@ -37,27 +37,31 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     omega_lm = 10**(-3) * omega_lm_exp
     omegaT_lm = 10**(-4) * omegaT_lm_exp
     kappa_T = 10**(-5) * kappa_T_0
-    kappa_LA_ls = 10**kappa_LA_ls_exp
-    kappa_LA_ls_2 = 10**kappa_LA_ls_2_exp
-    kappa_LA_lm = 10**kappa_LA_lm_exp
+    kappa_LA_ls23K, kappa_LA_ls23K_2, kappa_LA_lsCTC494, kappa_LA_lsCTC494_2, kappa_LA_lm = 10**np.array([kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp])
 
-    k_T_inhib = 10**(-4) * k_T_inhib0
-    gamma_BAC = 1 / (1 + k_T_inhib * T)
+    k_T_inhib = k_T_inhib0
+    #gamma_BAC = 1 / (1 + k_T_inhib * T)
+
+    #n = 2 
+    toxin_death = omegaT_lm * x_lm_sen * T**n / (k_T_inhib**n +T**n)
+
+    print(toxin_death,  x_lm_sen, T, k_T_inhib, omegaT_lm)
 
     return [
-        (mu_ls * R - omega_ls) * x_ls,
-        (mu_lm * R  - omega_lm) * x_lm_sen - omegaT_lm * T * x_lm_sen,
+        (mu_ls * R - omega_ls) * x_ls23K,
+        (mu_ls * R - omega_ls) * x_lsCTC494,
+        (mu_lm * R  - omega_lm) * x_lm_sen - toxin_death,
         (mu_lm * R  - omega_lm) * x_lm_res,
-        -(mu_ls / N_t) * R * x_ls - (mu_lm / N_t) * R * x_lm_sen - (mu_lm / N_t) * R * x_lm_res,
-        kappa_T * x_ls * R,  #  ??
-        kappa_LA_ls * x_ls + kappa_LA_ls_2* R * x_ls + kappa_LA_lm * (x_lm_sen+x_lm_res),  # *R but wo R the curves look better
-        - q_acid * LA
+        -(mu_ls / N_t)*R*x_ls23K - (mu_ls / N_t)*R*x_lsCTC494 - (mu_lm / N_t)*R*x_lm_sen - (mu_lm / N_t)*R*x_lm_res,
+        kappa_T * x_lsCTC494 * R,  #  ??
+        (kappa_LA_ls23K*x_ls23K + kappa_LA_ls23K_2*R*x_ls23K) + (kappa_LA_lsCTC494*x_lsCTC494 + kappa_LA_lsCTC494_2*R*x_lsCTC494) +
+        + kappa_LA_lm  * (x_lm_sen+x_lm_res),  # *R but wo R the curves look better
+        0.#- q_acid * LA
     ]
-
     
 def observable(t, x):
-    n = np.array([x[0], x[1]+x[2]])
-    obs = np.concatenate((n, x[4:])) # mb add pH
+    n = np.array([x[0]+x[1], x[2]+x[3]])
+    obs = np.concatenate((n, x[5:])) # mb add pH
     return obs
 
 
@@ -145,12 +149,15 @@ def cost_res(param, calibr_setup):
     #ll_x = np.zeros(np.shape(obs_x))
     ll_x = np.zeros(np.shape(obs_x[:, :]))
     for i, exp in enumerate(exps):
+        '''
         if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
             param_ode_new[2*3 + 2 + 2] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
+        '''
+        ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
     print(np.shape(ll_x), np.sum(ll_x, axis=(0, 2)))
     ll_x = ll_x[ll_x != 0]
     return calibr_setup["aggregation_func"]([ll_x])
@@ -180,7 +187,7 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
     return np.array(ll_x0)
 
 if __name__ == "__main__":
-    n_cl = 3
+    n_cl = 4
     relnoise = 0.1
 
     path = 'out/'
@@ -196,7 +203,7 @@ if __name__ == "__main__":
     #x0_vals = param_opt[:n_cl] 
 
 
-    names = ['LsCTC494', 'Ls23K', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
+    names = ['LsCTC494', 'Ls23K', 'Lm', 'Ls23K-Lm']#, 'LsCTC494-Lm']
     n_exps = len(names)
     temps = [2.0 for _ in range(len(names))]
 
@@ -210,6 +217,7 @@ if __name__ == "__main__":
     param_ode = list(param_opt[n_cl*n_exps:])
     param_ode_new = np.copy(param_ode)
     for i in range (len(data)):
+        '''
         #if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V05':
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
@@ -217,7 +225,9 @@ if __name__ == "__main__":
             plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
         else:
             plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
-    
+        '''
+        plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
+
     calibr_setup = {
         "model": ode_model_coculture,
         "output_path": path2,

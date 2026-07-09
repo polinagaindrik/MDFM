@@ -158,7 +158,6 @@ def cost(param, calibr_setup, jac_spasity):
     #ll_x = np.zeros(np.shape(obs_x))
     ll_x = np.zeros(np.shape(obs_x[:, :-1]))
     for i, exp in enumerate(exps):
-        '''
         #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
         if exp != 'LsCTC494-Lm' and exp != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
@@ -166,8 +165,6 @@ def cost(param, calibr_setup, jac_spasity):
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
-        '''
-        ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
     ll_x = ll_x[ll_x != 0]
     return calibr_setup["aggregation_func"]([ll_x])
 
@@ -192,7 +189,7 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
         (obs_x[i][1] - obs_model[1]) ** 2 / x_max[1],
         (obs_x[i][2] - obs_model[2]) ** 2 / np.max(x_max[2]), # BAC
         (obs_x[i][3] - obs_model[3]) ** 2,# / np.max(x_max[3]), #/ x_max[3], # LA
-        #(obs_x[i][4] - obs_model[4]) ** 2 / np.max(x_max[4]), #/ x_max[3], # LA
+        #(obs_x[i][4] - obs_model[4]) ** 2 / np.max(x_max[4]),  # pH
     ]
     return np.array(ll_x0)
 
@@ -223,7 +220,7 @@ def data_calibration_poolpaper(dfs, path=""):
             (dfs[0].T['x_Ls_State_00'][f'{exp}_01_poolpaper'] - 0.2*dfs[0].T['x_Ls_State_00'][f'{exp}_01_poolpaper'],
             dfs[0].T['x_Ls_State_00'][f'{exp}_01_poolpaper'] + 0.2*dfs[0].T['x_Ls_State_00'][f'{exp}_01_poolpaper'])]
         #and lm
-        add += [(0., dfs[0].T['x_Lm_State_00'][f'{exp}_01_poolpaper'] + 0.2*dfs[0].T['x_Lm_State_00'][f'{exp}_01_poolpaper']),
+        add += [(dfs[0].T['x_Lm_State_00'][f'{exp}_01_poolpaper'] - 0.2*dfs[0].T['x_Lm_State_00'][f'{exp}_01_poolpaper'], dfs[0].T['x_Lm_State_00'][f'{exp}_01_poolpaper'] + 0.2*dfs[0].T['x_Lm_State_00'][f'{exp}_01_poolpaper']),
          (0., 0.3*dfs[0].T['x_Lm_State_00'][f'{exp}_01_poolpaper']) # with resistant bacteria
          #(0., 0.) # if no resistant bacteria
          ]
@@ -233,11 +230,11 @@ def data_calibration_poolpaper(dfs, path=""):
     param_ode_bnds = tuple(
         [(0.1, 1.), (0.1, 1.)] + # mu_opt
         [(2., 5.), (5., 8.), (2., 5.), (5., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
-        #[(0., 0.) for _ in range(2)] + 
-        [(0.1, 10.) for _ in range(2)] +  # omega
-        [(0.01, 100.)] + [(5., 20.)] + [(2., 2.)] + # omegaT_exp + ki_T_inhib + n
+        #[(0.1, 10.) for _ in range(2)] +  # omega
+        [(0., 0.) for _ in range(2)] +  # omega
+        [(0.01, 1.)] + [(5., 20.)] + [(1., 1.)] + # omegaT_exp + ki_T_inhib + n
         [(8.0, 10.0)] +          # N_max_exp
-        [(.1, 1.)] + # kappa_T
+        [(.1, 1.)]  + # kappa_T
         #[(0., 0.)] + # kappa_T
         [(-11, -9)] + [(-9.5, -8.)] + # kappa_LA ls23K
         [(-11, -9)] + [(-9.5, -8.)] + # kappa_LA lsCTC494
@@ -286,7 +283,7 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     #gamma_BAC = 1 / (1 + k_T_inhib * T)
 
     #n = 2 
-    toxin_death = omegaT_lm * x_lm_sen * T**n / (k_T_inhib**n +T**n) 
+    toxin_death = omegaT_lm * x_lm_sen * T #omegaT_lm * x_lm_sen * T**n / (k_T_inhib**n +T**n) #
 
     return [
         (mu_ls * R - omega_ls) * x_ls23K,
@@ -313,22 +310,6 @@ def pH_func(t, pH_series):
     diff = time_arr - t
     return pH_arr[np.argmin(np.abs(diff))]
 
-'''
-def ode_model_monoculture(t, x, param, x0, ode_args):
-    (temp_cond, n_cl,) = ode_args
-    (mu, omega, omegaT, N_t, k_T, k_LA, ) = param
-    # If it's lm: k_T=0
-    # If it's ls: omegaT=0
-    # TODO add pH dependence of mu
-    (x0, R0, T0, LA0) = x0
-    (x, R, T, LA) = x
-    return [
-        (mu * R) * x - omega * x - omegaT / (N_t) * T * x,
-        -(mu / N_t) * R * x,
-        k_T * x * R,  #  ??
-        k_LA * x
-    ]
-'''
 
 ########### pH(LA) # function
 def pH_LA_dependence(days, LA_data, pH_data, add_name='', path=''):
@@ -425,15 +406,12 @@ if __name__ == "__main__":
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     for i in range (len(exps)):
         data = dfs.filter(like=f'V{i+1:02d}')
-        '''
         if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
             param_ode_new[2*3 + 2 + 2] = 0.
             plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
         else:
-            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
-        '''
-        plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
+            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')    
     
     '''
     # Test with in-siilico data generation and calibration

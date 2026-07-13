@@ -233,11 +233,11 @@ def data_calibration_poolpaper(dfs, path=""):
         [(.2, .7), (.2, .7)] + # mu_opt
         #[(0.55, 0.55), (0.33, 0.33)] + # mu_opt
         #[(3.83, 3.83), (7.02, 7.02), (4.84, 4.84), (5.81, 5.81)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
-        [(3.5, 4.5), (5., 8.), (4., 5.), (5.5, 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
+        [(3.5, 4.5), (5., 8.), (3.5, 5.), (5.5, 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
         #[(0.1, 10.) for _ in range(2)] +  # omega
         [(0., 0.) for _ in range(2)] +  # omega
-        [(1., 2.)] + [(3000., 5000.)] + [(0.5, 1.5)] + # omegaT_exp + ki_T_inhib + n
-        [(8.0, 9.0)] +          # N_max_exp
+        [(0.5, 2.)] + [(3000., 5000.)] + [(0.3, 1.5)] + # omegaT_exp + ki_T_inhib + n
+        [(8.0, 9.5)] +          # N_max_exp
         #[(8.2855, 8.2855)] +          # N_max_exp
         [(.1, 1.)]  + # kappa_T
         #[(0.6, 0.6)]  + # kappa_T
@@ -269,7 +269,7 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     omega_ls_exp, omega_lm_exp,
     omegaT_lm_exp, k_T_inhib0, n,
     N_texp,
-    kappa_T_0, 
+    kappa_T_0,
     kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp,
     q_acid) = param
 

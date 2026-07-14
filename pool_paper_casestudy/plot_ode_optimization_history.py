@@ -22,6 +22,14 @@ colors_all = {
         'N_wo_tempshift':'#679E48',
         'N_tempshift_10':'#ED733E',
         'N_tempshift_10_5_15':'#C3568A',
+        'N_Lm': '#ED733E',
+        'N_Lm_woT':'#D70040',
+        'N_Ls23K': '#679E48',
+        'N_Ls23Kco': '#386641',
+        'N_Lm_withT':'#D06062',
+        'N_LsCTC494': '#4E89B1',
+        'N_LsCTC494co': '#00356B',
+        
     }
 
 figsize_default = (6.5, 4.0)
@@ -185,7 +193,7 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
     param_ode_new[2*3 + 2 + 3+1] = 0.
 
     days, [obs_x] = extract_observables_from_df([dfs])
-    t_model = np.linspace(days[0], days[-1]+1.5, 100)
+    t_model = np.linspace(days[0], days[-1]+5, 100)
 
     # Figure A w/o BAC: Ls23K + Lm
     exp_indexes = [1, 2, 3,]
@@ -269,9 +277,8 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
     plt.savefig(path + f"Figures-pool_model-real_data-LsCTC494-Lm.png", bbox_inches="tight")
     plt.close(fig)
 
-    '''
     # All together:
-    exp_indexes = [0, 1, 2, 3, 4]
+    exp_indexes = [0, 1, 2, 3, 4, ]
     fig, ax = plt.subplots()
     for i in exp_indexes:
         x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
@@ -282,54 +289,77 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
             x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode, x0, [pH_series, n_cl])
         obs_model = observable(t_model, x_sol)
         if i == 0:
-            ax.plot(t_model, obs_model[0], label='Monoculture: LsCTC494', linestyle='dashed', color=colors_all['N_A'])
-            ax.scatter(days, obs_x[i][0], marker='^', color=colors_all['N_A'])
+            ax.plot(t_model, obs_model[0], label='Ls-CTC494', linestyle='dashed', color=colors_all['N_LsCTC494'], linewidth=3)
+            ax.scatter(days, obs_x[i][0], marker='^', color=colors_all['N_LsCTC494'])
         elif i == 1:
-            ax.plot(t_model, obs_model[0], label='Monoculture: Ls23K', linestyle='dashed', color=colors_all['N_A'])
-            ax.scatter(days, obs_x[i][0], marker='^', color=colors_all['N_A'])
+            ax.plot(t_model, obs_model[0], label='Ls-23K', linestyle='dashed', color=colors_all['N_Ls23K'], linewidth=3)
+            ax.scatter(days, obs_x[i][0], marker='^', color=colors_all['N_Ls23K'])
         elif i == 2:
-            ax.plot(t_model, obs_model[1], label='Monoculture: Lm', color=colors_all['N_B'], linestyle='dashed')
-            ax.scatter(days, obs_x[i][1], marker='o', color=colors_all['N_B'])
+            ax.plot(t_model, obs_model[1], label='Lm-CTC1034', color=colors_all['N_Lm'], linestyle='dashed', linewidth=3)
+            ax.scatter(days, obs_x[i][1], marker='^', color=colors_all['N_Lm'])
         elif i == 3:
-            ax.plot(t_model, obs_model[0], label='Coculture: Ls23K', color=colors_all['N_lambd_1e-2_omega_0'])
-            ax.plot(t_model, obs_model[1], label='Coculture: Lm', linestyle='solid', color=colors_all['N_lambd_1e-3_omega_0'])
+            ax.plot(t_model, obs_model[0], label='Ls-23K (co)', color=colors_all['N_Ls23Kco'])
+            ax.plot(t_model, obs_model[1], label='Lm (co Ls-23K)', linestyle='solid', color=colors_all['N_Lm_woT'])
             #ax.plot(t_model, obs_model[2], label='Bacteriocin', linestyle='dashed', color=colors_all['T'])
 
-            ax.scatter(days, obs_x[i][0], marker='^', color=colors_all['N_lambd_1e-2_omega_0'])
-            ax.scatter(days, obs_x[i][1], marker='o', color=colors_all['N_lambd_1e-3_omega_0'])
+            ax.scatter(days, obs_x[i][0], marker='D', color=colors_all['N_Ls23Kco'])
+            ax.scatter(days, obs_x[i][1], marker='D', color=colors_all['N_Lm_woT'])
             #ax.scatter(days, obs_x[i][2], marker='X', color=colors_all['T'])
 
         else:
-            ax.plot(t_model, obs_model[0], label='Coculture: LsCTC494', color=colors_all['N_lambd_1e-2_omega_0'])
-            ax.plot(t_model, obs_model[1], label='Coculture: Lm', linestyle='solid', color=colors_all['N_lambd_1e-3_omega_0'])
+            ax.plot(t_model, obs_model[0], label='Ls-CTC494 (co)', color=colors_all['N_LsCTC494co'])
+            ax.plot(t_model, obs_model[1], label='Lm (co Ls-CTC494)', linestyle='solid', color=colors_all['N_Lm_withT'])
             #ax.plot(t_model, obs_model[2], label='Bacteriocin', linestyle='dashed', color=colors_all['T'])
 
-            ax.scatter(days, obs_x[i][0], marker='^', color=colors_all['N_lambd_1e-2_omega_0'])
-            ax.scatter(days, obs_x[i][1], marker='o', color=colors_all['N_lambd_1e-3_omega_0'])
+            ax.scatter(days, obs_x[i][0], marker='^', color=colors_all['N_LsCTC494co'])
+            ax.scatter(days, obs_x[i][1], marker='o', color=colors_all['N_Lm_withT'])
             #ax.scatter(days, obs_x[i][2], marker='X', color=colors_all['T'])
 
     ax2 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
     fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', r'Bacteriocin [AU/mL]')
     ax2.plot(t_model, obs_model[2], label='Bacteriocin', linestyle='dotted', color=colors_all['T'])
+    ax2.set_ylim(-150, 5100)
     ax2.scatter(days, obs_x[i][2], marker='X', color=colors_all['T'])
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
 
     ax.set_yscale("log")
-    ax.set_xlim(-0.1, 55)
+    ax.set_xlim(-0.1, 57)
+    ax.set_ylim(2*10**(-2), 2*10**9)
+    ax.text(*coord_text, r'\textbf{A}', transform = ax.transAxes)
     fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Bacterial Count [CFU/mL]')
-    ax.legend()
-    ax2.legend()
-    plt.savefig(path + f"Figures-pool_model-real_data-all_count.png", bbox_inches="tight")
+    
+    legend_elements = [
+        Line2D([0], [0], color=colors_all['N_Ls23K'], label='Ls-23K', marker='^', linestyle='dashed'),
+        Line2D([0], [0], color=colors_all['N_Ls23Kco'], label='Ls-23K (co. Lm)', marker='D'),
+
+        Line2D([0], [0], color=colors_all['N_LsCTC494'], label='Ls-CTC494', marker='^', linestyle='dashed'),
+        Line2D([0], [0], color=colors_all['N_LsCTC494co'], label='Ls-CTC494 (co. Lm)', marker='o'),
+
+        Line2D([0], [0], color=colors_all['N_Lm'], label='Lm', marker='^', linestyle='dashed'),
+
+        Line2D([0], [0], color=colors_all['N_Lm_woT'], label='Lm (co. 23K)', marker='D'),
+        Line2D([0], [0], color=colors_all['N_Lm_withT'], label='Lm (co. CTC494)', marker='o'),
+        #Line2D([0], [0], color=colors_all['T'], label='Bacteriocin', marker='x', linestyle='-.')
+    ]
+    legend_box = [0.57, 0.62]
+    ax.legend(handlelength=2.4, handles=legend_elements, ncol=1, fontsize=11, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
+
+    legend_elements = [
+        Line2D([0], [0], color=colors_all['T'], label='Bacteriocin', marker='X', linestyle='dotted')
+    ]
+    ax2.legend(handles=legend_elements, loc='lower center', fontsize=12, handlelength=2.4)
+    plt.savefig(path + f"Figures-pool_model_real_data_all_count.pdf", bbox_inches="tight")
     plt.close(fig)
-    '''
+  
     # Plotting lactic acid:
     # All
-    exp_indexes = [0, 1, 2, 3, 4]
-    lbls = ['Ls-CTC494 (mono)', 'Ls-23K (mono)', 'Lm-CTC1034 (mono)', 'Ls-23K + Lm-CTC1034 (co)', 'Ls-CTC494 + Lm-CTC1034 (co)']
-    mrkrs = ['^', '^', '^', 'o', 'o']
+    exp_indexes = [3, 4 ,0, 1, 2]
+    lbls = ['Ls-CTC494', 'Ls-23K', 'Lm-CTC1034', 'Lm/Ls-23K (co.)', 'Lm/Ls-CTC494 (co.)']
+    mrkrs = ['^', '^', '^', 'D', 'o']
     lst = ['dashed','dashed', 'dashed', 'solid', 'solid']
-    clrs = [colors_all['R'], colors_all['N'], colors_all['N_tempshift_10_5_15'], colors_all['N_wo_tempshift'], colors_all['N_lambd_1e-3_omega_0_5']]
+    clrs = [colors_all['N_LsCTC494'], colors_all['N_Ls23K'], colors_all['N_Lm'], colors_all['N'], colors_all['N_lambd_1e-2_omega_0']]
     fig, ax = plt.subplots()
+    ax2 = ax.twinx()
     for i in exp_indexes:
         x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
         pH_series = np.array([obs_x[i][-1], days]).T
@@ -342,22 +372,25 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
         ax.plot(t_model, obs_model[3], label=lbls[i], linewidth=3.5, color=clrs[i], linestyle=lst[i])
         ax.scatter(days, obs_x[i][3], color=clrs[i], marker=mrkrs[i])
 
+        ax.scatter(days, obs_x[i][4], color=clrs[i], marker='x')
+
     ax.set_xlim(-0.1, np.max(t_model))
     fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Lactic Acid [g/L]')
-    ax.set_ylim(-1, 7.)
+    fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', 'pH')
+    ax.set_ylim(-.5, 6.)
+    ax2.set_ylim(-.5, 6.)
     legend_elements = [
-        Line2D([0], [0], color=clrs[0], label=lbls[0], marker='^', linestyle='dashed'),
-        Line2D([0], [0], color=clrs[1], label=lbls[1], marker='^', linestyle='dashed'),
-        Line2D([0], [0], color=clrs[2], label=lbls[2], marker='o'),
-        Line2D([0], [0], color=clrs[3], label=lbls[3], marker='o'),
-        Line2D([0], [0], color=clrs[4], label=lbls[4], marker='o')
-        ]
-    plt.legend(handles=legend_elements)
-    ax.text(*coord_text, r'\textbf{C}', transform = ax.transAxes)
+        Line2D([0], [0], color=clrs[i], label=lbls[i], marker=mrkrs[i], linestyle=lst[i])
+        for i in exp_indexes]
+    ax.text(*coord_text, r'\textbf{B}', transform = ax.transAxes)
+    legend_box = [0.48, 0.65]
+    plt.legend(handles=legend_elements, ncol=1, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure, fontsize=13, handlelength=2.4)
     
-    plt.savefig(path + f"Figures-pool_model-real_data-LA.png", bbox_inches="tight")
+    plt.savefig(path + f"Figures-pool_model_real_data_LA_pH.pdf", bbox_inches="tight")
     plt.close(fig)
+    
 
+    '''
     # Plotting lactic acid:
     # For mono cultures
     exp_indexes = [1, 2, 3]
@@ -400,8 +433,8 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
     plt.close(fig)
 
 
-        # Plotting lactic acid:
-        # For cocultures
+    # Plotting lactic acid:
+    # For cocultures
     exp_indexes = [0, 2, 4]
     lbls = ['Ls-CTC494 (mono)', 'Ls-23K (mono)', 'Lm-CTC1034 (mono)', 'Ls-23K + Lm-CTC1034 (co)', 'Ls-CTC494 + Lm-CTC1034 (co)']
     mrkrs = ['^', '^', '^', 'o', 'o']
@@ -427,7 +460,6 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
     fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Lactic Acid [g/L]')
     fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', 'pH')
 
-
     ax2.set_ylim(-1, 7.)
     ax.set_ylim(-1, 7.)
     legend_elements = [
@@ -439,6 +471,7 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
     ax.text(*coord_text, r'\textbf{D}', transform = ax.transAxes)
     plt.savefig(path + f"Figures-pool_model-real_data-LA-LsCTC494.png", bbox_inches="tight")
     plt.close(fig)
+    '''
     return 1
 
 
@@ -510,7 +543,6 @@ if __name__ == "__main__":
 
     param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
     #x0_vals = param_opt[:n_cl] 
-
 
     names = ['LsCTC494', 'Ls23K', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
     n_exps = len(names)

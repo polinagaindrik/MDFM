@@ -10,13 +10,147 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 
+def plot_comparision(param_opt1, dfs1,  param_opt2, dfs2, path='', add_name=''):
+    names = ['LsCTC494', 'Ls23K', 'LmCTC1034', 'Ls23K-LmCTC1034', 'LsCTC494-LmCTC1034']
+    n_exps = len(names)
+    coord_text = (0.04, 0.88)
+    
+    exp_indexes = [3, 4 ,0, 1, 2]
+    lbls = ['Ls-CTC494', 'Ls-23K', 'Lm-CTC1034', 'Lactic Acid', 'pH']
+    mrkrs = ['o', 'o',  'o', '^', 'x']
+    lst = ['solid', 'solid', 'solid', 'dashed', '']
+    clrs = [colors_all['N_LsCTC494co'], colors_all['N_LsCTC494'], colors_all['N_Lm_withT'], colors_all['T_A'], colors_all['N_Ls23K']]
+    clr_indexes = [[0, 3, 4], [1, 3, 4], [2, 3, 4], [0, 2, 3, 4], [1, 2, 3, 4]]
+    obs_count_indexes = [[0], [0], [1], [0, 1], [0, 1]]
+    subfigures = [r'\textbf{A}', r'\textbf{B}', r'\textbf{C}', r'\textbf{D}', r'\textbf{E}']
+
+    for i in exp_indexes:
+        index = clr_indexes[i]
+        clrs_exp = [clrs[ind] for ind in index]
+        lbls_exp = [lbls[ind] for ind in index]
+        mrkrs_exp = [mrkrs[ind] for ind in index]
+        lst_exp = [lst[ind] for ind in index]
+        obs_count_ind_exp = obs_count_indexes[i]
+
+        fig, ax = plt.subplots()
+        ax2 = ax.twinx()
+
+        for l, (param_opt, dfs) in enumerate(zip([param_opt1, param_opt2], [dfs1, dfs2])):
+            alpha = 1. - l*0.3
+            if l == 0:
+                linestyle = 'solid'
+            else:
+                linestyle = 'dotted'
+            
+            exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
+            x0_vals = param_opt[:n_cl*n_exps]
+            param_ode = list(param_opt[n_cl*n_exps:])
+            param_ode_new = np.copy(param_ode)
+            param_ode_new[2*3 + 2 + 3+1] = 0.
+            days, [obs_x] = extract_observables_from_df([dfs])
+            t_model = np.linspace(days[0], days[-1]+5, 100)
+
+            x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
+            pH_series = np.array([obs_x[i][-1], days]).T
+            if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
+                x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode_new, x0, [pH_series, n_cl])
+            else:
+                x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode, x0, [pH_series, n_cl])
+            obs_model = observable(t_model, x_sol)
+
+            for k in range(len(index)-2):
+                ax.plot(t_model, obs_model[obs_count_ind_exp[k]], label='Ls-CTC494', color=clrs_exp[k], linewidth=2+l*2, linestyle=linestyle, alpha=alpha)
+                ax.scatter(days, obs_x[i][obs_count_ind_exp[k]], marker=mrkrs_exp[k], color=clrs_exp[k])
+            
+            ax2.plot(t_model, obs_model[3], linewidth=2+l*2, color=clrs_exp[k+1], linestyle=linestyle, alpha=alpha)
+            ax2.scatter(days, obs_x[i][3], color=clrs_exp[k+1], marker=mrkrs_exp[k+1])
+
+        ax.set_xlim(-0.1, np.max(t_model))
+        ax.set_yscale('log')
+        ax.set_title(names[i])
+        fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Bacterial Count [CFU/mL]')
+        fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', r'pH; Lactic Acid [g/L]')
+
+        legend_elements = [
+            Line2D([0], [0], color=clrs_exp[j], label=lbls_exp[j]+' (with pH)', marker=mrkrs_exp[j], linestyle='solid', linewidth=2)
+            for j in range (len(index)-1)] + [Line2D([0], [0], color=clrs_exp[j], label=lbls_exp[j]+' (without pH)', alpha=0.7, linestyle='dotted', linewidth=4)
+            for j in range (len(index)-1)]
+        ax.text(*coord_text, subfigures[i], transform = ax.transAxes)
+        legend_box = [0.48, 0.65]
+        plt.legend(handles=legend_elements, ncol=1, fontsize=13, handlelength=2.4, loc='lower right', framealpha=0.5)
+        plt.savefig(path + f"Figures-pool_model_real_data_comparison_exp_{names[i]}.png", bbox_inches="tight")
+        plt.close(fig)   
+
+
+def plot_cases_separately(param_opt, dfs, path='', add_name=''):
+    names = ['LsCTC494', 'Ls23K', 'LmCTC1034', 'Ls23K-LmCTC1034', 'LsCTC494-LmCTC1034']
+    n_exps = len(names)
+    coord_text = (0.04, 0.88)
+    exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
+    x0_vals = param_opt[:n_cl*n_exps]
+    param_ode = list(param_opt[n_cl*n_exps:])
+    param_ode_new = np.copy(param_ode)
+    param_ode_new[2*3 + 2 + 3+1] = 0.
+
+    days, [obs_x] = extract_observables_from_df([dfs])
+    t_model = np.linspace(days[0], days[-1]+5, 100)
+
+    exp_indexes = [3, 4 ,0, 1, 2]
+    lbls = ['Ls-CTC494', 'Ls-23K', 'Lm-CTC1034', 'Lactic Acid', 'pH']
+    mrkrs = ['o', 'o',  'o', '^', 'x']
+    lst = ['solid', 'solid', 'solid', 'dashed', '']
+    clrs = [colors_all['N_LsCTC494co'], colors_all['N_LsCTC494'], colors_all['N_Lm_withT'], colors_all['T_A'], colors_all['N_Ls23K']]
+    clr_indexes = [[0, 3, 4], [1, 3, 4], [2, 3, 4], [0, 2, 3, 4], [1, 2, 3, 4]]
+    obs_count_indexes = [[0], [0], [1], [0, 1], [0, 1]]
+    subfigures = [r'\textbf{A}', r'\textbf{B}', r'\textbf{C}', r'\textbf{D}', r'\textbf{E}']
+
+    for i in exp_indexes:
+        index = clr_indexes[i]
+        clrs_exp = [clrs[ind] for ind in index]
+        lbls_exp = [lbls[ind] for ind in index]
+        mrkrs_exp = [mrkrs[ind] for ind in index]
+        lst_exp = [lst[ind] for ind in index]
+        obs_count_ind_exp = obs_count_indexes[i]
+
+        fig, ax = plt.subplots()
+        ax2 = ax.twinx()
+        x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
+        pH_series = np.array([obs_x[i][-1], days]).T
+        if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
+            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode_new, x0, [pH_series, n_cl])
+        else:
+            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode, x0, [pH_series, n_cl])
+        obs_model = observable(t_model, x_sol)
+
+        for k in range(len(index)-2):
+            ax.plot(t_model, obs_model[obs_count_ind_exp[k]], label='Ls-CTC494', color=clrs_exp[k], linewidth=3, linestyle=lst_exp[k])
+            ax.scatter(days, obs_x[i][obs_count_ind_exp[k]], marker=mrkrs_exp[k], color=clrs_exp[k])
+        
+        ax2.plot(t_model, obs_model[3], linewidth=3, color=clrs_exp[k+1], linestyle=lst_exp[k+1])
+        ax2.scatter(days, obs_x[i][3], color=clrs_exp[k+1], marker=mrkrs_exp[k+1])
+        ax2.scatter(days, obs_x[i][4], color=clrs_exp[k+2], marker=mrkrs_exp[k+2])
+
+        ax.set_xlim(-0.1, np.max(t_model))
+        ax.set_yscale('log')
+        fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Bacterial Count [CFU/mL]')
+        fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', r'pH; Lactic Acid [g/L]')
+        
+        legend_elements = [
+            Line2D([0], [0], color=clrs_exp[j], label=lbls_exp[j], marker=mrkrs_exp[j], linestyle=lst_exp[j])
+            for j in range (len(index))]
+        ax.text(*coord_text, subfigures[i], transform = ax.transAxes)
+        legend_box = [0.48, 0.65]
+        plt.legend(handles=legend_elements, ncol=1, fontsize=13, handlelength=2.4)
+        
+        plt.savefig(path + f"Figures-pool_model_real_data_exp_{names[i]}.png", bbox_inches="tight")
+        plt.close(fig)
+
+
 def plot_paper_figures(param_opt, dfs, path='', add_name=''):
     names = ['LsCTC494', 'Ls23K', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
     n_exps = len(names)
     coord_text = (0.04, 0.88)
-
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
-
     x0_vals = param_opt[:n_cl*n_exps]
     param_ode = list(param_opt[n_cl*n_exps:])
     param_ode_new = np.copy(param_ode)
@@ -218,91 +352,6 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
     
     plt.savefig(path + f"Figures-pool_model_real_data_LA_pH.pdf", bbox_inches="tight")
     plt.close(fig)
-    
-
-    '''
-    # Plotting lactic acid:
-    # For mono cultures
-    exp_indexes = [1, 2, 3]
-    lbls = ['Ls-CTC494 (mono)', 'Ls-23K (mono)', 'Lm-CTC1034 (mono)', 'Ls-23K + Lm-CTC1034 (co)', 'Ls-CTC494 + Lm-CTC1034 (co)']
-    mrkrs = ['^', '^', '^', 'o', 'o']
-    lst = ['dashed','dashed', 'dashed', 'solid', 'solid']
-    clrs = [colors_all['R'], colors_all['N'], colors_all['N_tempshift_10_5_15'], colors_all['N_wo_tempshift'], colors_all['N_lambd_1e-3_omega_0_5']]
-    fig, ax = plt.subplots()
-    ax2 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
-    for i in exp_indexes:
-        x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
-        pH_series = np.array([obs_x[i][-1], days]).T
-        if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode_new, x0, [pH_series, n_cl])
-        else:
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode, x0, [pH_series, n_cl])
-        obs_model = observable(t_model, x_sol)
-
-        ax.plot(t_model, obs_model[3], label=lbls[i], linewidth=3.5, color=clrs[i], linestyle=lst[i])
-        ax.scatter(days, obs_x[i][3], color=clrs[i], marker=mrkrs[i])
-
-        #ax2.plot(t_model, obs_model[4], label=lbls[i], linewidth=3.5, color=clrs[i], linestyle=lst[i])
-        ax2.scatter(days, obs_x[i][4], color=clrs[i], marker='x')
-    ax.set_xlim(-0.1, np.max(t_model))
-    fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Lactic Acid [g/L]')
-    fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', 'pH')
-
-
-    ax2.set_ylim(-1, 7.)
-    ax.set_ylim(-1, 7.)
-    legend_elements = [
-        Line2D([0], [0], color=clrs[i], label=lbls[i], marker=mrkrs[i], linestyle=lst[i])
-        for i in exp_indexes]
-    #legend_box = [0.48, 0.75]
-    #plt.legend(handles=legend_elements, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
-    plt.legend(handles=legend_elements, loc='center left')
-    ax.text(*coord_text, r'\textbf{C}', transform = ax.transAxes)
-    
-    plt.savefig(path + f"Figures-pool_model-real_data-LA-Ls23.png", bbox_inches="tight")
-    plt.close(fig)
-
-
-    # Plotting lactic acid:
-    # For cocultures
-    exp_indexes = [0, 2, 4]
-    lbls = ['Ls-CTC494 (mono)', 'Ls-23K (mono)', 'Lm-CTC1034 (mono)', 'Ls-23K + Lm-CTC1034 (co)', 'Ls-CTC494 + Lm-CTC1034 (co)']
-    mrkrs = ['^', '^', '^', 'o', 'o']
-    lst = ['dashed','dashed', 'dashed', 'solid', 'solid']
-    clrs = [colors_all['R'], colors_all['N'], colors_all['N_tempshift_10_5_15'], colors_all['N_wo_tempshift'], colors_all['N_lambd_1e-3_omega_0_5']]
-    fig, ax = plt.subplots()
-    ax2 = ax.twinx()  # instantiate a second Axes that shares the same x-axis
-    for i in exp_indexes:
-        x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
-        pH_series = np.array([obs_x[i][-1], days]).T
-        if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode_new, x0, [pH_series, n_cl])
-        else:
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode, x0, [pH_series, n_cl])
-        obs_model = observable(t_model, x_sol)
-
-        ax.plot(t_model, obs_model[3], label=lbls[i], linewidth=3.5, color=clrs[i], linestyle=lst[i])
-        ax.scatter(days, obs_x[i][3], color=clrs[i], marker=mrkrs[i])
-
-        #ax2.plot(t_model, obs_model[4], label=lbls[i], linewidth=3.5, color=clrs[i], linestyle=lst[i])
-        ax2.scatter(days, obs_x[i][4], color=clrs[i], marker='x')
-    ax.set_xlim(-0.1, np.max(t_model))
-    fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Lactic Acid [g/L]')
-    fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', 'pH')
-
-    ax2.set_ylim(-1, 7.)
-    ax.set_ylim(-1, 7.)
-    legend_elements = [
-        Line2D([0], [0], color=clrs[i], label=lbls[i], marker=mrkrs[i], linestyle=lst[i])
-        for i in exp_indexes]
-    #legend_box = [0.43, 0.7]
-    #plt.legend(handles=legend_elements, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
-    plt.legend(handles=legend_elements, loc='center left')
-    ax.text(*coord_text, r'\textbf{D}', transform = ax.transAxes)
-    plt.savefig(path + f"Figures-pool_model-real_data-LA-LsCTC494.png", bbox_inches="tight")
-    plt.close(fig)
-    '''
-    return 1
 
 
 def cost_res(param, calibr_setup):
@@ -358,6 +407,17 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
     ]
     return np.array(ll_x0)
 
+def get_param_dfs(path, path2):
+    optim_file2 = "optimization_history1.csv"
+    df_optim2 = pd.read_csv(path+optim_file2)
+    param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
+    names = ['LsCTC494', 'Ls23K', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
+    df_names = [f'dataframe_poolpaper_{name}.pkl' for name in names]
+    data = [pd.read_pickle(path2+df_name) for df_name in df_names]
+    dfs = pd.read_pickle(path2+f'dataframe_poolpaper_all.pkl')
+    return param_opt, dfs, df_optim2
+
+
 if __name__ == "__main__":
     n_cl = 4
     relnoise = 0.
@@ -368,26 +428,29 @@ if __name__ == "__main__":
     #path2 = 'pool_paper_casestudy/out/all_x_LA_BAC_with_death_wo_pH_latest/'
     add_name = ''
 
-    optim_file2 = "optimization_history1.csv"
-    df_optim2 = pd.read_csv(path+optim_file2)
+    param_opt, dfs, df_optim2 = get_param_dfs(path, path2)
     fm.plotting.plot_cost_function(df_optim2, path=path2)
-
-
-    param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
-    #x0_vals = param_opt[:n_cl] 
 
     names = ['LsCTC494', 'Ls23K', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
     n_exps = len(names)
     temps = [2.0 for _ in range(len(names))]
-
-    df_names = [f'dataframe_poolpaper_{name}.pkl' for name in names]
-    #df_name = f'dataframe_poolpaper.pkl'
-    data = [pd.read_pickle(path2+df_name) for df_name in df_names]
-    dfs = pd.read_pickle(path2+f'dataframe_poolpaper_all.pkl')
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
 
+    #plot_paper_figures(param_opt, dfs, path=path2, add_name=add_name)
+    plot_cases_separately(param_opt, dfs, path=path2, add_name=add_name)
 
-    plot_paper_figures(param_opt, dfs, path=path2, add_name=add_name)
+    # With pH term
+    path = 'pool_paper_casestudy/out/all_x_LA_BAC_with_death_wo_pH_latest/'
+    path2 = 'pool_paper_casestudy/out/all_x_LA_BAC_with_death_wo_pH_latest/'
+    param_opt1, dfs1, _ = get_param_dfs(path, path2)
+
+    # Without pH term
+    path = 'pool_paper_casestudy/out/all_wo_pH_influence/'
+    path2 = 'pool_paper_casestudy/out/all_wo_pH_influence/'
+    param_opt2, dfs2, _ = get_param_dfs(path, path2)
+
+    plot_comparision(param_opt1, dfs1,  param_opt2, dfs2, path='pool_paper_casestudy/out/', add_name='_pH_influence')
+    exit()
 
 
     x0_vals = param_opt[:n_cl*n_exps]

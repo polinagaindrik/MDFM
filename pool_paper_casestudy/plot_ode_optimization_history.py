@@ -130,7 +130,7 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
         ax2.scatter(days, obs_x[i][3], color=clrs_exp[k+1], marker=mrkrs_exp[k+1])
         ax2.scatter(days, obs_x[i][4], color=clrs_exp[k+2], marker=mrkrs_exp[k+2])
 
-        ax.set_xlim(-0.1, np.max(t_model))
+        ax.set_xlim(-0.05, np.max(t_model))
         ax.set_yscale('log')
         fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Bacterial Count [CFU/mL]')
         fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', r'pH; Lactic Acid [g/L]')
@@ -143,6 +143,18 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
         plt.legend(handles=legend_elements, ncol=1, fontsize=13, handlelength=2.4)
         
         plt.savefig(path + f"Figures-pool_model_real_data_exp_{names[i]}.png", bbox_inches="tight")
+        plt.close(fig)
+
+        fig, ax = plt.subplots()
+        ax.plot(t_model, obs_model[2], label='Bacteriocin', linestyle='-.', color=colors_all['T'])
+        ax.scatter(days, obs_x[i][2], marker='X', color=colors_all['T'])
+        fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Bacteriocin [AU/mL]')
+        ax.set_xlim(-0.05, np.max(t_model))
+        legend_elements = [Line2D([0], [0], color=colors_all['T'], label='Bacteriocin', marker='X', linestyle='-.')]
+        legend_box = [0.48, 0.75]
+        plt.legend(handles=legend_elements, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
+        ax.text(*coord_text, r'\textbf{F}', transform = ax.transAxes)
+        plt.savefig(path + f"Figures-pool_model_real_data_BAC_{names[i]}.png", bbox_inches="tight")
         plt.close(fig)
 
 
@@ -422,10 +434,10 @@ if __name__ == "__main__":
     n_cl = 4
     relnoise = 0.
 
-    path = 'out/'
-    path2 = 'pool_paper_casestudy/out/test/'
-    #path = 'pool_paper_casestudy/out/all_x_LA_BAC_with_death_wo_pH_latest/'
-    #path2 = 'pool_paper_casestudy/out/all_x_LA_BAC_with_death_wo_pH_latest/'
+    #path = 'out/'
+    #path2 = 'pool_paper_casestudy/out/test/'
+    path = 'pool_paper_casestudy/out/all_wo_pH_influence/'
+    path2 = 'pool_paper_casestudy/out/all_wo_pH_influence/'
     add_name = ''
 
     param_opt, dfs, df_optim2 = get_param_dfs(path, path2)

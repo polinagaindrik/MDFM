@@ -10,42 +10,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-def ode_model_coculture2(t, x, param, x0, ode_args):
-    #(x_ls23K0, x_lsCTC4940, x_lm_sen0, x_lm_res0, R0, T0, LA0, pH0) = x0
-    (x_ls23K, x_lsCTC494, x_lm_sen, x_lm_res, R, T, LA, _) = x
-
-    (mu_ls23K_opt, mu_lsCTC494_opt, mu_lm_opt,
-    pH_ls23K_min, pH_ls23K_opt, pH_lsCTC494_min, pH_lsCTC494_opt, pH_lm_min, pH_lm_opt,
-    omegaT_lm, k_T_inhib, n,
-    N_ls23K_texp, N_lsCTC494_texp, N_lm_texp,
-    kappa_T_0,
-    kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp,
-    ) = param
-
-    (pH_cond, n_cl,) = ode_args
-    pH = pH_func(t, pH_cond)
-
-    mu_ls23K = mu_ls23K_opt * (pH - pH_ls23K_min) / (pH_ls23K_opt - pH_ls23K_min)
-    mu_lsCTC494 = mu_lsCTC494_opt * (pH - pH_lsCTC494_min) / (pH_lsCTC494_opt - pH_lsCTC494_min)
-    mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)
-
-    N_ls23K_t, N_lsCTC494_t, N_lm_t = 10**np.array([N_ls23K_texp, N_lsCTC494_texp, N_lm_texp])
-    kappa_T = 10**(-5) * kappa_T_0
-
-    kappa_LA_ls23K, kappa_LA_ls23K_2, kappa_LA_lsCTC494, kappa_LA_lsCTC494_2, kappa_LA_lm, kappa_LA_lm_2 = 10**(-9) * np.array([kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp])
-    toxin_death = omegaT_lm * x_lm_sen * T**n / (k_T_inhib**n + T**n)
-
-    return [
-        (mu_ls23K * R) * x_ls23K,
-        (mu_lsCTC494 * R) * x_lsCTC494 * (N_lsCTC494_t/N_ls23K_t),
-        (mu_lm * R) * x_lm_sen * (N_lm_t/N_ls23K_t) - toxin_death,
-        (mu_lm * R) * x_lm_res * (N_lm_t/N_ls23K_t),
-        -(mu_ls23K / N_ls23K_t)*R*x_ls23K - (mu_lsCTC494 / N_lsCTC494_t)*R*x_lsCTC494 - (mu_lm / N_lm_t)*R*x_lm_sen - (mu_lm / N_lm_t)*R*x_lm_res,
-        kappa_T * x_lsCTC494 * R,  #  ??
-        (kappa_LA_ls23K + kappa_LA_ls23K_2*R)*x_ls23K + (kappa_LA_lsCTC494 + kappa_LA_lsCTC494_2*R)*x_lsCTC494 + (kappa_LA_lm + kappa_LA_lm_2*R)*(x_lm_sen+x_lm_res),
-        0.
-    ]
-
 def data_calibration_poolpaper_sequen(dfs, path=""):
     n_cl = 4
     dicts_param = []
@@ -106,7 +70,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
             )
         elif i == 2:
             param_ode_bnds_mono = tuple(
-                [(.2, .7), (0., 0.), (0., 0.)] + # mu_opt
+                [(0., 0.), (0., 0.), (.2, .7)] + # mu_opt
                 [(3., 3.), (7., 7.), (3., 3.), (7., 7.), (3.5, 4.5), (5., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
                 [(1., 1.), (1., 1.), (8.0, 9.5)] +   # N_max_exp
@@ -212,7 +176,8 @@ def get_extract_params_from_mono_exp(param_ode, i):
     N_t = param_ode[3*n_cl_param +3 + i]
     kappas_LA = param_ode[4*n_cl_param +3+1+ 2*i: 4*n_cl_param +3+1 + (2*i+2)]
     dict_exp = {'mu_opt': mu_opt, 'pH_min': pH_params[0], 'pH_opt': pH_params[1], 'N_t': N_t, 'kappas_LA': kappas_LA}
-    #print(dict_exp)    
+    print(param_ode)
+    print(i, dict_exp)    
     return dict_exp
 
 
@@ -250,7 +215,7 @@ if __name__ == "__main__":
         #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode_new[2*3 + 2 + 3+1] = 0.
+            param_ode_new[3*3+3+3] = 0.
             plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=ode_model_coculture2, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
         else:
             plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], model=ode_model_coculture2, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')

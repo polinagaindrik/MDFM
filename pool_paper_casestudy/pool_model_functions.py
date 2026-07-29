@@ -236,11 +236,8 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
 
     ###############################################################3
 def ode_model_coculture(t, x, param, x0, ode_args):
-    (pH_cond, n_cl,) = ode_args
-    pH = pH_func(t, pH_cond)
-
     (x_ls23K0, x_lsCTC4940, x_lm_sen0, x_lm_res0, R0, T0, LA0, pH0) = x0
-    (x_ls23K, x_lsCTC494, x_lm_sen, x_lm_res, R, T, LA, pH) = x
+    (x_ls23K, x_lsCTC494, x_lm_sen, x_lm_res, R, T, LA, _) = x
 
     (mu_ls_opt, mu_lm_opt,
     pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt,
@@ -250,6 +247,9 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     kappa_T_0,
     kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp,
     q_acid) = param
+
+    (pH_cond, n_cl,) = ode_args
+    pH = pH_func(t, pH_cond)
 
     mu_ls = mu_ls_opt * (pH - pH_ls_min) / (pH_ls_opt - pH_ls_min)
     mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)

@@ -286,19 +286,22 @@ def ode_model_coculture2(t, x, param, x0, ode_args):
     (mu_ls23K_opt, mu_lsCTC494_opt, mu_lm_opt,
     pH_ls23K_min, pH_ls23K_opt, pH_lsCTC494_min, pH_lsCTC494_opt, pH_lm_min, pH_lm_opt,
     omegaT_lm, k_T_inhib, n,
-    N_ls23K_texp, N_lsCTC494_texp, N_lm_texp,
+    N_ls23K_texp, r_lsCTC494, r_lm,
     kappa_T_0,
     kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp,
     ) = param
 
     (pH_cond, n_cl,) = ode_args
-    pH = pH_func(t, pH_cond)
+    #pH = pH_func(t, pH_cond)
+
+    #N_lm_texp = 8.0
+    #mu_lm_opt = 0.2
 
     mu_ls23K = mu_ls23K_opt * (pH - pH_ls23K_min) / (pH_ls23K_opt - pH_ls23K_min)
     mu_lsCTC494 = mu_lsCTC494_opt * (pH - pH_lsCTC494_min) / (pH_lsCTC494_opt - pH_lsCTC494_min)
     mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)
 
-    N_ls23K_t, N_lsCTC494_t, N_lm_t = 10**np.array([N_ls23K_texp, N_lsCTC494_texp, N_lm_texp])
+    N_ls23K_t = 10**N_ls23K_texp
     kappa_T = 10**(-5) * kappa_T_0
 
     kappa_LA_ls23K, kappa_LA_ls23K_2, kappa_LA_lsCTC494, kappa_LA_lsCTC494_2, kappa_LA_lm, kappa_LA_lm_2 = 10**(-9) * np.array([kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp])
@@ -306,10 +309,12 @@ def ode_model_coculture2(t, x, param, x0, ode_args):
 
     return [
         (mu_ls23K * R) * x_ls23K,
-        (mu_lsCTC494 * R) * x_lsCTC494 * (N_ls23K_t /N_lsCTC494_t),
-        (mu_lm * R) * x_lm_sen * (N_ls23K_t/N_lm_t) - toxin_death,
-        (mu_lm * R) * x_lm_res * (N_ls23K_t/N_lm_t),
-        -(mu_ls23K / N_ls23K_t)*R*x_ls23K - (mu_lsCTC494 / N_lsCTC494_t)*R*x_lsCTC494 - (mu_lm / N_lm_t)*R*x_lm_sen - (mu_lm / N_lm_t)*R*x_lm_res,
+        (mu_lsCTC494 * R) * x_lsCTC494,# * (N_ls23K_t /N_lsCTC494_t),
+        (mu_lm * R) * x_lm_sen - toxin_death, #* (N_ls23K_t/N_lm_t)
+        (mu_lm * R) * x_lm_res, # * (N_ls23K_t/N_lm_t),
+        #-(mu_ls23K / N_ls23K_t)*R*x_ls23K - (mu_lsCTC494 / N_lsCTC494_t)*R*x_lsCTC494 - (mu_lm / N_lm_t)*R*x_lm_sen - (mu_lm / N_lm_t)*R*x_lm_res,
+        -(1/N_ls23K_t)*(mu_ls23K*R*x_ls23K + r_lsCTC494*mu_lsCTC494* (R**r_lsCTC494)*x_lsCTC494 + r_lm*mu_lm*(R**r_lm)*(x_lm_sen -
+        x_lm_res)),
         kappa_T * x_lsCTC494 * R,  #  ??
         (kappa_LA_ls23K + kappa_LA_ls23K_2*R)*x_ls23K + (kappa_LA_lsCTC494 + kappa_LA_lsCTC494_2*R)*x_lsCTC494 + (kappa_LA_lm + kappa_LA_lm_2*R)*(x_lm_sen+x_lm_res),
         0.

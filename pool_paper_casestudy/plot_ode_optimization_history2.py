@@ -143,7 +143,7 @@ def get_param_dfs(path, path2):
     optim_file2 = "optimization_history1.csv"
     df_optim2 = pd.read_csv(path+optim_file2)
     param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
-    names = ['LsCTC494', 'Ls23K', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
+    names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
     df_names = [f'dataframe_poolpaper_{name}.pkl' for name in names]
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
     dfs = pd.read_pickle(path2+f'dataframe_poolpaper_all.pkl')

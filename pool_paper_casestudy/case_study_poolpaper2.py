@@ -62,7 +62,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
                 [(0., 0.), (.2, .7), (0., 0.)] + # mu_opt
                 [(3., 3.), (7., 7.), (3.5, 4.5), (5., 8.), (3., 3.), (7., 7.),] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
-                [(dicts_param[0]['N_t'], dicts_param[0]['N_t']), (8.0, 9.5), (1., 1.)] + # N_max_exp
+                [(dicts_param[0]['N_t'], dicts_param[0]['N_t']), (0.1, 10.), (0., 0.)] + # N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(0., 0.)] + [(0., 0.)] + # kappa_LA ls23K
                 [(.1, 10)] + [(1., 100.)] + # kappa_LA lsCTC494
@@ -74,7 +74,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
                 [(3., 3.), (7., 7.), (3., 3.), (7., 7.), (3.5, 5.5), (6., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
                 [(dicts_param[0]['N_t'], dicts_param[0]['N_t']),
-                 (dicts_param[1]['N_t'], dicts_param[1]['N_t']), (8.0, 10.)] +   # N_max_exp
+                 (dicts_param[1]['N_t'], dicts_param[1]['N_t']), (0.1, 10.)] +   # N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(0., 0.)] + [(0., 0.)] +   # kappa_LA ls23K
                 [(0., 0.)] + [(0., 0.)] +   # kappa_LA lsCTC494

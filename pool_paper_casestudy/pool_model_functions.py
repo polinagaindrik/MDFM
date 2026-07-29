@@ -4,7 +4,6 @@ import sys
 sys.path.append(os.getcwd())
 import fusion_model as fm
 
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -28,8 +27,7 @@ colors_all = {
         'N_Ls23Kco': '#386641',
         'N_Lm_withT':'#D06062',
         'N_LsCTC494': '#4E89B1',
-        'N_LsCTC494co': '#00356B',
-        
+        'N_LsCTC494co': '#00356B',  
     }
 
 figsize_default = (6.5, 4.0)
@@ -309,7 +307,7 @@ def pH_LA_dependence(days, LA_data, pH_data, add_name='', path=''):
     return pH
 
 ############## Plotting ######################333
-def plot_all_curves(param_ode, x10, data=None, path='', add_name=''):
+def plot_all_curves(param_ode, x10, model=ode_model_coculture, obs=observable, data=None, path='', add_name=''):
     clrs = [colors_all['N_A'], colors_all['N_B'], colors_all['R'], colors_all['T'], colors_all['N']]
     n_cl = 3
     if data is not None:
@@ -317,8 +315,8 @@ def plot_all_curves(param_ode, x10, data=None, path='', add_name=''):
     t = np.linspace(days[0], days[-1], 100)
     x0 = set_initial_vals(x10, None, n_cl, pH0=obs_x[0][-1][0])
     pH_series = np.array([obs_x[0][-1], days]).T
-    x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t, param_ode, x0, [pH_series, n_cl])
-    obs_model = observable(days, x_sol)
+    x_sol = fm.mdl.model_ODE_solution(model, t, param_ode, x0, [pH_series, n_cl])
+    obs_model = obs(days, x_sol)
     lbls = ["ls", "lm", "BAC", "LA", "pH"]
     fig, ax = plt.subplots()
     for i in range(2):

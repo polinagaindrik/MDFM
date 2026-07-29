@@ -264,8 +264,6 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     kappa_LA_ls23K, kappa_LA_ls23K_2, kappa_LA_lsCTC494, kappa_LA_lsCTC494_2, kappa_LA_lm = 10**np.array([kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp])
 
     k_T_inhib = k_T_inhib0
-
-    #n = 2 
     toxin_death = omegaT_lm * x_lm_sen * T**n / (k_T_inhib**n + T**n) #omegaT_lm * x_lm_sen * T #
 
     return [
@@ -283,7 +281,7 @@ def ode_model_coculture(t, x, param, x0, ode_args):
 
 def ode_model_coculture2(t, x, param, x0, ode_args):
     #(x_ls23K0, x_lsCTC4940, x_lm_sen0, x_lm_res0, R0, T0, LA0, pH0) = x0
-    (x_ls23K, x_lsCTC494, x_lm_sen, x_lm_res, R, T, LA, _) = x
+    (x_ls23K, x_lsCTC494, x_lm_sen, x_lm_res, R, T, LA, pH) = x
 
     (mu_ls23K_opt, mu_lsCTC494_opt, mu_lm_opt,
     pH_ls23K_min, pH_ls23K_opt, pH_lsCTC494_min, pH_lsCTC494_opt, pH_lm_min, pH_lm_opt,
@@ -308,9 +306,9 @@ def ode_model_coculture2(t, x, param, x0, ode_args):
 
     return [
         (mu_ls23K * R) * x_ls23K,
-        (mu_lsCTC494 * R) * x_lsCTC494 * (N_lsCTC494_t/N_ls23K_t),
-        (mu_lm * R) * x_lm_sen * (N_lm_t/N_ls23K_t) - toxin_death,
-        (mu_lm * R) * x_lm_res * (N_lm_t/N_ls23K_t),
+        (mu_lsCTC494 * R) * x_lsCTC494 * (N_ls23K_t /N_lsCTC494_t),
+        (mu_lm * R) * x_lm_sen * (N_ls23K_t/N_lm_t) - toxin_death,
+        (mu_lm * R) * x_lm_res * (N_ls23K_t/N_lm_t),
         -(mu_ls23K / N_ls23K_t)*R*x_ls23K - (mu_lsCTC494 / N_lsCTC494_t)*R*x_lsCTC494 - (mu_lm / N_lm_t)*R*x_lm_sen - (mu_lm / N_lm_t)*R*x_lm_res,
         kappa_T * x_lsCTC494 * R,  #  ??
         (kappa_LA_ls23K + kappa_LA_ls23K_2*R)*x_ls23K + (kappa_LA_lsCTC494 + kappa_LA_lsCTC494_2*R)*x_lsCTC494 + (kappa_LA_lm + kappa_LA_lm_2*R)*(x_lm_sen+x_lm_res),

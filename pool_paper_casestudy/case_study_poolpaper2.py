@@ -51,7 +51,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
                 [(.2, .7), (0., 0.), (0., 0.)] + # mu_opt
                 [(3.5, 4.5), (5., 8.), (3., 3.), (7., 7.), (3., 3.), (7., 7.),] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
-                [(8.0, 9.5), (1., 1.), (1., 1.)] +          # N_max_exp
+                [(8.0, 9.5), (0., 0.), (0., 0.)] +          # N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(.1, 10)] + [(1., 100.)] + # kappa_LA ls23K
                 [(0., 0.)] + [(0., 0.)] + # kappa_LA lsCTC494
@@ -62,7 +62,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
                 [(0., 0.), (.2, .7), (0., 0.)] + # mu_opt
                 [(3., 3.), (7., 7.), (3.5, 4.5), (5., 8.), (3., 3.), (7., 7.),] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
-                [(1., 1.), (8.0, 9.5), (1., 1.)] +          # N_max_exp
+                [(dicts_param[0]['N_t'], dicts_param[0]['N_t']), (8.0, 9.5), (1., 1.)] + # N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(0., 0.)] + [(0., 0.)] + # kappa_LA ls23K
                 [(.1, 10)] + [(1., 100.)] + # kappa_LA lsCTC494
@@ -71,9 +71,10 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
         elif i == 2:
             param_ode_bnds_mono = tuple(
                 [(0., 0.), (0., 0.), (.2, .7)] + # mu_opt
-                [(3., 3.), (7., 7.), (3., 3.), (7., 7.), (3.5, 4.5), (5., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
+                [(3., 3.), (7., 7.), (3., 3.), (7., 7.), (3.5, 5.5), (6., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
-                [(1., 1.), (1., 1.), (8.0, 9.5)] +   # N_max_exp
+                [(dicts_param[0]['N_t'], dicts_param[0]['N_t']),
+                 (dicts_param[1]['N_t'], dicts_param[1]['N_t']), (8.0, 10.)] +   # N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(0., 0.)] + [(0., 0.)] +   # kappa_LA ls23K
                 [(0., 0.)] + [(0., 0.)] +   # kappa_LA lsCTC494
@@ -81,8 +82,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
             )
         calibr_setup = calibr_presetup
         calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds_mono
-        print(len(x0_bnds_all), len(param_ode_bnds_mono))
-        print("Start optimization...")
+        print(f"Start optimization {i}")
         param_opt = calculate_model_params(cost, calibr_setup)[0]
         x0_vals.append(param_opt[:n_cl])
         dicts_param.append(get_extract_params_from_mono_exp(param_opt[n_cl:], i))
@@ -118,12 +118,15 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
         [(0., 0.)] + # kappa_T
         [(kappa, kappa)  for j in range (3) for kappa in dicts_param[j]['kappas_LA']]
         )
+    print('Parameter bounds: ')
+    for b in param_ode_bnds:
+        print(b)
 
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds
     print(len(x0_bnds_all), len(param_ode_bnds))
 
-    print("Start optimization...")
+    print("Start optimization Ls23K-Lm")
     param_opt = calculate_model_params(cost, calibr_setup)[0]
     x0_vals.append(param_opt[:n_cl])
     
@@ -163,7 +166,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds
     print(len(x0_bnds_all), len(param_ode_bnds))
-    print("Start optimization...")
+    print("Start optimization  LsCTC494-Lm")
     param_opt = calculate_model_params(cost, calibr_setup)[0]
     param_final = np.concatenate((np.array(x0_vals).flatten(), param_opt))
     fm.output.json_dump({"param_ode": param_final.astype(list)}, "Result_calibration.json", dir=path)

@@ -196,10 +196,6 @@ if __name__ == "__main__":
     path = "pool_paper_casestudy/out/"
     workers = -1
     n_cl = 4
-    n_states = 1
-    # relnoise = 0.1
-    add_name = ""
-    ntr = 1
     path_new = path + "test2/"
     
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']

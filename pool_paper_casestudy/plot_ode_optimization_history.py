@@ -90,7 +90,7 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
     x0_vals = param_opt[:n_cl*n_exps]
     param_ode = list(param_opt[n_cl*n_exps:])
     param_ode_new = np.copy(param_ode)
-    param_ode_new[2*3 + 2 + 3+1] = 0.
+    param_ode_new[2*4 + 2 + 3+1] = 0.
 
     days, [obs_x] = extract_observables_from_df([dfs])
     t_model = np.linspace(days[0], days[-1]+5, 100)
@@ -434,10 +434,10 @@ if __name__ == "__main__":
     n_cl = 4
     relnoise = 0.
 
-    #path = 'out/'
-    #path2 = 'pool_paper_casestudy/out/test/'
-    path = 'pool_paper_casestudy/out/all_wo_pH_influence/'
-    path2 = 'pool_paper_casestudy/out/all_wo_pH_influence/'
+    path = 'out/'
+    path2 = 'pool_paper_casestudy/out/test/'
+    #path = 'pool_paper_casestudy/out/all_wo_pH_influence/'
+    #path2 = 'pool_paper_casestudy/out/all_wo_pH_influence/'
     add_name = ''
 
     param_opt, dfs, df_optim2 = get_param_dfs(path, path2)
@@ -450,6 +450,7 @@ if __name__ == "__main__":
 
     #plot_paper_figures(param_opt, dfs, path=path2, add_name=add_name)
     plot_cases_separately(param_opt, dfs, path=path2, add_name=add_name)
+    exit()
 
     # With pH term
     path = 'pool_paper_casestudy/out/all_x_LA_BAC_with_death_wo_pH_latest/'
@@ -473,7 +474,7 @@ if __name__ == "__main__":
         #if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V05':
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode_new[2*3 + 2 + 3+1] = 0.
+            param_ode_new[2*4 + 2 + 3+1] = 0.
             plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
         else:
             plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')

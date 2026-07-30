@@ -200,9 +200,9 @@ def cost(param, calibr_setup, jac_spasity):
         if exp != 'LsCTC494-Lm' and exp != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
             if calibr_setup['model'] == ode_model_coculture:
-                param_ode_new[2*3 + 2 + 3+1] = 0.
+                param_ode_new[2*4 + 2 + 3+1] = 0.
             elif calibr_setup['model'] == ode_model_coculture2:
-                param_ode_new[3*3+3+3] = 0.
+                param_ode_new[4*3+3+3] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
@@ -283,7 +283,9 @@ def ode_model_coculture2(t, x, param, x0, ode_args):
     (x_ls23K, x_lsCTC494, x_lm_sen, x_lm_res, R, T, LA, pH) = x
 
     (mu_ls23K_opt, mu_lsCTC494_opt, mu_lm_opt,
-    pH_ls23K_min, pH_ls23K_opt, pH_lsCTC494_min, pH_lsCTC494_opt, pH_lm_min, pH_lm_opt,
+    pH_ls23K_min, pH_ls23K_opt, pH_ls23K_max,
+    pH_lsCTC494_min, pH_lsCTC494_opt, pH_lsCTC494_max,
+    pH_lm_min, pH_lm_opt, pH_lm_max,
     omegaT_lm, k_T_inhib, n,
     r_23K,  r_lsCTC494, N_lm_texp,
     kappa_T_0,
@@ -291,11 +293,11 @@ def ode_model_coculture2(t, x, param, x0, ode_args):
     ) = param
 
     (pH_cond, n_cl,) = ode_args
-    #pH = pH_func(t, pH_cond)
+    pH = pH_func(t, pH_cond)
 
-    mu_ls23K = mu_ls23K_opt * (pH - pH_ls23K_min) / (pH_ls23K_opt - pH_ls23K_min)
-    mu_lsCTC494 = mu_lsCTC494_opt * (pH - pH_lsCTC494_min) / (pH_lsCTC494_opt - pH_lsCTC494_min)
-    mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)
+    mu_ls23K = mu_ls23K_opt * (pH - pH_ls23K_min) * (pH_ls23K_max - pH) / ((pH_ls23K_opt - pH_ls23K_min) * (pH_ls23K_max - pH_ls23K_min))
+    mu_lsCTC494 = mu_lsCTC494_opt * (pH - pH_lsCTC494_min) * (pH_lsCTC494_max - pH) / ((pH_lsCTC494_opt - pH_lsCTC494_min) * (pH_lsCTC494_max - pH_lsCTC494_min))
+    mu_lm = mu_lm_opt * (pH - pH_lm_min) * (pH_lm_max - pH) / ((pH_lm_opt - pH_lm_min) * (pH_lm_max - pH_lm_min))
 
     N_lm_t = 10**N_lm_texp
     kappa_T = 10**(-5) * kappa_T_0
@@ -395,3 +397,14 @@ def set_labels(fig, ax, xlabel, y_label):
     ax.tick_params(labelsize=13)
     ax.set_ylabel(y_label, fontsize=15)
     return fig, ax
+
+
+def get_param_dfs(path, path2):
+    optim_file2 = "optimization_history1.csv"
+    df_optim2 = pd.read_csv(path+optim_file2)
+    param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
+    names = ['LsCTC494', 'Ls23K', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
+    df_names = [f'dataframe_poolpaper_{name}.pkl' for name in names]
+    data = [pd.read_pickle(path2+df_name) for df_name in df_names]
+    dfs = pd.read_pickle(path2+f'dataframe_poolpaper_all.pkl')
+    return param_opt, dfs, df_optim2

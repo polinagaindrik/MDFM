@@ -48,7 +48,8 @@ def data_calibration_poolpaper(dfs, path=""):
         [(.2, .7), (.2, .7)] + # mu_opt
         #[(0.55, 0.55), (0.33, 0.33)] + # mu_opt
         #[(3.83, 3.83), (7.02, 7.02), (4.84, 4.84), (5.81, 5.81)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
-        [(3.5, 4.5), (5., 8.), (3.5, 5.), (5.5, 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
+        [(3.5, 4.5), (6., 7.), (9., 10.),      # pH_ls_min, pH_ls_opt, pH_ls_max
+         (3.5, 5.), (6., 8.), (9., 11.)] +    # pH_lm_min, pH_lm_opt, pH_lm_max
         #[(0.1, 10.) for _ in range(2)] +  # omega
         [(0., 0.) for _ in range(2)] +  # omega
         [(0.5, 2.)] + [(3000., 5000.)] + [(0.3, 1.5)] + # omegaT_exp + ki_T_inhib + n
@@ -88,7 +89,7 @@ if __name__ == "__main__":
 
     df_exps = []
     for i, (n, nr, las) in enumerate(zip(names, skip_rows, LA_sheetnames)):
-        df_exps.append(experimental_values(n, skiprows=nr, path_data='"pool_paper_casestudy/data/', LA_sheetname=las, path=path_new, exp_start_offset=i))
+        df_exps.append(experimental_values(n, skiprows=nr, path_data='pool_paper_casestudy/data/', LA_sheetname=las, path=path_new, exp_start_offset=i))
     dfs = fm.dtf.merge_dfs(df_exps, sort=False)
     fm.data.save_all_dfs([dfs], names=['poolpaper_all'], path=path_new)
 
@@ -110,7 +111,7 @@ if __name__ == "__main__":
         #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode_new[2*3 + 2 + 3+1] = 0.
+            param_ode_new[2*4 + 2 + 3+1] = 0.
             plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
         else:
             plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')    

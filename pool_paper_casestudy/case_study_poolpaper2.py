@@ -12,10 +12,10 @@ import matplotlib.pyplot as plt
 
 def data_calibration_poolpaper_sequen(dfs, path=""):
     n_cl = 4
-    dicts_param = []
-    x0_vals = []
+    dicts_param = {}
+    x0_vals = {}
     # Monoculture experiments
-    for i in range (3):
+    for i in [2, 0, 1]:
         df = [dfs[0].filter(like=f'V{i+1:02d}')]#.filter(like=f'V{i+1:02d}')
         exps_calibr = sorted(list(set([s.split("_")[0] for s in df[0].columns])))
         calibr_presetup = {
@@ -51,7 +51,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
                 [(.2, .7), (0., 0.), (0., 0.)] + # mu_opt
                 [(3.5, 4.5), (5., 8.), (3., 3.), (7., 7.), (3., 3.), (7., 7.),] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
-                [(8.0, 9.5), (0., 0.), (0., 0.)] +          # N_max_exp
+                [(1., 4.), (1., 1.), (dicts_param[2]['N_t'], dicts_param[2]['N_t'])] +          # N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(.1, 10)] + [(1., 100.)] + # kappa_LA ls23K
                 [(0., 0.)] + [(0., 0.)] + # kappa_LA lsCTC494
@@ -62,7 +62,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
                 [(0., 0.), (.2, .7), (0., 0.)] + # mu_opt
                 [(3., 3.), (7., 7.), (3.5, 4.5), (5., 8.), (3., 3.), (7., 7.),] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
-                [(dicts_param[0]['N_t'], dicts_param[0]['N_t']), (0.1, 10.), (0., 0.)] + # N_max_exp
+                [(dicts_param[0]['N_t'], dicts_param[0]['N_t']), (1., 4.), (dicts_param[2]['N_t'], dicts_param[2]['N_t'])] + # N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(0., 0.)] + [(0., 0.)] + # kappa_LA ls23K
                 [(.1, 10)] + [(1., 100.)] + # kappa_LA lsCTC494
@@ -72,9 +72,8 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
             param_ode_bnds_mono = tuple(
                 [(0., 0.), (0., 0.), (.2, .7)] + # mu_opt
                 [(3., 3.), (7., 7.), (3., 3.), (7., 7.), (3.5, 5.5), (6., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
-                [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
-                [(dicts_param[0]['N_t'], dicts_param[0]['N_t']),
-                 (dicts_param[1]['N_t'], dicts_param[1]['N_t']), (0.1, 10.)] +   # N_max_exp
+                [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n  
+                [(1., 1.), (1., 1.), (8., 9.)]  +# rj, N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(0., 0.)] + [(0., 0.)] +   # kappa_LA ls23K
                 [(0., 0.)] + [(0., 0.)] +   # kappa_LA lsCTC494
@@ -84,8 +83,8 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
         calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds_mono
         print(f"Start optimization {i}")
         param_opt = calculate_model_params(cost, calibr_setup)[0]
-        x0_vals.append(param_opt[:n_cl])
-        dicts_param.append(get_extract_params_from_mono_exp(param_opt[n_cl:], i))
+        x0_vals[i] = param_opt[:n_cl]
+        dicts_param[i] = get_extract_params_from_mono_exp(param_opt[n_cl:], i)
 
     # Estimation of x0 for coculture ls23K and Lm
     df = [dfs[0].filter(like='V04')]
@@ -118,18 +117,12 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
         [(0., 0.)] + # kappa_T
         [(kappa, kappa)  for j in range (3) for kappa in dicts_param[j]['kappas_LA']]
         )
-    print('Parameter bounds: ')
-    for b in param_ode_bnds:
-        print(b)
 
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds
-    print(len(x0_bnds_all), len(param_ode_bnds))
-
     print("Start optimization Ls23K-Lm")
     param_opt = calculate_model_params(cost, calibr_setup)[0]
-    x0_vals.append(param_opt[:n_cl])
-    
+    x0_vals[3] = param_opt[:n_cl]
     
     # Now estimate the rest parameters for coculture lsCTC494 and Lm
     df = [dfs[0].filter(like='V05')]
@@ -165,10 +158,11 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
         )
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds
-    print(len(x0_bnds_all), len(param_ode_bnds))
     print("Start optimization  LsCTC494-Lm")
     param_opt = calculate_model_params(cost, calibr_setup)[0]
-    param_final = np.concatenate((np.array(x0_vals).flatten(), param_opt))
+    x0_vals[4] = param_opt[:n_cl]
+    x0_vals_final = np.array([x0_vals[i] for i in range (5)]).flatten()
+    param_final = np.concatenate((x0_vals_final, param_opt[n_cl:]))
     fm.output.json_dump({"param_ode": param_final.astype(list)}, "Result_calibration.json", dir=path)
     return param_final, calibr_setup
 

@@ -48,10 +48,12 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
 
         if i == 0:
             param_ode_bnds_mono = tuple(
-                [(.2, .7), (0., 0.), (0., 0.)] + # mu_opt
-                [(3.5, 4.5), (5., 8.), (3., 3.), (7., 7.), (3., 3.), (7., 7.),] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
+                [(.2, 1.), (0., 0.), (0., 0.)] + # mu_opt
+                [(1., 3.5),(5., 8.), (9., 14.),
+                (3., 3.), (7., 7.), (9., 9.),
+                (3., 3.), (7., 7.), (9., 9.),] +  # pH_min, pH_opt, pH_max
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
-                [(1., 4.), (1., 1.), (dicts_param[2]['N_t'], dicts_param[2]['N_t'])] +          # N_max_exp
+                [(1., 5.), (1., 1.), (dicts_param[2]['N_t'], dicts_param[2]['N_t'])] +          # N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(.1, 10)] + [(1., 100.)] + # kappa_LA ls23K
                 [(0., 0.)] + [(0., 0.)] + # kappa_LA lsCTC494
@@ -59,10 +61,12 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
             )
         elif i == 1:
             param_ode_bnds_mono = tuple(
-                [(0., 0.), (.2, .7), (0., 0.)] + # mu_opt
-                [(3., 3.), (7., 7.), (3.5, 4.5), (5., 8.), (3., 3.), (7., 7.),] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
+                [(0., 0.), (.2, 1.), (0., 0.)] + # mu_opt
+                [(3., 3.), (7., 7.), (9., 9.),
+                (1., 3.5), (5., 8.), (9., 14.),
+                (3., 3.), (7., 7.), (9., 9.),] +  # pH_min, pH_opt, pH_max
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
-                [(dicts_param[0]['N_t'], dicts_param[0]['N_t']), (1., 4.), (dicts_param[2]['N_t'], dicts_param[2]['N_t'])] + # N_max_exp
+                [(dicts_param[0]['N_t'], dicts_param[0]['N_t']), (1., 5.), (dicts_param[2]['N_t'], dicts_param[2]['N_t'])] + # N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(0., 0.)] + [(0., 0.)] + # kappa_LA ls23K
                 [(.1, 10)] + [(1., 100.)] + # kappa_LA lsCTC494
@@ -70,8 +74,10 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
             )
         elif i == 2:
             param_ode_bnds_mono = tuple(
-                [(0., 0.), (0., 0.), (.2, .7)] + # mu_opt
-                [(3., 3.), (7., 7.), (3., 3.), (7., 7.), (3.5, 5.5), (6., 8.)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
+                [(0., 0.), (0., 0.), (.2, 1.)] + # mu_opt
+                [(3., 3.), (7., 7.), (9., 9.),
+                (3., 3.), (7., 7.),  (9., 9.),
+                (1., 3.5), (6., 8.), (9., 14.)] +  # pH_min, pH_opt, pH_max
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n  
                 [(1., 1.), (1., 1.), (8., 9.)]  +# rj, N_max_exp
                 [(0., 0.)] + # kappa_T
@@ -85,6 +91,9 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
         param_opt = calculate_model_params(cost, calibr_setup)[0]
         x0_vals[i] = param_opt[:n_cl]
         dicts_param[i] = get_extract_params_from_mono_exp(param_opt[n_cl:], i)
+
+        df_optim2 = pd.read_csv('out/optimization_history1.csv')
+        fm.plotting.plot_cost_function(df_optim2, path=path, add_name=f'_V{i+1:02d}')
 
     # Estimation of x0 for coculture ls23K and Lm
     df = [dfs[0].filter(like='V04')]
@@ -109,9 +118,9 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
     x0_bnds_all = tuple(x0_bnds_all)    
     param_ode_bnds = tuple(
         [(dicts_param[j]['mu_opt'], dicts_param[j]['mu_opt']) for j in range (3)] + [
-        (dicts_param[0]['pH_min'], dicts_param[0]['pH_min']), (dicts_param[0]['pH_opt'], dicts_param[0]['pH_opt']),
-        (dicts_param[1]['pH_min'], dicts_param[1]['pH_min']), (dicts_param[1]['pH_opt'], dicts_param[1]['pH_opt']),
-        (dicts_param[2]['pH_min'], dicts_param[2]['pH_min']), (dicts_param[2]['pH_opt'], dicts_param[2]['pH_opt'])] +
+        (dicts_param[0]['pH_min'], dicts_param[0]['pH_min']), (dicts_param[0]['pH_opt'], dicts_param[0]['pH_opt']), (dicts_param[0]['pH_max'], dicts_param[0]['pH_max']),
+        (dicts_param[1]['pH_min'], dicts_param[1]['pH_min']), (dicts_param[1]['pH_opt'], dicts_param[1]['pH_opt']), (dicts_param[1]['pH_max'], dicts_param[1]['pH_max']),
+        (dicts_param[2]['pH_min'], dicts_param[2]['pH_min']), (dicts_param[2]['pH_opt'], dicts_param[2]['pH_opt']), (dicts_param[2]['pH_max'], dicts_param[2]['pH_max'])] +
         [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
         [(dicts_param[j]['N_t'], dicts_param[j]['N_t']) for j in range (3)] +
         [(0., 0.)] + # kappa_T
@@ -123,6 +132,10 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
     print("Start optimization Ls23K-Lm")
     param_opt = calculate_model_params(cost, calibr_setup)[0]
     x0_vals[3] = param_opt[:n_cl]
+    df_optim2 = pd.read_csv('out/optimization_history1.csv')
+    fm.plotting.plot_cost_function(df_optim2, path=path, add_name=f'_V04')
+
+####################################################
     
     # Now estimate the rest parameters for coculture lsCTC494 and Lm
     df = [dfs[0].filter(like='V05')]
@@ -147,10 +160,10 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
         x0_bnds_all += add
     x0_bnds_all = tuple(x0_bnds_all)
     param_ode_bnds = tuple(
-        [(dicts_param[j]['mu_opt'], dicts_param[j]['mu_opt']) for j in range (3)] + [
-        (dicts_param[0]['pH_min'], dicts_param[0]['pH_min']), (dicts_param[0]['pH_opt'], dicts_param[0]['pH_opt']),
-        (dicts_param[1]['pH_min'], dicts_param[1]['pH_min']), (dicts_param[1]['pH_opt'], dicts_param[1]['pH_opt']),
-        (dicts_param[2]['pH_min'], dicts_param[2]['pH_min']), (dicts_param[2]['pH_opt'], dicts_param[2]['pH_opt'])] +
+         [(dicts_param[j]['mu_opt'], dicts_param[j]['mu_opt']) for j in range (3)] + [
+        (dicts_param[0]['pH_min'], dicts_param[0]['pH_min']), (dicts_param[0]['pH_opt'], dicts_param[0]['pH_opt']), (dicts_param[0]['pH_max'], dicts_param[0]['pH_max']),
+        (dicts_param[1]['pH_min'], dicts_param[1]['pH_min']), (dicts_param[1]['pH_opt'], dicts_param[1]['pH_opt']), (dicts_param[1]['pH_max'], dicts_param[1]['pH_max']),
+        (dicts_param[2]['pH_min'], dicts_param[2]['pH_min']), (dicts_param[2]['pH_opt'], dicts_param[2]['pH_opt']), (dicts_param[2]['pH_max'], dicts_param[2]['pH_max'])] +
         [(0.5, 2.), (3000., 5000.), (0.3, 1.5)] + # omegaT_exp + ki_T_inhib + n
         [(dicts_param[j]['N_t'], dicts_param[j]['N_t']) for j in range (3)] +
         [(.1, 1.)]  + # kappa_T
@@ -164,16 +177,17 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
     x0_vals_final = np.array([x0_vals[i] for i in range (5)]).flatten()
     param_final = np.concatenate((x0_vals_final, param_opt[n_cl:]))
     fm.output.json_dump({"param_ode": param_final.astype(list)}, "Result_calibration.json", dir=path)
+    df_optim2 = pd.read_csv('out/optimization_history1.csv')
+    fm.plotting.plot_cost_function(df_optim2, path=path, add_name=f'_V05')
     return param_final, calibr_setup
 
 def get_extract_params_from_mono_exp(param_ode, i):
     n_cl_param = 3
     mu_opt = param_ode[i]
-    pH_params = param_ode[n_cl_param + i*2:n_cl_param + i*2+2]
-    N_t = param_ode[3*n_cl_param +3 + i]
-    kappas_LA = param_ode[4*n_cl_param +3+1+ 2*i: 4*n_cl_param +3+1 + (2*i+2)]
-    dict_exp = {'mu_opt': mu_opt, 'pH_min': pH_params[0], 'pH_opt': pH_params[1], 'N_t': N_t, 'kappas_LA': kappas_LA}
-    print(param_ode)
+    pH_params = param_ode[n_cl_param + i*3:n_cl_param + i*3+3]
+    N_t = param_ode[4*n_cl_param +3 + i]
+    kappas_LA = param_ode[5*n_cl_param +3+1+ 2*i: 5*n_cl_param +3+1 + (2*i+2)]
+    dict_exp = {'mu_opt': mu_opt, 'pH_min': pH_params[0], 'pH_opt': pH_params[1], 'pH_max': pH_params[2], 'N_t': N_t, 'kappas_LA': kappas_LA}
     print(i, dict_exp)    
     return dict_exp
 
@@ -212,7 +226,7 @@ if __name__ == "__main__":
         #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode_new[3*3+3+3] = 0.
+            param_ode_new[4*3+3+3] = 0.
             plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=ode_model_coculture2, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
         else:
             plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], model=ode_model_coculture2, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')

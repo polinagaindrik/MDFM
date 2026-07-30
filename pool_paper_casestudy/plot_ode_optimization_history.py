@@ -11,15 +11,15 @@ from matplotlib.lines import Line2D
 
 
 def plot_comparision(param_opt1, dfs1,  param_opt2, dfs2, path='', add_name=''):
-    names = ['LsCTC494', 'Ls23K', 'LmCTC1034', 'Ls23K-LmCTC1034', 'LsCTC494-LmCTC1034']
+    names = ['Ls23K', 'LsCTC494', 'LmCTC1034', 'Ls23K-LmCTC1034', 'LsCTC494-LmCTC1034']
     n_exps = len(names)
     coord_text = (0.04, 0.88)
     
     exp_indexes = [3, 4 ,0, 1, 2]
-    lbls = ['Ls-CTC494', 'Ls-23K', 'Lm-CTC1034', 'Lactic Acid', 'pH']
+    lbls = ['Ls-23K', 'Ls-CTC494', 'Lm-CTC1034', 'Lactic Acid', 'pH']
     mrkrs = ['o', 'o',  'o', '^', 'x']
     lst = ['solid', 'solid', 'solid', 'dashed', '']
-    clrs = [colors_all['N_LsCTC494co'], colors_all['N_LsCTC494'], colors_all['N_Lm_withT'], colors_all['T_A'], colors_all['N_Ls23K']]
+    clrs = [colors_all['N_LsCTC494'], colors_all['N_LsCTC494co'], colors_all['N_Lm_withT'], colors_all['T_A'], colors_all['N_Ls23K']]
     clr_indexes = [[0, 3, 4], [1, 3, 4], [2, 3, 4], [0, 2, 3, 4], [1, 2, 3, 4]]
     obs_count_indexes = [[0], [0], [1], [0, 1], [0, 1]]
     subfigures = [r'\textbf{A}', r'\textbf{B}', r'\textbf{C}', r'\textbf{D}', r'\textbf{E}']
@@ -34,7 +34,6 @@ def plot_comparision(param_opt1, dfs1,  param_opt2, dfs2, path='', add_name=''):
 
         fig, ax = plt.subplots()
         ax2 = ax.twinx()
-
         for l, (param_opt, dfs) in enumerate(zip([param_opt1, param_opt2], [dfs1, dfs2])):
             alpha = 1. - l*0.3
             if l == 0:
@@ -83,25 +82,26 @@ def plot_comparision(param_opt1, dfs1,  param_opt2, dfs2, path='', add_name=''):
 
 
 def plot_cases_separately(param_opt, dfs, path='', add_name=''):
-    names = ['LsCTC494', 'Ls23K', 'LmCTC1034', 'Ls23K-LmCTC1034', 'LsCTC494-LmCTC1034']
+    names = ['Ls23K', 'LsCTC494', 'LmCTC1034', 'Ls23K-LmCTC1034', 'LsCTC494-LmCTC1034']
     n_exps = len(names)
     coord_text = (0.04, 0.88)
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     x0_vals = param_opt[:n_cl*n_exps]
     param_ode = list(param_opt[n_cl*n_exps:])
     param_ode_new = np.copy(param_ode)
-    param_ode_new[2*4 + 2 + 3+1] = 0.
+    #param_ode_new[2*4 + 2 + 3+1] = 0. #model1
+    param_ode_new[4*3+3+3] = 0. # model2
 
     days, [obs_x] = extract_observables_from_df([dfs])
     t_model = np.linspace(days[0], days[-1]+5, 100)
 
     exp_indexes = [3, 4 ,0, 1, 2]
-    lbls = ['Ls-CTC494', 'Ls-23K', 'Lm-CTC1034', 'Lactic Acid', 'pH']
+    lbls = ['Ls-23K','Ls-CTC494',  'Lm-CTC1034', 'Lactic Acid', 'pH']
     mrkrs = ['o', 'o',  'o', '^', 'x']
     lst = ['solid', 'solid', 'solid', 'dashed', '']
-    clrs = [colors_all['N_LsCTC494co'], colors_all['N_LsCTC494'], colors_all['N_Lm_withT'], colors_all['T_A'], colors_all['N_Ls23K']]
+    clrs = [colors_all['N_LsCTC494'], colors_all['N_LsCTC494co'], colors_all['N_Lm_withT'], colors_all['T_A'], colors_all['N_Ls23K']]
     clr_indexes = [[0, 3, 4], [1, 3, 4], [2, 3, 4], [0, 2, 3, 4], [1, 2, 3, 4]]
-    obs_count_indexes = [[0], [0], [1], [0, 1], [0, 1]]
+    obs_count_indexesz = [[0], [0], [1], [0, 1], [0, 1]]
     subfigures = [r'\textbf{A}', r'\textbf{B}', r'\textbf{C}', r'\textbf{D}', r'\textbf{E}']
 
     for i in exp_indexes:
@@ -159,15 +159,15 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
 
 
 def plot_paper_figures(param_opt, dfs, path='', add_name=''):
-    names = ['LsCTC494', 'Ls23K', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
+    names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
     n_exps = len(names)
     coord_text = (0.04, 0.88)
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     x0_vals = param_opt[:n_cl*n_exps]
     param_ode = list(param_opt[n_cl*n_exps:])
     param_ode_new = np.copy(param_ode)
-    param_ode_new[2*3 + 2 + 3+1] = 0.
-
+    param_ode_new[2*4 + 2 + 3+1] = 0.
+    #param_ode_new[4*3+3+3] = 0. # another model
     days, [obs_x] = extract_observables_from_df([dfs])
     t_model = np.linspace(days[0], days[-1]+5, 100)
 
@@ -330,10 +330,10 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
     # Plotting lactic acid:
     # All
     exp_indexes = [3, 4 ,0, 1, 2]
-    lbls = ['Ls-CTC494', 'Ls-23K', 'Lm-CTC1034', 'Lm/Ls-23K (co.)', 'Lm/Ls-CTC494 (co.)']
+    lbls = ['Ls-23K', 'Ls-CTC494', 'Lm-CTC1034', 'Lm/Ls-23K (co.)', 'Lm/Ls-CTC494 (co.)']
     mrkrs = ['^', '^', '^', 'D', 'o']
     lst = ['dashed','dashed', 'dashed', 'solid', 'solid']
-    clrs = [colors_all['N_LsCTC494'], colors_all['N_Ls23K'], colors_all['N_Lm'], colors_all['N'], colors_all['N_lambd_1e-2_omega_0']]
+    clrs = [colors_all['N_Ls23K'], colors_all['N_LsCTC494'], colors_all['N_Lm'], colors_all['N'], colors_all['N_lambd_1e-2_omega_0']]
     fig, ax = plt.subplots()
     ax2 = ax.twinx()
     for i in exp_indexes:
@@ -387,11 +387,13 @@ def cost_res(param, calibr_setup):
         #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
         if exp != 'LsCTC494-Lm' and exp != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode_new[2*3 + 2 + 3+1] = 0.
+            if calibr_setup['model'] == ode_model_coculture:
+                param_ode_new[2*4 + 2 + 3+1] = 0.
+            elif calibr_setup['model'] == ode_model_coculture2:
+                param_ode_new[4*3+3+3] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
-    print(np.shape(ll_x), np.sum(ll_x, axis=(0)))
     ll_x = ll_x[ll_x != 0]
     return calibr_setup["aggregation_func"]([ll_x])
 
@@ -409,7 +411,6 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, x_max):
     #np.concatenate((np.array(x0), np.array([0., 0.]), np.array([1., 0., 0., 6.])))
     C = fm.mdl.model_ODE_solution(model, days, param_ode, C0, const, t0=days[0])
     obs_model = observable(days, C)
-    #ll_x0 = (obs_x[i][:-1] - C[:-1]) ** 2 / x_max[:-1]
     ll_x0 = [
         (obs_x[i][0] - obs_model[0]) ** 2 / x_max[0], #  G
         (obs_x[i][1] - obs_model[1]) ** 2 / x_max[1],
@@ -434,7 +435,7 @@ if __name__ == "__main__":
     param_opt, dfs, df_optim2 = get_param_dfs(path, path2)
     fm.plotting.plot_cost_function(df_optim2, path=path2)
 
-    names = ['LsCTC494', 'Ls23K', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
+    names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
     n_exps = len(names)
     temps = [2.0 for _ in range(len(names))]
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))

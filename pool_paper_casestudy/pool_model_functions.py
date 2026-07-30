@@ -240,7 +240,8 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     (x_ls23K, x_lsCTC494, x_lm_sen, x_lm_res, R, T, LA, _) = x
 
     (mu_ls_opt, mu_lm_opt,
-    pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt,
+    pH_ls_min, pH_ls_opt, pH_ls_max,
+    pH_lm_min, pH_lm_opt, pH_lm_max,
     omega_ls_exp, omega_lm_exp,
     omegaT_lm_exp, k_T_inhib0, n,
     N_texp,
@@ -251,10 +252,8 @@ def ode_model_coculture(t, x, param, x0, ode_args):
     (pH_cond, n_cl,) = ode_args
     pH = pH_func(t, pH_cond)
 
-    mu_ls = mu_ls_opt * (pH - pH_ls_min) / (pH_ls_opt - pH_ls_min)
-    mu_lm = mu_lm_opt * (pH - pH_lm_min) / (pH_lm_opt - pH_lm_min)
-    #mu_ls = mu_ls_opt**2 * (pH - pH_ls_min)**2
-    #mu_lm = mu_lm_opt**2 * (pH - pH_lm_min)**2
+    mu_ls = mu_ls_opt * (pH - pH_ls_min) * (pH_ls_max - pH) / ((pH_ls_opt - pH_ls_min) * (pH_ls_max - pH_ls_min))
+    mu_lm = mu_lm_opt * (pH - pH_lm_min) * (pH_lm_max - pH) / ((pH_lm_opt - pH_lm_min) * (pH_lm_max - pH_lm_min))
 
     N_t = 10**N_texp
     omega_ls = 10**(-3) * omega_ls_exp

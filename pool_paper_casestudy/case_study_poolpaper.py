@@ -66,11 +66,11 @@ def data_calibration_poolpaper(dfs, path=""):
             (1., 3.5), (6., 8.), (9., 14.),
             (1., 3.5), (6., 8.), (9., 14.)] +  # pH_min, pH_opt, pH_max
             [(0.5, 2.), (3000., 5000.), (0.3, 1.5)] + # omegaT_exp + ki_T_inhib + n  
-            [(1., 1.), (1., 1.), (8., 9.)]  +# rj, N_max_exp
+            [(1., 5.), (1., 5.), (8., 9.)]  +# rj, N_max_exp
             [(.1, 1.)] + # kappa_T
             [(.1, 10)] + [(1., 100.)] +   # kappa_LA ls23K
-            [(.1, 10)] + [(1., 100.)]+   # kappa_LA lsCTC494
-            [(.1, 10)] + [(1., 100.)]   # kappa_LA lm
+            [(.1, 10)] + [(1., 100.)] +   # kappa_LA lsCTC494
+            [(.1, 10)] + [(1., 100.)]     # kappa_LA lm
         )  
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds

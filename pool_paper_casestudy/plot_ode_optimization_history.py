@@ -101,7 +101,7 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
     lst = ['solid', 'solid', 'solid', 'dashed', '']
     clrs = [colors_all['N_LsCTC494'], colors_all['N_LsCTC494co'], colors_all['N_Lm_withT'], colors_all['T_A'], colors_all['N_Ls23K']]
     clr_indexes = [[0, 3, 4], [1, 3, 4], [2, 3, 4], [0, 2, 3, 4], [1, 2, 3, 4]]
-    obs_count_indexesz = [[0], [0], [1], [0, 1], [0, 1]]
+    obs_count_indexes = [[0], [0], [1], [0, 1], [0, 1]]
     subfigures = [r'\textbf{A}', r'\textbf{B}', r'\textbf{C}', r'\textbf{D}', r'\textbf{E}']
 
     for i in exp_indexes:
@@ -117,9 +117,9 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
         x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
         pH_series = np.array([obs_x[i][-1], days]).T
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode_new, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture2, t_model, param_ode_new, x0, [pH_series, n_cl])
         else:
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture2, t_model, param_ode, x0, [pH_series, n_cl])
         obs_model = observable(t_model, x_sol)
 
         for k in range(len(index)-2):

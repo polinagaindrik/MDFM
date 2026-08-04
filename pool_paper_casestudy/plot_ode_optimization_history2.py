@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 
-def plot_cases_separately(param_opt, dfs, path='', add_name=''):
+def plot_cases_separately(param_opt, dfs, model, path='', add_name=''):
     names = ['Ls23K', 'LsCTC494', 'LmCTC1034', 'Ls23K-LmCTC1034', 'LsCTC494-LmCTC1034']
     n_exps = len(names)
     coord_text = (0.04, 0.88)
@@ -45,9 +45,9 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
         x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
         pH_series = np.array([obs_x[i][-1], days]).T
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture2, t_model, param_ode_new, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode_new, x0, [pH_series, n_cl])
         else:
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture2, t_model, param_ode, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode, x0, [pH_series, n_cl])
         obs_model = observable(t_model, x_sol)
 
         for k in range(len(index)-2):
@@ -62,15 +62,18 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
         ax.set_yscale('log')
         fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Bacterial Count [CFU/mL]')
         fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', r'pH; Lactic Acid [g/L]')
+        ax2.set_ylim(-0.5, 7)
         
         legend_elements = [
             Line2D([0], [0], color=clrs_exp[j], label=lbls_exp[j], marker=mrkrs_exp[j], linestyle=lst_exp[j])
             for j in range (len(index))]
         ax.text(*coord_text, subfigures[i], transform = ax.transAxes)
-        legend_box = [0.48, 0.65]
-        plt.legend(handles=legend_elements, ncol=1, fontsize=13, handlelength=2.4)
-        
-        plt.savefig(path + f"Figures-pool_model_real_data_exp_{names[i]}.png", bbox_inches="tight")
+        if exps[i] == 'V03':
+            legend_box = [1., 0.5]
+        else:
+            legend_box = [1.0, 0.3]
+        plt.legend(loc='center right', bbox_to_anchor=legend_box, handles=legend_elements, ncol=1, fontsize=13, handlelength=2.4)
+        plt.savefig(path + f"Figures-pool_model_real_data_exp_{names[i]}.pdf", bbox_inches="tight")
         plt.close(fig)
 
         fig, ax = plt.subplots()
@@ -80,9 +83,9 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
         ax.set_xlim(-0.05, np.max(t_model))
         legend_elements = [Line2D([0], [0], color=colors_all['T'], label='Bacteriocin', marker='X', linestyle='-.')]
         legend_box = [0.48, 0.75]
-        plt.legend(handles=legend_elements, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
+        plt.legend(loc='center right', bbox_to_anchor=legend_box, handles=legend_elements, ncol=1, fontsize=13, handlelength=2.4)
         ax.text(*coord_text, r'\textbf{F}', transform = ax.transAxes)
-        plt.savefig(path + f"Figures-pool_model_real_data_BAC_{names[i]}.png", bbox_inches="tight")
+        plt.savefig(path + f"Figures-pool_model_real_data_BAC_{names[i]}.pdf", bbox_inches="tight")
         plt.close(fig)
 
 
@@ -144,24 +147,24 @@ if __name__ == "__main__":
     n_cl = 4
     relnoise = 0.
 
-    path = 'out/'
-    path2 = 'pool_paper_casestudy/out/test2/'
-    #path = 'pool_paper_casestudy/out/all_wo_pH_influence/'
-    #path2 = 'pool_paper_casestudy/out/all_wo_pH_influence/'
+    #path = 'out/'
+    #path2 = 'pool_paper_casestudy/out/test2/'
+    path = 'pool_paper_casestudy/out/all_sepexps_withpH_Chrderiv/'
+    path2 = 'pool_paper_casestudy/out/all_sepexps_withpH_Chrderiv/'
     add_name = ''
+    model = ode_model_coculture3
 
     _, dfs, df_optim2 = get_param_dfs(path, path2)
     fm.plotting.plot_cost_function(df_optim2, path=path2)
 
     param_opt = fm.output.read_from_json('Result_calibration.json', dir=path2)["param_ode"]
-
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
     n_exps = len(names)
     temps = [2.0 for _ in range(len(names))]
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
 
     #plot_paper_figures(param_opt, dfs, path=path2, add_name=add_name)
-    plot_cases_separately(param_opt, dfs, path=path2, add_name=add_name)
+    plot_cases_separately(param_opt, dfs, model, path=path2, add_name=add_name)
     exit()
 
     # With pH term
@@ -193,7 +196,7 @@ if __name__ == "__main__":
 
     
     calibr_setup = {
-        "model": ode_model_coculture,
+        "model": model,
         "output_path": path2,
         "n_cl": n_cl,
         "dfs": [dfs],

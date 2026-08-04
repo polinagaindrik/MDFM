@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 
 def data_calibration_poolpaper_sequen(dfs, path=""):
     n_cl = 4
+    model = ode_model_coculture3
     dicts_param = {}
     x0_vals = {}
     # Monoculture experiments
@@ -19,7 +20,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
         df = [dfs[0].filter(like=f'V{i+1:02d}')]#.filter(like=f'V{i+1:02d}')
         exps_calibr = sorted(list(set([s.split("_")[0] for s in df[0].columns])))
         calibr_presetup = {
-            "model": ode_model_coculture2,
+            "model": model,
             "workers": workers,  # number of threads for multiprocessing
             "output_path": path,
             "n_cl": n_cl,
@@ -53,7 +54,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
                 (3., 3.), (7., 7.), (9., 9.),
                 (3., 3.), (7., 7.), (9., 9.),] +  # pH_min, pH_opt, pH_max
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
-                [(1., 5.), (1., 1.), (dicts_param[2]['N_t'], dicts_param[2]['N_t'])] +          # N_max_exp
+                [(8., 9.5), (0., 0.), (dicts_param[2]['N_t'], dicts_param[2]['N_t'])] + # N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(.1, 10)] + [(1., 100.)] + # kappa_LA ls23K
                 [(0., 0.)] + [(0., 0.)] + # kappa_LA lsCTC494
@@ -66,7 +67,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
                 (1., 3.5), (5., 8.), (9., 14.),
                 (3., 3.), (7., 7.), (9., 9.),] +  # pH_min, pH_opt, pH_max
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n
-                [(dicts_param[0]['N_t'], dicts_param[0]['N_t']), (1., 5.), (dicts_param[2]['N_t'], dicts_param[2]['N_t'])] + # N_max_exp
+                [(dicts_param[0]['N_t'], dicts_param[0]['N_t']), (8., 9.5), (dicts_param[2]['N_t'], dicts_param[2]['N_t'])] + # N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(0., 0.)] + [(0., 0.)] + # kappa_LA ls23K
                 [(.1, 10)] + [(1., 100.)] + # kappa_LA lsCTC494
@@ -79,7 +80,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
                 (3., 3.), (7., 7.),  (9., 9.),
                 (1., 3.5), (6., 8.), (9., 14.)] +  # pH_min, pH_opt, pH_max
                 [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n  
-                [(1., 1.), (1., 1.), (8., 9.)]  +# rj, N_max_exp
+                [(0., 0.), (0., 0.), (8., 9.5)]  +# rj, N_max_exp
                 [(0., 0.)] + # kappa_T
                 [(0., 0.)] + [(0., 0.)] +   # kappa_LA ls23K
                 [(0., 0.)] + [(0., 0.)] +   # kappa_LA lsCTC494
@@ -99,7 +100,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
     df = [dfs[0].filter(like='V04')]
     exps_calibr = sorted(list(set([s.split("_")[0] for s in df[0].columns])))
     calibr_presetup = {
-            "model": ode_model_coculture2,
+            "model": model,
             "workers": workers,  # number of threads for multiprocessing
             "output_path": path,
             "n_cl": n_cl,
@@ -141,7 +142,7 @@ def data_calibration_poolpaper_sequen(dfs, path=""):
     df = [dfs[0].filter(like='V05')]
     exps_calibr = sorted(list(set([s.split("_")[0] for s in df[0].columns])))
     calibr_presetup = {
-            "model": ode_model_coculture2,
+            "model": model,
             "workers": workers,  # number of threads for multiprocessing
             "output_path": path,
             "n_cl": n_cl,
@@ -196,6 +197,7 @@ if __name__ == "__main__":
     path = "pool_paper_casestudy/out/"
     workers = -1
     n_cl = 4
+    model = ode_model_coculture3
     path_new = path + "test2/"
     
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
@@ -223,6 +225,6 @@ if __name__ == "__main__":
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
             param_ode_new[4*3+3+3] = 0.
-            plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=ode_model_coculture2, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
+            plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
         else:
-            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], model=ode_model_coculture2, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
+            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')

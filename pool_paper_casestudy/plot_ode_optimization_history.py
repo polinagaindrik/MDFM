@@ -14,6 +14,7 @@ def plot_comparision(param_opt1, dfs1,  param_opt2, dfs2, path='', add_name=''):
     names = ['Ls23K', 'LsCTC494', 'LmCTC1034', 'Ls23K-LmCTC1034', 'LsCTC494-LmCTC1034']
     n_exps = len(names)
     coord_text = (0.04, 0.88)
+    model = ode_model_coculture2
     
     exp_indexes = [3, 4 ,0, 1, 2]
     lbls = ['Ls-23K', 'Ls-CTC494', 'Lm-CTC1034', 'Lactic Acid', 'pH']
@@ -45,16 +46,17 @@ def plot_comparision(param_opt1, dfs1,  param_opt2, dfs2, path='', add_name=''):
             x0_vals = param_opt[:n_cl*n_exps]
             param_ode = list(param_opt[n_cl*n_exps:])
             param_ode_new = np.copy(param_ode)
-            param_ode_new[2*3 + 2 + 3+1] = 0.
+            #param_ode_new[2*3 + 2 + 3+1] = 0.
+            param_ode_new[4*3+3+3] = 0.
             days, [obs_x] = extract_observables_from_df([dfs])
             t_model = np.linspace(days[0], days[-1]+5, 100)
 
             x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
             pH_series = np.array([obs_x[i][-1], days]).T
             if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
-                x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode_new, x0, [pH_series, n_cl])
+                x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode_new, x0, [pH_series, n_cl])
             else:
-                x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode, x0, [pH_series, n_cl])
+                x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode, x0, [pH_series, n_cl])
             obs_model = observable(t_model, x_sol)
 
             for k in range(len(index)-2):
@@ -81,7 +83,7 @@ def plot_comparision(param_opt1, dfs1,  param_opt2, dfs2, path='', add_name=''):
         plt.close(fig)   
 
 
-def plot_cases_separately(param_opt, dfs, path='', add_name=''):
+def plot_cases_separately(param_opt, dfs, model, path='', add_name=''):
     names = ['Ls23K', 'LsCTC494', 'LmCTC1034', 'Ls23K-LmCTC1034', 'LsCTC494-LmCTC1034']
     n_exps = len(names)
     coord_text = (0.04, 0.88)
@@ -117,9 +119,9 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
         x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
         pH_series = np.array([obs_x[i][-1], days]).T
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture2, t_model, param_ode_new, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode_new, x0, [pH_series, n_cl])
         else:
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture2, t_model, param_ode, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode, x0, [pH_series, n_cl])
         obs_model = observable(t_model, x_sol)
 
         for k in range(len(index)-2):
@@ -134,14 +136,17 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
         ax.set_yscale('log')
         fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Bacterial Count [CFU/mL]')
         fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', r'pH; Lactic Acid [g/L]')
-        
+        ax2.set_ylim(-0.5, 7)
         legend_elements = [
             Line2D([0], [0], color=clrs_exp[j], label=lbls_exp[j], marker=mrkrs_exp[j], linestyle=lst_exp[j])
             for j in range (len(index))]
         ax.text(*coord_text, subfigures[i], transform = ax.transAxes)
         legend_box = [0.48, 0.65]
-        plt.legend(handles=legend_elements, ncol=1, fontsize=13, handlelength=2.4)
-        
+        if exps[i] == 'V03':
+            legend_box = [1., 0.5]
+        else:
+            legend_box = [1.0, 0.3]
+        plt.legend(loc='center right', bbox_to_anchor=legend_box, handles=legend_elements, ncol=1, fontsize=13, handlelength=2.4)
         plt.savefig(path + f"Figures-pool_model_real_data_exp_{names[i]}.png", bbox_inches="tight")
         plt.close(fig)
 
@@ -158,7 +163,8 @@ def plot_cases_separately(param_opt, dfs, path='', add_name=''):
         plt.close(fig)
 
 
-def plot_paper_figures(param_opt, dfs, path='', add_name=''):
+    
+def plot_paper_figures(param_opt, dfs, model, path='', add_name=''):
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
     n_exps = len(names)
     coord_text = (0.04, 0.88)
@@ -177,7 +183,7 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
     for i in exp_indexes:
         x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
         pH_series = np.array([obs_x[i][-1], days]).T
-        x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode, x0, [pH_series, n_cl])
+        x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode, x0, [pH_series, n_cl])
         obs_model = observable(t_model, x_sol)
         if i == 1:
             ax.plot(t_model, obs_model[0], label='Monoculture: Ls23K', linestyle='dashed', color=colors_all['N_lambd_1e-3_omega_0'], linewidth=3.5)
@@ -211,9 +217,9 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
         x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
         pH_series = np.array([obs_x[i][-1], days]).T
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode_new, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode_new, x0, [pH_series, n_cl])
         else:
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode, x0, [pH_series, n_cl])
         obs_model = observable(t_model, x_sol)
         if i == 0:
             ax.plot(t_model, obs_model[0], label='Ls-CTC494 (mono)', linestyle='dashed', color=colors_all['N_lambd_1e-3_omega_0'], linewidth=3.5)
@@ -260,9 +266,9 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
         x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
         pH_series = np.array([obs_x[i][-1], days]).T
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode_new, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode_new, x0, [pH_series, n_cl])
         else:
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode, x0, [pH_series, n_cl])
         obs_model = observable(t_model, x_sol)
         if i == 0:
             ax.plot(t_model, obs_model[0], label='Ls-CTC494', linestyle='dashed', color=colors_all['N_LsCTC494'], linewidth=3)
@@ -340,9 +346,9 @@ def plot_paper_figures(param_opt, dfs, path='', add_name=''):
         x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
         pH_series = np.array([obs_x[i][-1], days]).T
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode_new, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode_new, x0, [pH_series, n_cl])
         else:
-            x_sol = fm.mdl.model_ODE_solution(ode_model_coculture, t_model, param_ode, x0, [pH_series, n_cl])
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode, x0, [pH_series, n_cl])
         obs_model = observable(t_model, x_sol)
 
         ax.plot(t_model, obs_model[3], label=lbls[i], linewidth=3.5, color=clrs[i], linestyle=lst[i])
@@ -391,6 +397,8 @@ def cost_res(param, calibr_setup):
                 param_ode_new[2*4 + 2 + 3+1] = 0.
             elif calibr_setup['model'] == ode_model_coculture2:
                 param_ode_new[4*3+3+3] = 0.
+            elif calibr_setup['model'] == ode_model_coculture3:
+                param_ode_new[4*3+3+3] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
@@ -428,9 +436,10 @@ if __name__ == "__main__":
 
     path = 'out/'
     path2 = 'pool_paper_casestudy/out/test/'
-    #path = 'pool_paper_casestudy/out/all_wo_pH_influence/'
-    #path2 = 'pool_paper_casestudy/out/all_wo_pH_influence/'
+    #path = 'pool_paper_casestudy/out/all_togetherexps_withpH_myderiv/'
+    #path2 = 'pool_paper_casestudy/out/all_togetherexps_withpH_myderiv/'
     add_name = ''
+    model = ode_model_coculture3
 
     param_opt, dfs, df_optim2 = get_param_dfs(path, path2)
     fm.plotting.plot_cost_function(df_optim2, path=path2)
@@ -441,7 +450,7 @@ if __name__ == "__main__":
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
 
     #plot_paper_figures(param_opt, dfs, path=path2, add_name=add_name)
-    plot_cases_separately(param_opt, dfs, path=path2, add_name=add_name)
+    plot_cases_separately(param_opt, dfs, model, path=path2, add_name=add_name)
     exit()
 
     # With pH term
@@ -466,14 +475,15 @@ if __name__ == "__main__":
         #if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V05':
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode_new[2*4 + 2 + 3+1] = 0.
+            #param_ode_new[2*4 + 2 + 3+1] = 0.
+            param_ode_new[4*3+3+3] = 0.
             plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
         else:
             plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
 
     
     calibr_setup = {
-        "model": ode_model_coculture,
+        "model": model,
         "output_path": path2,
         "n_cl": n_cl,
         "dfs": [dfs],

@@ -11,8 +11,9 @@ import matplotlib.pyplot as plt
 
 def data_calibration_poolpaper(dfs, path=""):
     exps_calibr = sorted(list(set([s.split("_")[0] for s in dfs[0].columns])))
+    model = ode_model_coculture3
     calibr_presetup = {
-        "model": ode_model_coculture2, #ode_model_coculture,
+        "model": model, #ode_model_coculture,
         "workers": workers,  # number of threads for multiprocessing
         "output_path": path,
         "n_cl": n_cl,
@@ -63,10 +64,10 @@ def data_calibration_poolpaper(dfs, path=""):
     param_ode_bnds = tuple(
             [(.2, 1.) for _ in range (3)] + # mu_opt
             [(1., 3.5), (6., 8.), (9., 14.),
-            (1., 3.5), (6., 8.), (9., 14.),
-            (1., 3.5), (6., 8.), (9., 14.)] +  # pH_min, pH_opt, pH_max
+             (1., 3.5), (6., 8.), (9., 14.),
+             (1., 3.5), (6., 8.), (9., 14.)] +  # pH_min, pH_opt, pH_max
             [(0.5, 2.), (3000., 5000.), (0.3, 1.5)] + # omegaT_exp + ki_T_inhib + n  
-            [(1., 5.), (1., 5.), (8., 9.)]  +# rj, N_max_exp
+            [(8., 9.), (8., 9.), (8., 9.)]  + # N_max_exp
             [(.1, 1.)] + # kappa_T
             [(.1, 10)] + [(1., 100.)] +   # kappa_LA ls23K
             [(.1, 10)] + [(1., 100.)] +   # kappa_LA lsCTC494
@@ -84,6 +85,7 @@ if __name__ == "__main__":
     path = "pool_paper_casestudy/out/"
     workers = -1
     n_cl = 4
+    model = ode_model_coculture3
     path_new = path + "test/"
     
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
@@ -109,7 +111,8 @@ if __name__ == "__main__":
         #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            param_ode_new[2*4 + 2 + 3+1] = 0.
-            plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
+            #param_ode_new[2*4 + 2 + 3+1] = 0.
+            param_ode_new[4*3+3+3] = 0.
+            plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
         else:
-            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
+            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')

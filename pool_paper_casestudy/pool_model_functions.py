@@ -203,6 +203,8 @@ def cost(param, calibr_setup, jac_spasity):
                 param_ode_new[2*4 + 2 + 3+1] = 0.
             elif calibr_setup['model'] == ode_model_coculture2:
                 param_ode_new[4*3+3+3] = 0.
+            elif calibr_setup['model'] == ode_model_coculture3:
+                param_ode_new[4*3+3+3] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
@@ -305,9 +307,6 @@ def ode_model_coculture2(t, x, param, x0, ode_args):
     kappa_LA_ls23K, kappa_LA_ls23K_2, kappa_LA_lsCTC494, kappa_LA_lsCTC494_2, kappa_LA_lm, kappa_LA_lm_2 = 10**(-9) * np.array([kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp])
     #print(n, k_T_inhib , T, x_lm_sen)
     toxin_death = omegaT_lm * x_lm_sen * np.abs(T)**n / (k_T_inhib**n + np.abs(T)**n)
-
-    
-
     return [
         mu_ls23K * R**r_23K * x_ls23K,
         mu_lsCTC494 * R**r_lsCTC494 * x_lsCTC494,# * (N_ls23K_t /N_lsCTC494_t),
@@ -351,7 +350,6 @@ def ode_model_coculture3(t, x, param, x0, ode_args):
     kappa_LA_ls23K, kappa_LA_ls23K_2, kappa_LA_lsCTC494, kappa_LA_lsCTC494_2, kappa_LA_lm, kappa_LA_lm_2 = 10**(-9) * np.array([kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp])
     #print(n, k_T_inhib , T, x_lm_sen)
     toxin_death = omegaT_lm * x_lm_sen * np.abs(T)**n / (k_T_inhib**n + np.abs(T)**n)
-    
 
     return [
         mu_ls23K * R * x_ls23K,

@@ -7,6 +7,7 @@ import fusion_model as fm
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 colors_all = {
         'R': '#808080',
@@ -348,8 +349,8 @@ def ode_model_coculture3(t, x, param, x0, ode_args):
     kappa_T = 10**(-5) * kappa_T_0
 
     kappa_LA_ls23K, kappa_LA_ls23K_2, kappa_LA_lsCTC494, kappa_LA_lsCTC494_2, kappa_LA_lm, kappa_LA_lm_2 = 10**(-9) * np.array([kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp])
-    #print(n, k_T_inhib , T, x_lm_sen)
     toxin_death = omegaT_lm * x_lm_sen * np.abs(T)**n / (k_T_inhib**n + np.abs(T)**n)
+    #kappa_LA_lm_2 = 0. # so it does not decompose LA
 
     return [
         mu_ls23K * R * x_ls23K,
@@ -453,3 +454,84 @@ def get_param_dfs(path, path2):
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
     dfs = pd.read_pickle(path2+f'dataframe_poolpaper_all.pkl')
     return param_opt, dfs, df_optim2
+
+######
+def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_indexes=[3, 4 ,0, 1, 2]):
+    n_cl = 4
+    names = ['Ls23K', 'LsCTC494', 'LmCTC1034', 'Ls23K-LmCTC1034', 'LsCTC494-LmCTC1034']
+    n_exps = len(names)
+    coord_text = (0.04, 0.88)
+    exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
+    x0_vals = param_opt[:n_cl*n_exps]
+    param_ode = list(param_opt[n_cl*n_exps:])
+    param_ode_new = np.copy(param_ode)
+    #param_ode_new[2*4 + 2 + 3+1] = 0. #model1
+    param_ode_new[4*3+3+3] = 0. # model2
+
+    days, [obs_x] = extract_observables_from_df([dfs])
+    t_model = np.linspace(days[0], days[-1]+5, 100)
+
+    # exp_indexes = [3, 4 ,0, 1, 2]
+    lbls = ['Ls-23K','Ls-CTC494',  'Lm-CTC1034', 'Lactic Acid', 'pH']
+    mrkrs = ['o', 'o',  'o', '^', 'x']
+    lst = ['solid', 'solid', 'solid', 'dashed', '']
+    clrs = [colors_all['N_LsCTC494'], colors_all['N_LsCTC494co'], colors_all['N_Lm_withT'], colors_all['T_A'], colors_all['N_Ls23K']]
+    clr_indexes = [[0, 3, 4], [1, 3, 4], [2, 3, 4], [0, 2, 3, 4], [1, 2, 3, 4]]
+    obs_count_indexes = [[0], [0], [1], [0, 1], [0, 1]]
+    subfigures = [r'\textbf{A}', r'\textbf{B}', r'\textbf{C}', r'\textbf{D}', r'\textbf{E}']
+
+    for i in exp_indexes:
+        index = clr_indexes[i]
+        clrs_exp = [clrs[ind] for ind in index]
+        lbls_exp = [lbls[ind] for ind in index]
+        mrkrs_exp = [mrkrs[ind] for ind in index]
+        lst_exp = [lst[ind] for ind in index]
+        obs_count_ind_exp = obs_count_indexes[i]
+
+        fig, ax = plt.subplots()
+        ax2 = ax.twinx()
+        x0 = set_initial_vals(np.array(x0_vals[n_cl*i:n_cl*(i+1)]), None, n_cl, pH0=obs_x[0][-1][0])
+        pH_series = np.array([obs_x[i][-1], days]).T
+        if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode_new, x0, [pH_series, n_cl])
+        else:
+            x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode, x0, [pH_series, n_cl])
+        obs_model = observable(t_model, x_sol)
+
+        for k in range(len(index)-2):
+            ax.plot(t_model, obs_model[obs_count_ind_exp[k]], label='Ls-CTC494', color=clrs_exp[k], linewidth=3, linestyle=lst_exp[k])
+            ax.scatter(days, obs_x[i][obs_count_ind_exp[k]], marker=mrkrs_exp[k], color=clrs_exp[k])
+        
+        ax2.plot(t_model, obs_model[3], linewidth=3, color=clrs_exp[k+1], linestyle=lst_exp[k+1])
+        ax2.scatter(days, obs_x[i][3], color=clrs_exp[k+1], marker=mrkrs_exp[k+1])
+        ax2.scatter(days, obs_x[i][4], color=clrs_exp[k+2], marker=mrkrs_exp[k+2])
+
+        ax.set_xlim(-0.05, np.max(t_model))
+        ax.set_yscale('log')
+        fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Bacterial Count [CFU/mL]')
+        fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', r'pH; Lactic Acid [g/L]')
+        ax2.set_ylim(-0.5, 7)
+        legend_elements = [
+            Line2D([0], [0], color=clrs_exp[j], label=lbls_exp[j], marker=mrkrs_exp[j], linestyle=lst_exp[j])
+            for j in range (len(index))]
+        ax.text(*coord_text, subfigures[i], transform = ax.transAxes)
+        legend_box = [0.48, 0.65]
+        if exps[i] == 'V03':
+            legend_box = [1., 0.5]
+        else:
+            legend_box = [1.0, 0.3]
+        plt.legend(loc='center right', bbox_to_anchor=legend_box, handles=legend_elements, ncol=1, fontsize=13, handlelength=2.4)
+        plt.savefig(path + f"Figures-pool_model_real_data_exp_{names[i]}"+add_name+".png", bbox_inches="tight")
+        plt.close(fig)
+
+        fig, ax = plt.subplots()
+        ax.plot(t_model, obs_model[2], label='Bacteriocin', linestyle='-.', color=colors_all['T'])
+        ax.scatter(days, obs_x[i][2], marker='X', color=colors_all['T'])
+        fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Bacteriocin [AU/mL]')
+        ax.set_xlim(-0.05, np.max(t_model))
+        legend_elements = [Line2D([0], [0], color=colors_all['T'], label='Bacteriocin', marker='X', linestyle='-.')]
+        legend_box = [0.48, 0.75]
+        plt.legend(handles=legend_elements, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
+        ax.text(*coord_text, r'\textbf{F}', transform = ax.transAxes)
+        plt.savefig(path + f"Figures-pool_model_real_data_BAC_{names[i]}"+add_name+".png", bbox_inches="tight")
+        plt.close(fig)

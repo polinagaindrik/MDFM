@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     # Monoculture experiments results:
     param_opt = fm.output.read_from_json('Result_calibration_mono_local.json', dir=path2)["param_ode"]
-    plot_cases_separately(param_opt, dfs_saved, model, path=path2, add_name='_localopt_mono', exp_indexes=[3, 0, 2])
+    plot_cases_separately(param_opt, dfs_saved, model, path=path2, add_name='_localopt_mono', exp_indexes=[0, 1, 2])
 
 
     # All 5 exps together 

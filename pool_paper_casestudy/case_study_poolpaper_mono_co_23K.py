@@ -66,15 +66,21 @@ if __name__ == "__main__":
     model = ode_model_coculture3
     path_new = path + "test/"
     
-    names = ['Ls23K', 'Lm', 'Ls23K-Lm']
-    skip_rows = [34, 58, 109]
-    LA_sheetnames = ['R9_23K_LA_prod', 'R9_1034_LA_prod', 'R9_23Kco_LA_prod']
+    names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
+    skip_rows = [34, 8,  58, 109, 83]
+    LA_sheetnames = ['R9_23K_LA_prod', 'R9_494_LA_prod', 'R9_1034_LA_prod', 'R9_23Kco_LA_prod', 'R9_494co_LA_prod']
 
     df_exps = []
     for i, (n, nr, las) in enumerate(zip(names, skip_rows, LA_sheetnames)):
         df_exps.append(experimental_values(n, skiprows=nr, path_data='pool_paper_casestudy/data/', LA_sheetname=las, path=path_new, exp_start_offset=i))
     dfs = fm.dtf.merge_dfs(df_exps, sort=False)
     fm.data.save_all_dfs([dfs], names=['poolpaper_all'], path=path_new)
+
+    # Without Ls-CTC494
+    for exp in ['V02', 'V05']:
+        clmns = dfs.filter(like=exp)
+        dfs = dfs.drop(columns=clmns)
+    names =  ['Ls23K', 'Lm', 'Ls23K-Lm']
 
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     n_exps = len(exps)
@@ -83,9 +89,6 @@ if __name__ == "__main__":
     x0_vals = param_opt[:n_cl*n_exps]
     param_ode = list(param_opt[n_cl*n_exps:])
     param_ode_new = np.copy(param_ode)
-    exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
-    for i in range (len(exps)):
-        data = dfs.filter(like=f'V{i+1:02d}')
-        #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
-        if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
-            plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
+    for i, exp in enumerate(exps):
+        data = dfs.filter(like=exp)
+        plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')

@@ -63,8 +63,10 @@ if __name__ == "__main__":
     ################ Control parameters: ######################## 
     #path = 'pool_paper_casestudy/out/all_sepexps_withpH_Chrderiv/'
     #path2 = 'pool_paper_casestudy/out/all_sepexps_withpH_Chrderiv/'
-    path = 'pool_paper_casestudy/out/all_togetherexps_withpH_Chrderiv/'
-    path2 = 'pool_paper_casestudy/out/all_togetherexps_withpH_Chrderiv/'
+    #path = 'pool_paper_casestudy/out/all_togetherexps_withpH_Chrderiv/'
+    #path2 = 'pool_paper_casestudy/out/all_togetherexps_withpH_Chrderiv/'
+    path = 'pool_paper_casestudy/out/all_3expsLmLs23K_withpH_Chrderiv/'
+    path2 = 'pool_paper_casestudy/out/all_3expsLmLs23K_withpH_Chrderiv/'
     model = ode_model_coculture3
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
 
@@ -76,12 +78,18 @@ if __name__ == "__main__":
     ## Get params from json (for sequential exps)
     #_, dfs_saved, _ = get_param_dfs(path, path2)
     #param_opt = fm.output.read_from_json('Result_calibration.json', dir=path2)["param_ode"]
-#
+    #
     ## For monoculture exps
     #for exp in ['V04', 'V05']:
     #    clmns = dfs_saved.filter(like=exp)
     #    dfs = dfs.drop(columns=clmns)
     #names = names[:-2]
+
+    # For exps mono + co (Lm+Ls23K, 3 exps)
+    for exp in ['V02', 'V05']:
+        clmns = dfs_saved.filter(like=exp)
+        dfs = dfs.drop(columns=clmns)
+    names = ['Ls23K', 'LmCTC1034', 'Ls23K-LmCTC1034']
 
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     n_exps = len(exps)

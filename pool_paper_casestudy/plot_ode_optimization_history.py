@@ -371,8 +371,7 @@ if __name__ == "__main__":
 
     #plot_paper_figures(param_opt, dfs, path=path2, add_name=add_name)
     plot_cases_separately(param_opt, dfs, model, path=path2, add_name=add_name)
-    exit()
-
+    '''
     # With pH term
     path = 'pool_paper_casestudy/out/all_x_LA_BAC_with_death_wo_pH_latest/'
     path2 = 'pool_paper_casestudy/out/all_x_LA_BAC_with_death_wo_pH_latest/'
@@ -385,32 +384,19 @@ if __name__ == "__main__":
 
     plot_comparision(param_opt1, dfs1,  param_opt2, dfs2, path='pool_paper_casestudy/out/', add_name='_pH_influence')
     exit()
-
+    '''
 
     x0_vals = param_opt[:n_cl*n_exps]
     param_ode = list(param_opt[n_cl*n_exps:])
     param_ode_new = np.copy(param_ode)
 
-    for i in range (len(data)):
-        #if exps[i] != 'LsCTC494' and exps[i] != 'LsCTC494-Lm' and exps[i] != 'V01' and exps[i] != 'V05':
+    for i in range (len(exps)):
+        data = dfs.filter(like=f'V{i+1:02d}')
+        #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
             #param_ode_new[2*4 + 2 + 3+1] = 0.
             param_ode_new[4*3+3+3] = 0.
-            plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
+            plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path2, add_name=f'_estim_realdata_{names[i]}')
         else:
-            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], data=data[i], path=path2, add_name=f'_estim_realdata_{names[i]}')
-
-    
-    calibr_setup = {
-        "model": model,
-        "output_path": path2,
-        "n_cl": n_cl,
-        "dfs": [dfs],
-        "aggregation_func": fm.pest.cost_arithmetic_mean,
-        "exps": exps,
-        "exp_temps": {exp: temp for exp, temp in zip(exps, temps)},
-    }
-    data_array = extract_observables_from_df(calibr_setup["dfs"])
-    calibr_setup["data_array"] = data_array
-    cost(param_opt, calibr_setup, None)
+            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path2, add_name=f'_estim_realdata_{names[i]}')    

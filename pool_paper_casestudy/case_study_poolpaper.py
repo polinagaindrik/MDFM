@@ -39,28 +39,6 @@ def data_calibration_poolpaper(dfs, path=""):
             add += [(0., 0.)] # with resistant bacteria
         x0_bnds_all += add
     x0_bnds_all = tuple(x0_bnds_all)
-    '''
-    param_ode_bnds = tuple(
-        [(.2, .7), (.2, .7)] + # mu_opt
-        #[(0.55, 0.55), (0.33, 0.33)] + # mu_opt
-        #[(3.83, 3.83), (7.02, 7.02), (4.84, 4.84), (5.81, 5.81)] +  # pH_ls_min, pH_ls_opt, pH_lm_min, pH_lm_opt
-        [(1., 3.5), (6., 9.), (9., 14.),      # pH_ls_min, pH_ls_opt, pH_ls_max
-         (1., 3.5), (6., 8.), (9., 14.)] +    # pH_lm_min, pH_lm_opt, pH_lm_max
-        #[(0.1, 10.) for _ in range(2)] +  # omega
-        [(0., 0.) for _ in range(2)] +  # omega
-        [(0.5, 2.)] + [(3000., 5000.)] + [(0.3, 1.5)] + # omegaT_exp + ki_T_inhib + n
-        [(8.0, 9.5)] +          # N_max_exp
-        #[(8.2855, 8.2855)] +          # N_max_exp
-        [(.1, 1.)]  + # kappa_T
-        #[(0.6, 0.6)]  + # kappa_T
-        #[(0., 0.)] + # kappa_T
-        [(-11, -9)] + [(-9.5, -8.)] + # kappa_LA ls23K
-        [(-11, -9)] + [(-9.5, -8.)] + # kappa_LA lsCTC494
-        [(-10., -9.)] + # kappa_LA lm
-        [(0., 0.)] # q_acid
-        #[(10**(-3), 6*10**(-3))] # q_acid
-    )
-    '''
     param_ode_bnds = tuple(
             [(.2, 1.) for _ in range (3)] + # mu_opt
             [(1., 3.5), (6., 8.), (9., 14.),

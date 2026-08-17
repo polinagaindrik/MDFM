@@ -270,6 +270,7 @@ def run_profile_likelihood_all(
         )
 
     results = {idx: {} for idx in free_idx}
+    progress = _make_progress_printer(len(all_tasks), step_pct=10)
     if n_jobs and n_jobs > 1:
         with mp.Pool(
             processes=n_jobs,
@@ -278,14 +279,15 @@ def run_profile_likelihood_all(
         ) as pool:
             for idx, val, best_cost, full_p in pool.imap_unordered(_pool_task, all_tasks):
                 results[idx][val] = (best_cost, full_p)
+                progress()
     else:
         for idx, val in all_tasks:
-            print(f"Profiling param[{idx}] at value {val:.6g} ...")
             best_cost, full_p = _optimize_one_point(
                 idx, val, param_opt, calibr_setup, jac_spasity, method, per_point_workers
             )
             print(f"  param[{idx}] = {val:.6g}  ->  cost = {best_cost:.6g}")
             results[idx][val] = (best_cost, full_p)
+            progress()
 
     rows = []
     ci_results = {}
@@ -297,7 +299,12 @@ def run_profile_likelihood_all(
         )
         ci_results[idx] = (lo_ci, hi_ci)
         for g, c in zip(grid, profile_cost):
-            rows.append({"param_index": idx, "param_value": g, "cost": c})
+            full_p = results[idx][g][1]  # full re-optimized parameter vector at this point
+            row = {"param_index": idx, "param_value": g, "cost": c}
+            for j, pv in enumerate(full_p):
+                col_name = param_names[j] if param_names is not None and j < len(param_names) else f"p{j}"
+                row[col_name] = pv
+            rows.append(row)
 
     df = pd.DataFrame(rows)
     df.to_csv(out_csv, index=False)
@@ -315,6 +322,19 @@ def run_profile_likelihood_all(
 
     return df, ci_results
 
+def _make_progress_printer(total, step_pct=10):
+    """Returns a callback that prints once every step_pct% of `total` completed tasks."""
+    state = {"done": 0, "next_threshold": step_pct}
+
+    def _report():
+        state["done"] += 1
+        pct = 100 * state["done"] / total
+        if pct >= state["next_threshold"]:
+            print(f"  progress: {state['done']}/{total} ({pct:.0f}%)", flush=True)
+            while state["next_threshold"] <= pct:
+                state["next_threshold"] += step_pct
+
+    return _report
 
 # ----------------------------------------------------------------------
 # Plotting
@@ -424,24 +444,6 @@ if __name__ == "__main__":
             'data_array': data_array,
             'x0': x0_vals
     }
-    x0_bnds_all = []
-    for exp in calibr_presetup["exps"]:
-        if exp == 'V01' or exp == 'V04': # ls23K
-            add = [(dfs.T['x_Ls_State_00'][f'{exp}_01_poolpaper'] - 0.2*dfs.T['x_Ls_State_00'][f'{exp}_01_poolpaper'],
-            dfs.T['x_Ls_State_00'][f'{exp}_01_poolpaper'] + 0.2*dfs.T['x_Ls_State_00'][f'{exp}_01_poolpaper']), (0., 0.)]
-        else: # ls494 
-            add = [(0., 0.),
-            (dfs.T['x_Ls_State_00'][f'{exp}_01_poolpaper'] - 0.5*dfs.T['x_Ls_State_00'][f'{exp}_01_poolpaper'],
-            dfs.T['x_Ls_State_00'][f'{exp}_01_poolpaper'] + 0.5*dfs.T['x_Ls_State_00'][f'{exp}_01_poolpaper'])]
-        #and lm
-        add += [(dfs.T['x_Lm_State_00'][f'{exp}_01_poolpaper'] - 0.3*dfs.T['x_Lm_State_00'][f'{exp}_01_poolpaper'], dfs.T['x_Lm_State_00'][f'{exp}_01_poolpaper'] + 0.3*dfs.T['x_Lm_State_00'][f'{exp}_01_poolpaper'])] # lm_sens
-        if exp == 'V05':
-            add += [(0., 0.1*dfs.T['x_Lm_State_00'][f'{exp}_01_poolpaper']) # with resistant bacteria
-            ]
-        else: 
-            add += [(0., 0.)] # with resistant bacteria
-        x0_bnds_all += add
-    x0_bnds_all = tuple(x0_bnds_all)
     param_ode_bnds = tuple(
             [(.2, 1.) for _ in range (3)] + # mu_opt
             [(1., 3.5), (6., 8.), (9., 14.),
@@ -453,13 +455,32 @@ if __name__ == "__main__":
             [(.1, 10)] + [(1., 100.)] +   # kappa_LA ls23K
             [(.1, 10)] + [(1., 100.)] +   # kappa_LA lsCTC494
             [(.1, 10)] + [(1., 100.)]     # kappa_LA lm
-        )  
+        )
+    #param_ode_bnds = [(p, p) for p in param_ode]
+    #param_ode_bnds[3*4:3*4+3] = [(0.5, 10.), (10., 10000.), (0.1, 3.)]
+    #param_ode_bnds = tuple(param_ode_bnds)
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = param_ode_bnds
+
+    ode_param_names = [
+        "mu_ls23K_opt", "mu_lsCTC494_opt", "mu_lm_opt",
+        "pH_ls23K_min", "pH_ls23K_opt", "pH_ls23K_max",
+        "pH_lsCTC494_min", "pH_lsCTC494_opt", "pH_lsCTC494_max",
+        "pH_lm_min", "pH_lm_opt", "pH_lm_max",
+        "omegaT_lm", "k_T_inhib", "n",
+        "N_ls23K_texp", "N_lsCTC494_texp", "N_lm_texp",
+        "kappa_T_0",
+        "kappa_LA_ls23K_exp", "kappa_LA_ls23K_2_exp",
+        "kappa_LA_lsCTC494_exp", "kappa_LA_lsCTC494_2_exp",
+        "kappa_LA_lm_exp", "kappa_LA_lm_2_exp",
+    ]
+
     df, cis = run_profile_likelihood_all(
          param_ode, calibr_setup,
-         span=0.3, n_points=3, method="local",
-         n_jobs=8,              # parallelize across grid points (safe for method='local')
-         out_csv="pool_paper_casestudy/out/profile_likelihood_results.csv",
-         plot_path="pool_paper_casestudy/out/profile_likelihood.png",
+         span=0.9, n_points=12, method="local",
+         n_jobs=20,              # parallelize across grid points (safe for method='local')
+         per_point_workers=20,
+         out_csv=path2+"profile_likelihood_results.csv",
+         plot_path=path2+"profile_likelihood.png",
+        param_names=ode_param_names,
     )

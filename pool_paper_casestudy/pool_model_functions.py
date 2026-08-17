@@ -453,7 +453,7 @@ def get_param_dfs(path, path2):
     return param_opt, dfs, df_optim2
 
 ######
-def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_indexes=[3, 4 ,0, 1, 2]):
+def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_indexes=[0, 1, 2, 3, 4]):
     n_cl = 4
     names = ['Ls23K', 'LsCTC494', 'LmCTC1034', 'Ls23K-LmCTC1034', 'LsCTC494-LmCTC1034']
     n_exps = len(names)
@@ -467,7 +467,8 @@ def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_index
 
     days, [obs_x] = extract_observables_from_df([dfs])
     t_model = np.linspace(days[0], days[-1]+5, 100)
-
+    obs_model = np.zeros((len(exps), np.shape(obs_x)[0], len(t_model)))
+    obs_model_rmse = np.zeros(np.shape(obs_x))
     # exp_indexes = [3, 4 ,0, 1, 2]
     lbls = ['Ls-23K','Ls-CTC494',  'Lm-CTC1034', 'Lactic Acid', 'pH']
     mrkrs = ['o', 'o',  'o', '^', 'x']
@@ -476,8 +477,7 @@ def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_index
     clr_indexes = [[0, 3, 4], [1, 3, 4], [2, 3, 4], [0, 2, 3, 4], [1, 2, 3, 4]]
     obs_count_indexes = [[0], [0], [1], [0, 1], [0, 1]]
     subfigures = [r'\textbf{A}', r'\textbf{B}', r'\textbf{C}', r'\textbf{D}', r'\textbf{E}']
-
-    for i in exp_indexes:
+    for j, i in enumerate(exp_indexes):
         index = clr_indexes[i]
         clrs_exp = [clrs[ind] for ind in index]
         lbls_exp = [lbls[ind] for ind in index]
@@ -491,15 +491,18 @@ def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_index
         pH_series = np.array([obs_x[i][-1], days]).T
         if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
             x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode_new, x0, [pH_series, n_cl])
+            x_sol_rmse  = fm.mdl.model_ODE_solution(model, days, param_ode_new, x0, [pH_series, n_cl])
         else:
             x_sol = fm.mdl.model_ODE_solution(model, t_model, param_ode, x0, [pH_series, n_cl])
-        obs_model = observable(t_model, x_sol)
+            x_sol_rmse  = fm.mdl.model_ODE_solution(model, days, param_ode, x0, [pH_series, n_cl])
+        obs_model[i] = observable(t_model, x_sol)
+        obs_model_rmse[i] = observable(days, x_sol_rmse)
 
         for k in range(len(index)-2):
-            ax.plot(t_model, obs_model[obs_count_ind_exp[k]], label='Ls-CTC494', color=clrs_exp[k], linewidth=3, linestyle=lst_exp[k])
+            ax.plot(t_model, obs_model[i][obs_count_ind_exp[k]], label='Ls-CTC494', color=clrs_exp[k], linewidth=3, linestyle=lst_exp[k])
             ax.scatter(days, obs_x[i][obs_count_ind_exp[k]], marker=mrkrs_exp[k], color=clrs_exp[k])
         
-        ax2.plot(t_model, obs_model[3], linewidth=3, color=clrs_exp[k+1], linestyle=lst_exp[k+1])
+        ax2.plot(t_model, obs_model[i][3], linewidth=3, color=clrs_exp[k+1], linestyle=lst_exp[k+1])
         ax2.scatter(days, obs_x[i][3], color=clrs_exp[k+1], marker=mrkrs_exp[k+1])
         ax2.scatter(days, obs_x[i][4], color=clrs_exp[k+2], marker=mrkrs_exp[k+2])
 
@@ -511,24 +514,34 @@ def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_index
         legend_elements = [
             Line2D([0], [0], color=clrs_exp[j], label=lbls_exp[j], marker=mrkrs_exp[j], linestyle=lst_exp[j])
             for j in range (len(index))]
-        ax.text(*coord_text, subfigures[i], transform = ax.transAxes)
+        ax.text(*coord_text, subfigures[j], transform = ax.transAxes)
         legend_box = [0.48, 0.65]
         if exps[i] == 'V03':
-            legend_box = [1., 0.5]
+            legend_box = [1., 0.45]
+        elif exps[i] == 'V05':
+            legend_box = [1.0, 0.35]
         else:
-            legend_box = [1.0, 0.3]
-        plt.legend(loc='center right', bbox_to_anchor=legend_box, handles=legend_elements, ncol=1, fontsize=13, handlelength=2.4)
-        plt.savefig(path + f"Figures-pool_model_real_data_exp_{names[i]}"+add_name+".png", bbox_inches="tight")
+            legend_box = [1.0, 0.2]
+        plt.legend(loc='center right', bbox_to_anchor=legend_box, handles=legend_elements, ncol=1, fontsize=15, handlelength=2.4)
+        plt.savefig(path + f"Figures-pool_model_real_data_exp_{names[i]}"+add_name+".pdf", bbox_inches="tight")
         plt.close(fig)
 
         fig, ax = plt.subplots()
-        ax.plot(t_model, obs_model[2], label='Bacteriocin', linestyle='-.', color=colors_all['T'])
+        ax.plot(t_model, obs_model[i][2], label='Bacteriocin', linestyle='-.', color=colors_all['T'])
         ax.scatter(days, obs_x[i][2], marker='X', color=colors_all['T'])
         fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Bacteriocin [AU/mL]')
-        ax.set_xlim(-0.05, np.max(t_model))
-        legend_elements = [Line2D([0], [0], color=colors_all['T'], label='Bacteriocin', marker='X', linestyle='-.')]
-        legend_box = [0.48, 0.75]
-        plt.legend(handles=legend_elements, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
+        ax.set_xlim(-0.05, np.max(t_model)-3)
+        #legend_elements = [Line2D([0], [0], color=colors_all['T'], label='Bacteriocin', marker='X', linestyle='-.')]
+        legend_elements = [Line2D([0], [0], color=colors_all['T'], label='Model', marker='', linestyle='-.'),
+        Line2D([0], [0], color=colors_all['T'], label='Experimental data', marker='X', linestyle='')
+        ]
+        legend_box = [0.5, 0.4]
+        plt.legend(handles=legend_elements, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure, fontsize=15, handlelength=2.8)
         ax.text(*coord_text, r'\textbf{F}', transform = ax.transAxes)
-        plt.savefig(path + f"Figures-pool_model_real_data_BAC_{names[i]}"+add_name+".png", bbox_inches="tight")
+        plt.savefig(path + f"Figures-pool_model_real_data_BAC_{names[i]}"+add_name+".pdf", bbox_inches="tight")
         plt.close(fig)
+
+    #for k in range(5):
+    #    rmse = np.sqrt(np.mean((obs_x[:, k, :]-obs_model_rmse[:, k, :])**2))
+    #    print(f"RMSE for {lbls[k]}: {rmse:.3f}")
+    #print('\n')

@@ -73,7 +73,9 @@ if __name__ == "__main__":
     # Get params from df (for interrupted exps)
     param_opt, dfs_saved, df_optim2 = get_param_dfs(path, path2)
     dfs = dfs_saved
-    n_exps_saved = len(names)
+    #n_exps_saved = len(names)
+    exps_saved = sorted(list(set([s.split("_")[0] for s in dfs_saved.columns])))
+    n_exps_saved = len(exps_saved)
 
     ## Get params from json (for sequential exps)
     #_, dfs_saved, _ = get_param_dfs(path, path2)
@@ -94,8 +96,10 @@ if __name__ == "__main__":
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     n_exps = len(exps)
 
+    n_exps_estim = n_exps # =n_exps only for Lm+Ls23K, for others =n_exps_saved
+
     data_array = extract_observables_from_df([dfs])
-    x0_saved = param_opt[:n_cl*n_exps_saved]
+    x0_saved = param_opt[:n_cl*n_exps_estim]
     x0_vals = param_opt[:n_cl*n_exps]
     model = ode_model_coculture3
     calibr_setup = {
@@ -108,11 +112,12 @@ if __name__ == "__main__":
             'data_array': data_array,
             'x0': x0_vals
     }
-    param_ode = param_opt[n_cl*n_exps_saved:]
-    param_loc = minimize(cost, param_ode, args=(calibr_setup, None), method='L-BFGS-B', tol=1e-7, options={'maxiter': 200, 'disp': True}).x
+    param_ode = param_opt[n_cl* n_exps_estim:]
+    param_loc = minimize(cost, param_ode, args=(calibr_setup, None), method='L-BFGS-B', tol=1e-8, options={'maxiter': 250, 'disp': True}).x
     #param_loc[-1] = 0. # as we set kappa_LA_lsCTC494_2 = 0 so it does not decompose LA
 
-    param_to_save = np.concatenate([x0_saved, param_loc])
+    #param_to_save = np.concatenate([x0_saved, param_loc]) # for all other exps
+    param_to_save = np.concatenate([x0_saved[:n_cl], np.zeros((n_cl)), x0_saved[n_cl:n_cl*n_exps_saved],  np.zeros((n_cl)), param_loc]) # for Lm+Ls23K
     fm.output.json_dump({"param_ode": param_to_save.astype(list)}, "Result_calibration_local.json", dir=path2)
     print("Locally optimized parameters:", param_loc)
 
@@ -120,13 +125,13 @@ if __name__ == "__main__":
     param_ode = list(param_loc)
     param_ode_new = np.copy(param_ode)
     print(param_ode_new, len(param_ode_new))
-    for i in range (len(exps)):
-        data = dfs.filter(like=f'V{i+1:02d}')
+    for i, exp in enumerate(exps):
+        data = dfs.filter(like=exp)
         #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
-        if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
+        if exp != 'LsCTC494-Lm' and exp != 'V05':
             param_ode_new[4*3+3+3] = 0.
             plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path2, add_name=f'_estim_realdata_{names[i]}_localopt')
         else:
             plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path2, add_name=f'_estim_realdata_{names[i]}_localopt')
     
-    plot_cases_separately(np.concatenate([x0_saved, param_loc]), dfs_saved, model, path=path2, add_name='_localopt')
+    plot_cases_separately(np.concatenate([x0_saved[:n_cl], np.zeros((n_cl)), x0_saved[n_cl:n_cl*n_exps_saved],  np.zeros((n_cl)), param_ode]) , dfs_saved, model, path=path2, add_name='_localopt')

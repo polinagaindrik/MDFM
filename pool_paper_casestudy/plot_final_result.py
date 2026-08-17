@@ -30,6 +30,9 @@ if __name__ == "__main__":
     param_opt = fm.output.read_from_json('Result_calibration_mono_local.json', dir=path2)["param_ode"]
     plot_cases_separately(param_opt, dfs_saved, model, path=path2, add_name='_localopt_mono', exp_indexes=[0, 1, 2])
 
+    # 3 exps (Lm+Ls23K) results:
+    param_opt = fm.output.read_from_json('Result_calibration_3exps_monoco_local.json', dir=path2)["param_ode"]
+    plot_cases_separately(param_opt, dfs_saved, model, path=path2, add_name='_localopt_monoco_3exps', exp_indexes=[0, 2, 3])
 
     # All 5 exps together 
     param_opt = fm.output.read_from_json('Result_calibration_5exps_local.json', dir=path2)["param_ode"]

@@ -337,7 +337,8 @@ def ode_model_coculture3(t, x, param, x0, ode_args):
     ) = param
 
     (pH_cond, n_cl,) = ode_args
-    pH = pH_func(t, pH_cond)
+    #pH = pH_func(t, pH_cond)
+    pH = interpolate_series(t, pH_cond)
 
     mu_ls23K = mu_ls23K_opt * (pH - pH_ls23K_min) * (pH_ls23K_max - pH) / ((pH_ls23K_opt - pH_ls23K_min) * (pH_ls23K_max - pH_ls23K_min))
     mu_lsCTC494 = mu_lsCTC494_opt * (pH - pH_lsCTC494_min) * (pH_lsCTC494_max - pH) / ((pH_lsCTC494_opt - pH_lsCTC494_min) * (pH_lsCTC494_max - pH_lsCTC494_min))
@@ -377,6 +378,33 @@ def pH_func(t, pH_series):
     diff = time_arr - t
     return pH_arr[np.argmin(np.abs(diff))]
 
+
+def interpolate_series(t, pH_series):
+    """
+    Linearly interpolate a value series at given time(s).
+    
+    Parameters
+    ----------
+    t : float or array-like
+        Time point(s) at which to evaluate the series.
+    pH_series : array-like, shape (n_times, 2)
+        Rows of [value, t], e.g. pH_series = [[pH1, t1], [pH2, t2], ...].
+        Does not need to be pre-sorted by time.
+
+    Returns
+    -------
+    float or np.ndarray
+        Interpolated value(s) at t
+    """
+    series = np.asarray(pH_series, dtype=float)
+    values = series[:, 0]
+    times = series[:, 1]
+
+    # sort by time in case entries aren't ordered
+    order = np.argsort(times)
+    times_sorted = times[order]
+    values_sorted = values[order]
+    return np.interp(t, times_sorted, values_sorted)
 
 ########### pH(LA) # function
 def pH_LA_dependence(days, LA_data, pH_data, add_name='', path=''):

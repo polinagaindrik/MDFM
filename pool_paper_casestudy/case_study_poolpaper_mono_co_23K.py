@@ -55,7 +55,10 @@ def data_calibration_poolpaper(dfs, path=""):
     calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds
     print("Start optimization...")
     param_opt = calculate_model_params(cost, calibr_setup)[0]
-    fm.output.json_dump({"param_ode": param_opt.astype(list)}, "Result_calibration.json", dir=path)
+    x0 = param_opt[:n_cl*len(exps_calibr)]
+    param_ode = param_opt[n_cl*len(exps_calibr):]
+    param_opt_final = np.concatenate([x0[:n_cl], np.zeros((n_cl)), x0[n_cl:n_cl*len(exps_calibr)],  np.zeros((n_cl)), param_ode])
+    fm.output.json_dump({"param_ode": param_opt_final.astype(list)}, "Result_calibration.json", dir=path)
     return param_opt, calibr_setup
 
 

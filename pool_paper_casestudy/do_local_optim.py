@@ -96,7 +96,7 @@ if __name__ == "__main__":
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     n_exps = len(exps)
 
-    n_exps_estim = n_exps # =n_exps only for Lm+Ls23K, for others =n_exps_saved
+    n_exps_estim = n_exps_saved #  =n_exps only for Lm+Ls23K (old ver), for others =n_exps_saved
 
     data_array = extract_observables_from_df([dfs])
     x0_saved = param_opt[:n_cl*n_exps_estim]
@@ -124,14 +124,4 @@ if __name__ == "__main__":
     x0_vals = calibr_setup['x0']
     param_ode = list(param_loc)
     param_ode_new = np.copy(param_ode)
-    print(param_ode_new, len(param_ode_new))
-    for i, exp in enumerate(exps):
-        data = dfs.filter(like=exp)
-        #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
-        if exp != 'LsCTC494-Lm' and exp != 'V05':
-            param_ode_new[4*3+3+3] = 0.
-            plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path2, add_name=f'_estim_realdata_{names[i]}_localopt')
-        else:
-            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path2, add_name=f'_estim_realdata_{names[i]}_localopt')
-    
-    plot_cases_separately(np.concatenate([x0_saved[:n_cl], np.zeros((n_cl)), x0_saved[n_cl:n_cl*n_exps_saved],  np.zeros((n_cl)), param_ode]) , dfs_saved, model, path=path2, add_name='_localopt')
+    plot_cases_separately(np.concatenate([x0_saved, param_ode]) , dfs_saved, model, path=path2, add_name='_localopt')

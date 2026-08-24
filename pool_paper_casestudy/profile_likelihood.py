@@ -67,9 +67,14 @@ def free_param_indices(param_bnds):
 
 
 def _cost_fixed_param(free_params, fixed_index, fixed_value, calibr_setup, jac_spasity):
-    """cost() with parameter `fixed_index` clamped to `fixed_value`, rest free."""
     full_params = np.insert(np.asarray(free_params, dtype=float), fixed_index, fixed_value)
-    return cost(full_params, calibr_setup, jac_spasity)
+    try:
+        c = cost(full_params, calibr_setup, jac_spasity)
+        if not np.isfinite(c):
+            return 1e3  # finite penalty instead of inf/nan/overflow
+        return c
+    except Exception:
+        return 1e3  # ODE solver failure at this parameter value -> penalize, don't crash
 
 
 def _build_grid(param_opt, param_index, param_bnds, span, n_points):
@@ -148,6 +153,7 @@ def _pool_task(task):
     )
     print(f"  param[{param_index}] = {val:.6g}  ->  cost = {best_cost:.6g}", flush=True)
     return param_index, val, best_cost, full_p
+
 
 
 # ----------------------------------------------------------------------
@@ -384,7 +390,18 @@ def plot_profile_likelihood(
 
         ax.plot(x, y, "o-", color="#4E89B1", lw=1.5, ms=4)
         ax.axvline(param_opt[idx], color="#D06062", ls="--", lw=1.2, label="estimate")
-        ax.axhline(cost_opt + threshold, color="gray", ls=":", lw=1.2, label=f"{int(confidence_level*100)}% threshold")
+
+        # zoom to the data, not the threshold line
+        y_lo, y_hi = np.min(y), np.max(y)
+        pad = 0.1 * max(y_hi - y_lo, 1e-8)
+        ax.set_ylim(y_lo - pad, y_hi + pad)
+
+        thresh_y = cost_opt + threshold
+        if thresh_y <= y_hi + pad:
+            ax.axhline(thresh_y, color="gray", ls=":", lw=1.2, label=f"{int(confidence_level*100)}% threshold")
+        else:
+            ax.text(0.98, 0.95, "threshold off-scale", transform=ax.transAxes,
+                    ha="right", va="top", fontsize=7, color="gray")
 
         if ci_results is not None and idx in ci_results:
             lo_ci, hi_ci = ci_results[idx]
@@ -478,7 +495,7 @@ if __name__ == "__main__":
     df, cis = run_profile_likelihood_all(
          param_ode, calibr_setup,
          span=0.9, n_points=12, method="local",
-         n_jobs=20,              # parallelize across grid points (safe for method='local')
+         n_jobs=1,              # parallelize across grid points (safe for method='local')
          per_point_workers=20,
          out_csv=path2+"profile_likelihood_results.csv",
          plot_path=path2+"profile_likelihood.png",

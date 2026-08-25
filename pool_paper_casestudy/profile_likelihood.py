@@ -92,22 +92,55 @@ def _build_grid(param_opt, param_index, param_bnds, span, n_points):
     return np.sort(np.unique(np.concatenate([grid, [p_opt_val]])))
 
 
-def _optimize_one_point(param_index, val, param_opt, calibr_setup, jac_spasity, method, per_point_workers):
-    """Re-optimize all free parameters except `param_index` (fixed at `val`)."""
+def _optimize_one_point(
+    param_index, val, param_opt, calibr_setup, jac_spasity, method, per_point_workers,
+    n_restarts=1, jitter_frac=0.05, rng=None,
+):
+    """
+    Re-optimize all free parameters except `param_index` (fixed at `val`).
+
+    n_restarts : number of inner optimizations to run from slightly different
+                 starting points (only applies to method='local'); the best
+                 (lowest-cost) result across restarts is kept. Restart 0 always
+                 uses the exact warm start (param_opt); restarts 1..n-1 use a
+                 random jitter around it. Guards against reporting a cost that's
+                 only high because a single deterministic L-BFGS-B run got stuck.
+    jitter_frac : relative size of the random perturbation applied to each free
+                 parameter's starting value for restarts > 0 (clipped to bounds).
+    rng         : np.random.Generator; a fresh default one is created if None
+                 (each worker process should get its own via the pool initializer,
+                 not share one across processes).
+    """
     free_idx = [j for j in range(len(param_opt)) if j != param_index]
     free_bnds = [calibr_setup["param_bnds"][j] for j in free_idx]
     x0_free = param_opt[free_idx]
 
     if method == "local":
-        res = minimize(
-            _cost_fixed_param,
-            x0_free,
-            args=(param_index, val, calibr_setup, jac_spasity),
-            method="L-BFGS-B",
-            bounds=free_bnds,
-            options={"maxiter": 200},
-        )
-        best_free, best_cost = res.x, res.fun
+        if rng is None:
+            rng = np.random.default_rng()
+
+        best_free, best_cost = None, np.inf
+        for r in range(max(1, n_restarts)):
+            if r == 0:
+                x0_r = x0_free
+            else:
+                lo_arr = np.array([b[0] for b in free_bnds])
+                hi_arr = np.array([b[1] for b in free_bnds])
+                span = hi_arr - lo_arr
+                jitter = rng.normal(0.0, jitter_frac, size=x0_free.shape) * np.where(span > 0, span, 1.0)
+                x0_r = np.clip(x0_free + jitter, lo_arr, hi_arr)
+
+            res = minimize(
+                _cost_fixed_param,
+                x0_r,
+                args=(param_index, val, calibr_setup, jac_spasity),
+                method="L-BFGS-B",
+                bounds=free_bnds,
+                options={"maxiter": 200},
+            )
+            if res.fun < best_cost:
+                best_free, best_cost = res.x, res.fun
+
     elif method == "global":
         setup_local = dict(calibr_setup)
         setup_local["workers"] = per_point_workers
@@ -124,7 +157,6 @@ def _optimize_one_point(param_index, val, param_opt, calibr_setup, jac_spasity, 
     full_p = np.insert(best_free, param_index, val)
     return best_cost, full_p
 
-
 # ----------------------------------------------------------------------
 # Multiprocessing across grid points
 # ----------------------------------------------------------------------
@@ -135,25 +167,33 @@ _G_CALIBR_SETUP = None
 _G_JAC = None
 _G_METHOD = None
 _G_PER_POINT_WORKERS = None
+_G_N_RESTARTS = None
+_G_JITTER_FRAC = None
+_G_RNG = None
 
 
-def _pool_init(param_opt, calibr_setup, jac_spasity, method, per_point_workers):
+def _pool_init(param_opt, calibr_setup, jac_spasity, method, per_point_workers, n_restarts=1, jitter_frac=0.05):
     global _G_PARAM_OPT, _G_CALIBR_SETUP, _G_JAC, _G_METHOD, _G_PER_POINT_WORKERS
+    global _G_N_RESTARTS, _G_JITTER_FRAC, _G_RNG
     _G_PARAM_OPT = param_opt
     _G_CALIBR_SETUP = calibr_setup
     _G_JAC = jac_spasity
     _G_METHOD = method
     _G_PER_POINT_WORKERS = per_point_workers
+    _G_N_RESTARTS = n_restarts
+    _G_JITTER_FRAC = jitter_frac
+    # seed differently per worker (PID) so restarts aren't identical across processes
+    _G_RNG = np.random.default_rng(os.getpid())
 
 
 def _pool_task(task):
     param_index, val = task
     best_cost, full_p = _optimize_one_point(
-        param_index, val, _G_PARAM_OPT, _G_CALIBR_SETUP, _G_JAC, _G_METHOD, _G_PER_POINT_WORKERS
+        param_index, val, _G_PARAM_OPT, _G_CALIBR_SETUP, _G_JAC, _G_METHOD, _G_PER_POINT_WORKERS,
+        n_restarts=_G_N_RESTARTS, jitter_frac=_G_JITTER_FRAC, rng=_G_RNG,
     )
     print(f"  param[{param_index}] = {val:.6g}  ->  cost = {best_cost:.6g}", flush=True)
     return param_index, val, best_cost, full_p
-
 
 
 # ----------------------------------------------------------------------
@@ -170,6 +210,8 @@ def profile_likelihood_for_param(
     jac_spasity=None,
     n_jobs=1,
     per_point_workers=1,
+    n_restarts=1,
+    jitter_frac=0.05,
 ):
     """
     Scan one parameter around its estimated value, re-optimizing all other
@@ -200,14 +242,16 @@ def profile_likelihood_for_param(
         with mp.Pool(
             processes=n_jobs,
             initializer=_pool_init,
-            initargs=(param_opt, calibr_setup, jac_spasity, method, per_point_workers),
+            initargs=(param_opt, calibr_setup, jac_spasity, method, per_point_workers, n_restarts, jitter_frac),
         ) as pool:
             for idx, val, best_cost, full_p in pool.imap_unordered(_pool_task, tasks):
                 results[val] = (best_cost, full_p)
     else:
+        rng = np.random.default_rng()
         for _, val in tasks:
             best_cost, full_p = _optimize_one_point(
-                param_index, val, param_opt, calibr_setup, jac_spasity, method, per_point_workers
+                param_index, val, param_opt, calibr_setup, jac_spasity, method, per_point_workers,
+                n_restarts=n_restarts, jitter_frac=jitter_frac, rng=rng,
             )
             print(f"  param[{param_index}] = {val:.6g}  ->  cost = {best_cost:.6g}")
             results[val] = (best_cost, full_p)
@@ -233,6 +277,53 @@ def confidence_interval_from_profile(grid, profile_cost, cost_opt, confidence_le
     return grid[below[0]], grid[below[-1]]
 
 
+def count_data_points(param, calibr_setup, jac_spasity=None):
+    """
+    Count the number of individual residual terms feeding into cost()'s `ll_x`
+    block (the real data residuals), by temporarily swapping in a counting
+    aggregation_func instead of cost_arithmetic_mean. Excludes the
+    regularization term (min(0, param)**2) from the count -- that's a
+    parameter-positivity penalty, not real data.
+    """
+    counting_setup = dict(calibr_setup)
+    counts = {}
+
+    def _counting_aggregation(J_vect):
+        ll_x = np.asarray(J_vect[0])
+        counts["n_data"] = int(np.size(ll_x[~np.isnan(ll_x)])) if ll_x.size else 0
+        # still return a real number so cost() doesn't error downstream
+        return np.nanmean([np.nanmean(Ji) for Ji in J_vect])
+
+    counting_setup["aggregation_func"] = _counting_aggregation
+    cost(param, counting_setup, jac_spasity)  # runs cost() only to trigger the count
+    return counts["n_data"]
+
+
+def estimate_profile_scale(param_opt, calibr_setup, cost_opt, n_free_params, jac_spasity=None):
+    """
+    Estimate the scale factor converting cost() (mean squared residual) into
+    an approximate -2*logL scale for the chi2 threshold, assuming i.i.d.
+    Gaussian residual noise:
+
+        cost_profile - cost_opt <= chi2.ppf(confidence_level, 1) * scale
+        sigma_hat^2 = cost_opt * n_data / (n_data - n_free_params)   (bias-corrected)
+        scale = sigma_hat^2 / n_data
+
+    Returns (scale, n_data, sigma_hat2). Raises if n_data <= n_free_params
+    (model over-parameterized relative to the data actually used in cost()).
+    """
+    n_data = count_data_points(param_opt, calibr_setup, jac_spasity)
+    dof_resid = n_data - n_free_params
+    if dof_resid <= 0:
+        raise ValueError(
+            f"n_data ({n_data}) <= n_free_params ({n_free_params}); can't estimate "
+            "residual variance -- model is over-parameterized relative to the data "
+            "actually used in cost()."
+        )
+    sigma_hat2 = cost_opt * n_data / dof_resid
+    scale = sigma_hat2 / n_data
+    return scale, n_data, sigma_hat2
+
 # ----------------------------------------------------------------------
 # Full run across all free parameters, with a single shared process pool
 # ----------------------------------------------------------------------
@@ -245,9 +336,11 @@ def run_profile_likelihood_all(
     n_points=15,
     method="local",
     confidence_level=0.95,
-    scale=1.0,
+    scale="auto",
     n_jobs=1,
     per_point_workers=1,
+    n_restarts=1,
+    jitter_frac=0.05,
     out_csv="profile_likelihood_results.csv",
     param_names=None,
     plot=True,
@@ -263,6 +356,12 @@ def run_profile_likelihood_all(
     param_opt = np.asarray(param_opt, dtype=float)
     cost_opt = cost(param_opt, calibr_setup, jac_spasity)
     free_idx = free_param_indices(calibr_setup["param_bnds"])
+
+    if scale == "auto":
+        scale, n_data, sigma_hat2 = estimate_profile_scale(
+            param_opt, calibr_setup, cost_opt, n_free_params=len(free_idx), jac_spasity=jac_spasity
+        )
+        print(f"Auto-estimated scale: n_data={n_data}, sigma_hat^2={sigma_hat2:.6g}, scale={scale:.6g}")
 
     grids = {idx: _build_grid(param_opt, idx, calibr_setup["param_bnds"], span, n_points) for idx in free_idx}
     all_tasks = [(idx, val) for idx in free_idx for val in grids[idx]]
@@ -281,15 +380,17 @@ def run_profile_likelihood_all(
         with mp.Pool(
             processes=n_jobs,
             initializer=_pool_init,
-            initargs=(param_opt, calibr_setup, jac_spasity, method, per_point_workers),
+            initargs=(param_opt, calibr_setup, jac_spasity, method, per_point_workers, n_restarts, jitter_frac),
         ) as pool:
             for idx, val, best_cost, full_p in pool.imap_unordered(_pool_task, all_tasks):
                 results[idx][val] = (best_cost, full_p)
                 progress()
     else:
+        rng = np.random.default_rng()
         for idx, val in all_tasks:
             best_cost, full_p = _optimize_one_point(
-                idx, val, param_opt, calibr_setup, jac_spasity, method, per_point_workers
+                idx, val, param_opt, calibr_setup, jac_spasity, method, per_point_workers,
+                n_restarts=n_restarts, jitter_frac=jitter_frac, rng=rng,
             )
             print(f"  param[{idx}] = {val:.6g}  ->  cost = {best_cost:.6g}")
             results[idx][val] = (best_cost, full_p)
@@ -440,7 +541,7 @@ if __name__ == "__main__":
     # and obtained param_opt in your run of do_local_optim.py /
     # case_study_poolpaper2.py.
     # --------------------------------------------------------------
-    path2 = "pool_paper_casestudy/out/all_together_final/"
+    path2 = "pool_paper_casestudy/out/lininter_final/"
     n_cl = 4
 
     result = fm.output.read_from_json("Result_calibration_5exps_local.json", dir="pool_paper_casestudy/out/all_together_final/")
@@ -462,16 +563,16 @@ if __name__ == "__main__":
             'x0': x0_vals
     }
     param_ode_bnds = tuple(
-            [(.2, 1.) for _ in range (3)] + # mu_opt
-            [(1., 3.5), (6., 8.), (9., 14.),
-             (1., 3.5), (6., 8.), (9., 14.),
-             (1., 3.5), (6., 8.), (9., 14.)] +  # pH_min, pH_opt, pH_max
-            [(0.5, 2.), (3000., 5000.), (0.3, 1.5)] + # omegaT_exp + ki_T_inhib + n  
-            [(8., 9.), (8., 9.), (8., 9.)]  + # N_max_exp
-            [(.1, 1.)] + # kappa_T
-            [(.1, 10)] + [(1., 100.)] +   # kappa_LA ls23K
-            [(.1, 10)] + [(1., 100.)] +   # kappa_LA lsCTC494
-            [(.1, 10)] + [(1., 100.)]     # kappa_LA lm
+            [(.1, 3.) for _ in range (3)] + # mu_opt
+            [(0.1, 5), (5., 9.), (6., 14.),
+             (0.1, 5), (5., 9.), (6., 14.),
+             (0.1, 5), (5., 9.), (6., 14.)] +  # pH_min, pH_opt, pH_max
+            [(0.5, 2.), (3000., 5000.), (0.1, 2.)] + # omegaT_exp + ki_T_inhib + n
+            [(5., 11.), (5., 11.), (5., 11.)]  + # N_max_exp
+            [(.01, 2.)] + # kappa_T
+            [(.1, 10)] + [(0.1, 100.)] +   # kappa_LA ls23K
+            [(.1, 10)] + [(0.1, 100.)] +   # kappa_LA lsCTC494
+            [(.1, 10)] + [(0.1, 100.)]     # kappa_LA lm
         )
     #param_ode_bnds = [(p, p) for p in param_ode]
     #param_ode_bnds[3*4:3*4+3] = [(0.5, 10.), (10., 10000.), (0.1, 3.)]
@@ -493,11 +594,11 @@ if __name__ == "__main__":
     ]
 
     df, cis = run_profile_likelihood_all(
-         param_ode, calibr_setup,
-         span=0.9, n_points=12, method="local",
-         n_jobs=1,              # parallelize across grid points (safe for method='local')
-         per_point_workers=20,
-         out_csv=path2+"profile_likelihood_results.csv",
-         plot_path=path2+"profile_likelihood.png",
+        param_ode, calibr_setup,
+        span=2., n_points=12, method="local",
+        n_jobs=23, per_point_workers=1,
+        n_restarts=3, jitter_frac=0.05,   # 3 tries per grid point, ~5% jitter
+        out_csv="pool_paper_casestudy/out/profile_likelihood_results.csv",
+        plot_path="pool_paper_casestudy/out/profile_likelihood.png",
         param_names=ode_param_names,
-    )
+)

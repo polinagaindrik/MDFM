@@ -119,11 +119,6 @@ When cost (sumgeommean) <= 2e-4  -> the result looks really good.
 Not good: strategy='rand1bin'/'best1exp', 2step global optimization, geom mean of all entries
 
 
-Now running:
-- manjaro: -
-- ikarus: 
-
-
 Discussion with Christian (04.06.2025):
 1. Introduce parameters for activation and inhibition, common form/parameter for all bacteria not separate for eah bacteria as it is rigt now.
         ? For inhibition term (1 - sign(a)) a/2
@@ -146,7 +141,7 @@ Discussion with Christian (04.06.2025):
         - alpha \propto T^{1/2}    
         - Model works if self-inhibition term is included 1 / (1+ \beta(T) n(t)/nmax).
           Terms comes from inibition of diff species of each other.
-        - \beta doesn't strongly depend on the temperature
+        - \beta doesn't strongly depend on the temperature 
         - \lambda strongly depend on T 
 
 4.  H. Banga Conformal Predicton - ??
@@ -154,12 +149,22 @@ Discussion with Christian (04.06.2025):
 5. To think about the paper based on the model. What to publish with what? Sections? Journals?
 
 Now running:
-ikarus: 0noise - 10 species V
-               - 12 species V (5500min = 3.8Tage, 5000steps)
-        20 noise - 10 species ...
-manjaro: 20 noise - 4 species V
-                    6 species V
-                    8 species V
-         30 noise - 4 species V
-                    6 species V
-                    8 species...
+ikarus: media: gen2+sel2 V
+                sel2+sel3 V
+                sel1+sel3 ...
+manjaro: media: gen3+sel3 V
+                sel1+sel2 ...
+
+Next: 
+      _ Repeat: n_sp = 8  noise = 0
+                n_sp = 10 noise = 0.1
+
+
+
+To do:
+- Check 10 sp 10 noise for identifiability.
+  Implement S matrix calculation for real model, generated data that I use for optimization.
+  Identifiability to estimate z given observable data.
+(if obs-good estim and x-bad => identifiability problem. if obs-bad estim => optimization problem.)
+
+- In Supplement: Workstation configurations + computational time for different model complexity.

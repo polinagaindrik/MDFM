@@ -28,8 +28,8 @@ def json_dump(calibr_result, filename, dir='', **kwargs):
     # Return the json output as stri
     with open(dir+filename, "w") as f:
         json.dump(calibr_result, f, **kwargs)
-
 # TODO convert read solution to the format it was before saving
+
 def read_from_json(filename, dir=''):
     f = open(dir + filename,)
     sol = json.load(f)

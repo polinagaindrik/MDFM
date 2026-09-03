@@ -613,16 +613,13 @@ if __name__ == "__main__":
     }
     param_ode_bnds = tuple(
             [(.2, 1.) for _ in range (3)] + # mu_opt
-            [(0.5, 2.), (3000., 5000.), (0.3, 1.5)] + # omegaT_exp + ki_T_inhib + n  
-            [(8., 9.), (8., 9.), (8., 9.)]  + # N_max_exp
-            [(.1, 1.)] + # kappa_T
-            [(.1, 10)] + [(1., 100.)] +   # kappa_LA ls23K
-            [(.1, 10)] + [(1., 100.)] +   # kappa_LA lsCTC494
-            [(.1, 10)] + [(1., 100.)]     # kappa_LA lm
+            [(0.8, 1.2), (3000., 5000.), (0.25, 0.45)] + # omegaT_exp + ki_T_inhib + n  
+            [(8.1, 8.6), (8.1, 8.6), (8.5, 9.2)]  + # N_max_exp
+            [(.2, 0.9)] + # kappa_T
+            [(0., 10)] + [(2., 5.)] +   # kappa_LA ls23K
+            [(0., 10)] + [(3., 10.)] +   # kappa_LA lsCTC494
+            [(-0.1, 1)] + [(-0.1, 1.)]     # kappa_LA lm
         )
-    #param_ode_bnds = [(p, p) for p in param_ode]
-    #param_ode_bnds[3*4:3*4+3] = [(0.5, 10.), (10., 10000.), (0.1, 3.)]
-    #param_ode_bnds = tuple(param_ode_bnds)
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = param_ode_bnds
 
@@ -650,11 +647,11 @@ if __name__ == "__main__":
     ]
 
     df, cis = run_profile_likelihood_all(
-         param_ode, calibr_setup,
-         span=0.9, n_points=9, method="local",
-         n_jobs=1,              # parallelize across grid points (safe for method='local')
-         per_point_workers=20,
-         out_csv=path2+"profile_likelihood_results.csv",
-         plot_path=path2+"profile_likelihood.png",
-         param_names=ode_param_names,
-)
+        param_ode, calibr_setup,
+        span=0.9, n_points=12, method="local",
+        n_jobs=22,              # <-- parallelize across grid points
+        per_point_workers=1,    # <-- irrelevant for method="local", leave at 1
+        out_csv=path2+"profile_likelihood_results.csv",
+        plot_path=path2+"profile_likelihood.png",
+        param_names=ode_param_names,
+    )

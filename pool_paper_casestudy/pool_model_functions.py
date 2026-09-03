@@ -365,6 +365,40 @@ def ode_model_coculture3(t, x, param, x0, ode_args):
         0.
     ]
 
+
+
+def ode_model_coculture_wopH(t, x, param, x0, ode_args):
+    #(x_ls23K0, x_lsCTC4940, x_lm_sen0, x_lm_res0, R0, T0, LA0, pH0) = x0
+    (x_ls23K, x_lsCTC494, x_lm_sen, x_lm_res, R, T, LA, pH) = x
+
+    (mu_ls23K, mu_lsCTC494, mu_lm,
+    omegaT_lm, k_T_inhib, n,
+    N_ls23K_texp, N_lsCTC494_texp, N_lm_texp,
+    kappa_T_0,
+    kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp,
+    ) = param
+
+    N_ls23K_t = 10**N_ls23K_texp
+    N_lsCTC494_t = 10**N_lsCTC494_texp
+    N_lm_t = 10**N_lm_texp
+    kappa_T = 10**(-5) * kappa_T_0
+
+    kappa_LA_ls23K, kappa_LA_ls23K_2, kappa_LA_lsCTC494, kappa_LA_lsCTC494_2, kappa_LA_lm, kappa_LA_lm_2 = 10**(-9) * np.array([kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp])
+    toxin_death = omegaT_lm * x_lm_sen * np.abs(T)**n / (k_T_inhib**n + np.abs(T)**n)
+    #kappa_LA_lm_2 = 0. # so it does not decompose LA
+
+    return [
+        mu_ls23K * R * x_ls23K,
+        mu_lsCTC494 * R * x_lsCTC494,
+        mu_lm * R * x_lm_sen - toxin_death,
+        mu_lm * R * x_lm_res,
+        -R*(mu_ls23K*x_ls23K*(1/N_ls23K_t) + mu_lsCTC494*x_lsCTC494*(1/N_lsCTC494_t) + mu_lm*(x_lm_sen +
+        x_lm_res)*(1/N_lm_t)),
+        kappa_T * x_lsCTC494 * R,  #  ??
+        (kappa_LA_ls23K + kappa_LA_ls23K_2*R)*x_ls23K + (kappa_LA_lsCTC494 + kappa_LA_lsCTC494_2*R)*x_lsCTC494 + (kappa_LA_lm + kappa_LA_lm_2*R)*(x_lm_sen+x_lm_res),
+        0.
+    ]
+
     
 def observable(t, x):
     n = np.array([x[0]+x[1], x[2]+x[3]])
@@ -491,7 +525,8 @@ def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_index
     param_ode = list(param_opt[n_cl*n_exps:])
     param_ode_new = np.copy(param_ode)
     #param_ode_new[2*4 + 2 + 3+1] = 0. #model1
-    param_ode_new[4*3+3+3] = 0. # model2
+   # param_ode_new[4*3+3+3] = 0. # model2
+    param_ode_new[3+3+3] = 0. # model wo pH
 
     days, [obs_x] = extract_observables_from_df([dfs])
     t_model = np.linspace(days[0], days[-1]+5, 100)

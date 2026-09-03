@@ -30,17 +30,6 @@ def get_param_array(param_bnds, num_points):
     return np.array([np.linspace(bnd[0], bnd[1], num_points) for bnd in param_bnds])
 
 
-def calculate_likelihood(ll_func, calibr_setup, dfs, param_opt, num_points=10):
-    param_arr = get_param_array(calibr_setup['param_bnds'], num_points)
-    ll_arr = np.zeros(np.shape(param_arr))
-    n_param = len(param_arr)
-    for i in range (n_param):
-        print(i)
-        for k, p_val in enumerate(param_arr[i]):
-            ll_arr[i, k] = ll_func(np.insert(param_opt, i, p_val), dfs, calibr_setup['model'], calibr_setup['P_matrix'], calibr_setup['s_x'])
-    return param_arr, ll_arr
-
-
 def calculate_profile_likelihood(func_ll, calibr_setup, dfs, num_points=10):
     param_arr = get_param_array(calibr_setup['param_bnds'], num_points)
     profll_arr = np.zeros(np.shape(param_arr))

@@ -15,7 +15,7 @@ rcParams['text.latex.preamble'] = r"\usepackage{bm} \usepackage{amsmath}"
 rcParams['lines.linewidth'] = 2.
 rcParams['lines.linestyle'] = 'solid' #'dashed'#
 rcParams['lines.markersize'] = 8
-rcParams['figure.figsize'] = (7, 5)
+rcParams['figure.figsize'] = (7.2, 4.5)
 rcParams['legend.framealpha'] = 0.
 rcParams['legend.handlelength'] = 2.
 
@@ -154,7 +154,7 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
     ax.text(*coord_text, '(b)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     ax.legend(handles=lines, ncol=2)
     #ax.legend(fontsize=13, framealpha=0., handlelength=2., bbox_to_anchor=(1.,1.))# bbox_to_anchor=(1., 0.1, 0.5, 0.5))#, bbox_to_anchor=(1, 1)) # 
-    plt.savefig(path+exp+add_name+'_ngs.png', bbox_inches='tight')
+    plt.savefig(path+exp+add_name+'_ngs.pdf', bbox_inches='tight')
     plt.close(fig)
 
 
@@ -183,16 +183,16 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
         #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         
         coord_text = (0.06, 0.92)
-        if med=='PC' or med=='media1' or med=='gen1':
+        if med=='PC' or med=='media1' or med[:-1]=='gen':
             ax.text(*coord_text, '(c)', fontsize=20,
                     horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-            ax.legend(handles=lines, bbox_to_anchor=(0.72, 0.52, 0.0, 0.0))
+            ax.legend(handles=lines, bbox_to_anchor=(0.72, 0.3))
         elif med =='MRS' or med =='media2' or med=='sel1':
             ax.text(*coord_text, '(d)', fontsize=20,
                     horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
             ax.legend(handles=lines)
         #ax.legend(bbox_to_anchor=(1., 1.))#, bbox_to_anchor=(1., 0.1, 0.5, 0.5)) #, bbox_to_anchor=(1, 1)
-        plt.savefig(path+exp+add_name+f'_{med}'+'_maldi.png', bbox_inches='tight')
+        plt.savefig(path+exp+add_name+f'_{med}'+'_maldi.pdf', bbox_inches='tight')
         plt.close(fig)
     
 
@@ -221,7 +221,7 @@ def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=['']
     fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'log CFU mL$^{-1}$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
     ax.legend()#, handles=lines)
-    plt.savefig(path+exp+add_name+'_mibi.png', bbox_inches='tight')
+    plt.savefig(path+exp+add_name+'_mibi.pdf', bbox_inches='tight')
     plt.close(fig)
 
 
@@ -243,23 +243,28 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
             ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
         lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'Species {int(bact_all[k].split("_")[-1])+1}'))
     ax.set_yscale('log')
-    ax.set_xlim(-0.25, np.max(days_meas)+0.3)
-    ax.set_ylim(np.min(obs_meas)*0.1, np.max(obs_meas)*2.5)
+    #ax.set_xlim(-0.25, np.max(days_meas)+0.3)
+    ax.set_xlim(0., np.max(days_meas)+0.3)
+    ax.set_ylim(np.min(obs_meas)*0.5, np.max(obs_meas)*2.5)
     if temp != 2.0:
-        ax.set_xlim(-0.25, 10.5)
-        ax.set_ylim(np.min(obs_meas)*0.5, np.max(obs_meas)*2.5)
+        #ax.set_xlim(-0.25, 10)
+        ax.set_xlim(0., 10)
+        ax.set_ylim(np.min(obs_meas)*0.6, np.max(obs_meas)*2.7)
     fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'log $x(t)$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
     #coord_text = (0.95, 0.07)
     coord_text = (0.06, 0.92)
     if temp == 2.0:
         text_lbl = '(a)'
+        legend_box = [0.2, 0.5]
     elif temp == 6.0:
         text_lbl = '(b)'
+        legend_box = [0.2, 0.5]
     else:
         text_lbl = '(c)'
+        legend_box = [0.317, 0.427]
     ax.text(*coord_text, text_lbl, fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-    ax.legend(ncol=len(bact_all)//4, handles=lines, bbox_to_anchor=[0.2, 0.53], bbox_transform=fig.transFigure)
+    ax.legend(ncol=len(bact_all)//4, handles=lines, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
     #ax.legend(handlelength=1.3, ncol=len(bact_all)//4)#, bbox_to_anchor=(1, 1))
-    plt.savefig(path+exp+add_name+'_realx.png', bbox_inches='tight')
+    plt.savefig(path+exp+add_name+'_realx.pdf', bbox_inches='tight')
     plt.close(fig)

@@ -9,12 +9,12 @@ import time
 if __name__ == "__main__":
     path = 'model_paper/out/'
     workers = -1
-    n_cl = 4
-    n_media = 2
-    relnoise = 0.2
+    n_cl = 6
+    n_media = 1
+    relnoise = 0.1
 
     add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
-    path_new = path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
+    path_new = path#path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
     #add_name = f'_{int(n_cl)}dim_{int(n_media)}media_gen'
     #path_new = path+f'{int (n_cl)}_dim_{n_media}media_gen/calibration/'
 
@@ -23,7 +23,7 @@ if __name__ == "__main__":
     ntr = 1
     x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=path)['x0'])[:len(temps), :n_cl]
     S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=path)
-    dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, x10=x10,
+    dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(fm.data.model_2media_exp_sel, n_cl, temps, ntr, S_matrix_setup, x10=x10,
                                                                               inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0.,
                                                                               path=path_new, add_name=add_name)
     (df_mibi, df_maldi, df_ngs) = dfs_calibr

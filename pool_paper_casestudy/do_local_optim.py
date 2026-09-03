@@ -74,13 +74,14 @@ if __name__ == "__main__":
     add_name = '_5exps'
     model = ode_model_coculture_wopH
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
+    add_name = '_5exps'
 
     ### Get params from df (for interrupted exps)
     ##param_opt, dfs_saved, df_optim2 = get_param_dfs(path, path2)
 
     ## Get params from json (for sequential exps)
-    _, dfs_saved, _ = get_param_dfs(path, path2)
-    param_opt = fm.output.read_from_json('Result_calibration.json', dir=path2)["param_ode"]
+    dfs_saved = pd.read_pickle(path2+'dataframe_poolpaper_all.pkl')
+    param_opt = fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path2)["param_ode"]
 
     #dfs = dfs_saved
     #n_exps_saved = len(names)
@@ -115,9 +116,8 @@ if __name__ == "__main__":
 
     data_array = extract_observables_from_df([dfs])
     x0_saved = param_opt[:n_cl*n_exps_estim]
-    #x0_vals = param_opt[:n_cl*n_exps]
-    x0_vals = np.concatenate([param_opt[:n_cl], param_opt[n_cl*2:n_cl*4]]) # only for Lm-Ls23K setup
-    model = ode_model_coculture3
+    x0_vals = param_opt[:n_cl*n_exps]
+    #x0_vals = np.concatenate([param_opt[:n_cl], param_opt[n_cl*2:n_cl*4]]) # only for Lm-Ls23K setup
     calibr_setup = {
             "model": model,
             "output_path": path2,
@@ -136,7 +136,7 @@ if __name__ == "__main__":
 
     param_to_save = np.concatenate([x0_saved, param_loc]) # for all other exps
     #param_to_save = np.concatenate([x0_saved[:n_cl], np.zeros((n_cl)), x0_saved[n_cl:n_cl*n_exps_saved],  np.zeros((n_cl)), param_loc]) # for Lm+Ls23K (old ver)
-    fm.output.json_dump({"param_ode": param_to_save.astype(list)}, "Result_calibration_local.json", dir=path2)
+    fm.output.json_dump({"param_ode": param_to_save.astype(list)}, f"Result_calibration{add_name}_local.json", dir=path2)
 
     param_ode = list(param_loc)
     plot_cases_separately(param_to_save , dfs_saved, model, path=path2, add_name='_localopt')

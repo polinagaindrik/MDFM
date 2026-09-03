@@ -1,80 +1,56 @@
-"""
-Profile likelihood for pool_paper_casestudy (MDFM repo)
-=========================================================
 
-Adapted to the `cost(param, calibr_setup, jac_spasity)` signature used in
-`pool_paper_casestudy/do_local_optim.py`, following the same fix-one-parameter /
-re-optimize-the-rest pattern already used in
-`fusion_model/parameter_estimation/likelihood_functions.py::calculate_profile_likelihood`
-(that generic version uses a different `ll_func(param, dfs, model, P_matrix, s_x)`
-signature and won't run as-is on this case study).
-
-Includes:
-  - multiprocessing across grid points (one worker process per (parameter, value) pair)
-  - plotting of the resulting profile-likelihood curves with the chi2-based
-    threshold and confidence interval
-
-CAVEAT ON THE CHI2 THRESHOLD
------------------------------
-`cost_arithmetic_mean` (the aggregation function used here) returns a *mean
-squared residual*, not `-2*logL`. The chi2-based confidence interval below is
-only statistically exact if `cost` is proportional to `-2*logL` (e.g.
-`n * MSE / sigma^2` under i.i.d. Gaussian noise). Treat `confidence_interval_from_profile`
-as a convenience utility -- calibrate `scale` (or pass your own threshold) if you
-need a rigorous interval. This mirrors what `likelihood_functions.py` already
-does elsewhere in the repo, so it is consistent with how the rest of the codebase
-reports these intervals, but it is an approximation, not a guarantee.
-
-CAVEAT ON MULTIPROCESSING
----------------------------
-`method="global"` already parallelizes *within* each grid point via
-`differential_evolution(..., workers=...)`. Also parallelizing *across* grid
-points (n_jobs > 1) on top of that oversubscribes your CPU cores. If you use
-`method="global"`, keep `n_jobs=1` (default) and control parallelism only
-through `per_point_workers`, or explicitly divide your cores between the two
-levels (n_jobs * per_point_workers <= number of cores).
-`method="local"` (L-BFGS-B) is single-threaded per point, so `n_jobs > 1` is
-the recommended way to parallelize it.
-
-Drop this file into `pool_paper_casestudy/` (same level as `do_local_optim.py`)
-so the relative imports resolve, or adjust the `sys.path` / import lines below.
-"""
-
-import os
-import sys
-
-sys.path.append(os.getcwd())
-import multiprocessing as mp
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from scipy.optimize import minimize
-from scipy.stats import chi2
-
-import fusion_model as fm
-from pool_paper_casestudy.pool_model_functions import *
-from pool_paper_casestudy.do_local_optim import cost  # your cost(param, calibr_setup, jac_spasity)
-
+import concurrent.futures
+import signal
+from contextlib import contextmanager
 
 # ----------------------------------------------------------------------
 # Helpers
 # ----------------------------------------------------------------------
+
+class _SolveTimeout(Exception):
+    pass
+
+@contextmanager
+def time_limit(seconds):
+    """Raises _SolveTimeout if the wrapped block runs longer than `seconds`.
+    Unix-only (uses SIGALRM); must run in the main thread of a process --
+    fine here since each multiprocessing.Pool worker runs its task in its
+    own process's main thread."""
+    if not seconds or seconds <= 0:
+        yield
+        return
+
+    def _handler(signum, frame):
+        raise _SolveTimeout(f"solve exceeded {seconds}s")
+
+    old_handler = signal.signal(signal.SIGALRM, _handler)
+    signal.alarm(int(np.ceil(seconds)))
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
 
 def free_param_indices(param_bnds):
     """Indices whose bounds are not fixed (lo == hi)."""
     return [j for j, (lo, hi) in enumerate(param_bnds) if hi > lo]
 
 
-def _cost_fixed_param(free_params, fixed_index, fixed_value, calibr_setup, jac_spasity):
+def _cost_fixed_param(free_params, fixed_index, fixed_value, calibr_setup, jac_spasity, solve_timeout=30):
+    """cost() with parameter `fixed_index` clamped to `fixed_value`, rest free.
+    Wraps the ODE solve in a hard wall-clock timeout (seconds) so a
+    pathological parameter combination can't hang the whole sweep."""
     full_params = np.insert(np.asarray(free_params, dtype=float), fixed_index, fixed_value)
     try:
-        c = cost(full_params, calibr_setup, jac_spasity)
+        with time_limit(solve_timeout):
+            c = cost(full_params, calibr_setup, jac_spasity)
         if not np.isfinite(c):
-            return 1e3  # finite penalty instead of inf/nan/overflow
+            return 1e3
         return c
+    except _SolveTimeout:
+        return 1e3
     except Exception:
-        return 1e3  # ODE solver failure at this parameter value -> penalize, don't crash
+        return 1e3
 
 
 def _build_grid(param_opt, param_index, param_bnds, span, n_points):
@@ -192,6 +168,22 @@ def _pool_task(task):
         param_index, val, _G_PARAM_OPT, _G_CALIBR_SETUP, _G_JAC, _G_METHOD, _G_PER_POINT_WORKERS,
         n_restarts=_G_N_RESTARTS, jitter_frac=_G_JITTER_FRAC, rng=_G_RNG,
     )
+    print(f"  param[{param_index}] = {val:.6g}  ->  cost = {best_cost:.6g}", flush=True)
+    return param_index, val, best_cost, full_p
+
+
+def _pool_task_with_timeout(task, timeout=60):
+    param_index, val = task
+    with concurrent.futures.ProcessPoolExecutor(max_workers=1) as ex:
+        future = ex.submit(
+            _optimize_one_point, param_index, val, _G_PARAM_OPT, _G_CALIBR_SETUP,
+            _G_JAC, _G_METHOD, _G_PER_POINT_WORKERS, _G_N_RESTARTS, _G_JITTER_FRAC, _G_RNG,
+        )
+        try:
+            best_cost, full_p = future.result(timeout=timeout)
+        except concurrent.futures.TimeoutError:
+            print(f"  TIMEOUT at param[{param_index}] = {val:.6g} (>{timeout}s) -- skipping", flush=True)
+            return param_index, val, np.nan, np.full_like(_G_PARAM_OPT, np.nan)
     print(f"  param[{param_index}] = {val:.6g}  ->  cost = {best_cost:.6g}", flush=True)
     return param_index, val, best_cost, full_p
 
@@ -534,18 +526,13 @@ def plot_profile_likelihood(
 
     return fig
 
-
 if __name__ == "__main__":
     # --------------------------------------------------------------
     # Example usage -- adapt to how you actually built calibr_setup
     # and obtained param_opt in your run of do_local_optim.py /
     # case_study_poolpaper2.py.
     # --------------------------------------------------------------
-<<<<<<< HEAD
     path2 = "pool_paper_casestudy/out/wo_pH_new/"
-=======
-    path2 = "pool_paper_casestudy/out/lininter_final/"
->>>>>>> b0a33c38cef427cb72ddd6885e972b499527e789
     n_cl = 4
 
     result = fm.output.read_from_json("Result_calibration_5exps_local.json", dir=path2)
@@ -567,7 +554,6 @@ if __name__ == "__main__":
             'x0': x0_vals
     }
     param_ode_bnds = tuple(
-<<<<<<< HEAD
             [(.2, 1.) for _ in range (3)] + # mu_opt
             [(0.5, 2.), (3000., 5000.), (0.3, 1.5)] + # omegaT_exp + ki_T_inhib + n  
             [(8., 9.), (8., 9.), (8., 9.)]  + # N_max_exp
@@ -575,18 +561,6 @@ if __name__ == "__main__":
             [(.1, 10)] + [(1., 100.)] +   # kappa_LA ls23K
             [(.1, 10)] + [(1., 100.)] +   # kappa_LA lsCTC494
             [(.1, 10)] + [(1., 100.)]     # kappa_LA lm
-=======
-            [(.1, 3.) for _ in range (3)] + # mu_opt
-            [(0.1, 5), (5., 9.), (6., 14.),
-             (0.1, 5), (5., 9.), (6., 14.),
-             (0.1, 5), (5., 9.), (6., 14.)] +  # pH_min, pH_opt, pH_max
-            [(0.5, 2.), (3000., 5000.), (0.1, 2.)] + # omegaT_exp + ki_T_inhib + n
-            [(5., 11.), (5., 11.), (5., 11.)]  + # N_max_exp
-            [(.01, 2.)] + # kappa_T
-            [(.1, 10)] + [(0.1, 100.)] +   # kappa_LA ls23K
-            [(.1, 10)] + [(0.1, 100.)] +   # kappa_LA lsCTC494
-            [(.1, 10)] + [(0.1, 100.)]     # kappa_LA lm
->>>>>>> b0a33c38cef427cb72ddd6885e972b499527e789
         )
     #param_ode_bnds = [(p, p) for p in param_ode]
     #param_ode_bnds[3*4:3*4+3] = [(0.5, 10.), (10., 10000.), (0.1, 3.)]
@@ -618,20 +592,11 @@ if __name__ == "__main__":
     ]
 
     df, cis = run_profile_likelihood_all(
-<<<<<<< HEAD
          param_ode, calibr_setup,
          span=0.9, n_points=9, method="local",
          n_jobs=1,              # parallelize across grid points (safe for method='local')
          per_point_workers=20,
          out_csv=path2+"profile_likelihood_results.csv",
          plot_path=path2+"profile_likelihood.png",
-=======
-        param_ode, calibr_setup,
-        span=2., n_points=12, method="local",
-        n_jobs=23, per_point_workers=1,
-        n_restarts=3, jitter_frac=0.05,   # 3 tries per grid point, ~5% jitter
-        out_csv="pool_paper_casestudy/out/profile_likelihood_results.csv",
-        plot_path="pool_paper_casestudy/out/profile_likelihood.png",
->>>>>>> b0a33c38cef427cb72ddd6885e972b499527e789
         param_names=ode_param_names,
 )

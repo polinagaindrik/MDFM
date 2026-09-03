@@ -615,11 +615,12 @@ def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_index
     obs_model = np.zeros((len(exps), np.shape(obs_x)[0], len(t_model)))
     obs_model_rmse = np.zeros(np.shape(obs_x))
     # exp_indexes = [3, 4 ,0, 1, 2]
-    lbls = ['Ls-23K','Ls-CTC494',  'Lm-CTC1034', 'Lactic Acid', 'pH']
+    lbls = ['Ls-23K','Ls-CTC494',  'Lm-CTC1034', 'Lactic Acid']#, 'pH']
     mrkrs = ['o', 'o',  'o', '^', 'x']
     lst = ['solid', 'solid', 'solid', 'dashed', '']
     clrs = [colors_all['N_LsCTC494'], colors_all['N_LsCTC494co'], colors_all['N_Lm_withT'], colors_all['T_A'], colors_all['N_Ls23K']]
-    clr_indexes = [[0, 3, 4], [1, 3, 4], [2, 3, 4], [0, 2, 3, 4], [1, 2, 3, 4]]
+    #clr_indexes = [[0, 3, 4], [1, 3, 4], [2, 3, 4], [0, 2, 3, 4], [1, 2, 3, 4]]
+    clr_indexes = [[0, 3], [1, 3], [2, 3], [0, 2, 3], [1, 2, 3]]
     obs_count_indexes = [[0], [0], [1], [0, 1], [0, 1]]
     subfigures = [r'\textbf{A}', r'\textbf{B}', r'\textbf{C}', r'\textbf{D}', r'\textbf{E}']
     for j, i in enumerate(exp_indexes):
@@ -643,13 +644,13 @@ def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_index
         obs_model[i] = observable(t_model, x_sol)
         obs_model_rmse[i] = observable(days, x_sol_rmse)
 
-        for k in range(len(index)-2):
+        for k in range(len(index)-1):
             ax.plot(t_model, obs_model[i][obs_count_ind_exp[k]], label='Ls-CTC494', color=clrs_exp[k], linewidth=3, linestyle=lst_exp[k])
             ax.scatter(days, obs_x[i][obs_count_ind_exp[k]], marker=mrkrs_exp[k], color=clrs_exp[k])
         
         ax2.plot(t_model, obs_model[i][3], linewidth=3, color=clrs_exp[k+1], linestyle=lst_exp[k+1])
         ax2.scatter(days, obs_x[i][3], color=clrs_exp[k+1], marker=mrkrs_exp[k+1])
-        ax2.scatter(days, obs_x[i][4], color=clrs_exp[k+2], marker=mrkrs_exp[k+2])
+        #ax2.scatter(days, obs_x[i][4], color=clrs_exp[k+2], marker=mrkrs_exp[k+2])
 
         ax.set_xlim(-0.05, np.max(t_model))
         ax.set_yscale('log')

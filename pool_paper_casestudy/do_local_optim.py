@@ -10,6 +10,53 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 
+def multistart_minimize(cost_func, param_ode_init, calibr_setup, n_restarts=6, jitter_frac=0.15,
+                         biological_guess=None, seed=None, method='L-BFGS-B', tol=1e-8, maxiter=200):
+    """
+    Run L-BFGS-B from multiple starting points, keep the best result.
+
+    param_ode_init   : your current best-guess param_ode vector (e.g. from a prior fit)
+    n_restarts       : number of restarts total, INCLUDING the run from param_ode_init itself
+    jitter_frac      : relative random perturbation applied to param_ode_init for restarts
+                        that aren't the biological_guess or the unperturbed start
+    biological_guess : optional dict {index: value} to override specific entries of
+                        param_ode_init for one of the restarts (e.g. {3: 1.6, 4: 2800.}
+                        for MM's omega3, K3) -- guarantees that specific hypothesis gets tested
+    seed              : int, for reproducible jitter across restarts
+    """
+    rng = np.random.default_rng(seed)
+    bnds = calibr_setup["param_bnds"]
+    lo_arr = np.array([b[0] for b in bnds])
+    hi_arr = np.array([b[1] for b in bnds])
+    span = hi_arr - lo_arr
+
+    starts = []
+    starts.append(("unperturbed", np.array(param_ode_init, dtype=float)))
+
+    if biological_guess is not None:
+        bio_start = np.array(param_ode_init, dtype=float)
+        for idx, val in biological_guess.items():
+            bio_start[idx] = val
+        bio_start = np.clip(bio_start, lo_arr, hi_arr)
+        starts.append(("biological_guess", bio_start))
+
+    n_random = max(0, n_restarts - len(starts))
+    for r in range(n_random):
+        jitter = rng.normal(0.0, jitter_frac, size=len(param_ode_init)) * np.where(span > 0, span, 1.0)
+        jittered = np.clip(np.array(param_ode_init, dtype=float) + jitter, lo_arr, hi_arr)
+        starts.append((f"random_{r}", jittered))
+
+    best_res, best_label = None, None
+    for label, x0 in starts:
+        res = minimize(cost_func, x0, args=(calibr_setup, None), method=method,
+                        tol=tol, bounds=bnds, options={'maxiter': maxiter})
+        print(f"[{label}] success={res.success}, nit={res.nit}, cost={res.fun:.6g}")
+        if best_res is None or res.fun < best_res.fun:
+            best_res, best_label = res, label
+
+    print(f"\nBest start: '{best_label}', cost={best_res.fun:.6g}")
+    return best_res
+
 
 def cost(param, calibr_setup, jac_spasity):
     n_cl = calibr_setup["n_cl"]
@@ -40,6 +87,10 @@ def cost(param, calibr_setup, jac_spasity):
                 param_ode_new[4*3+3+3] = 0.
             elif calibr_setup['model'] == ode_model_coculture_wopH:
                 param_ode_new[3+3+3] = 0.
+            elif calibr_setup['model'] == ode_model_coculture_wopH_MM:
+                param_ode_new[8] = 0.
+            elif calibr_setup['model'] == ode_model_coculture_wopH_expsat:
+                param_ode_new[8] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
@@ -71,10 +122,9 @@ if __name__ == "__main__":
     #path2 = 'pool_paper_casestudy/out/all_3expsLmLs23K_withpH_Chrderiv/'
     path = 'pool_paper_casestudy/out/wo_pH_new/'
     path2 = 'pool_paper_casestudy/out/wo_pH_new/'
-    add_name = '_5exps'
-    model = ode_model_coculture_wopH
+    add_name = '_5exps_MM'
+    model = ode_model_coculture_wopH_MM
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
-    add_name = '_5exps'
 
     ### Get params from df (for interrupted exps)
     ##param_opt, dfs_saved, df_optim2 = get_param_dfs(path, path2)
@@ -128,9 +178,25 @@ if __name__ == "__main__":
             'data_array': data_array,
             'x0': x0_vals
     }
+    param_ode_bnds = tuple(
+            [(.2, 1.), (.2, 1.), (.2, 1.)] + # mu_opt
+            #[(0.9, 1.2), (700., 14000.), (0.25, 0.5)] + # omegaT_exp + ki_T_inhib + n 
+            [(0.05, 3.0), (1, 8000)] + 
+            [(8.0, 9.0), (8., 9.), (8., 9.0)]  + # N_max_exp
+            [(.2, 1.)] + # kappa_T
+            [(0.2, 1)] + [(2., 10)] +   # kappa_LA ls23K
+            [(0.1, 1.)] + [(3.5, 10)] +   # kappa_LA lsCTC494
+            [(0., 2.)] + [(0., 2.)]     # kappa_LA lm
+        )
+    calibr_setup["param_bnds"] = param_ode_bnds
     param_ode = param_opt[n_cl* n_exps_estim:]
-    res = minimize(cost, param_ode, args=(calibr_setup, None), method='L-BFGS-B', tol=1e-8, options={'maxiter': 200})
-    print(res)
+    # indices of omega3, K3 in the 15-length MM param_ode vector
+
+    res = multistart_minimize(
+        cost, param_ode, calibr_setup,
+        n_restarts=1, jitter_frac=0.15,
+        seed=0,
+    )
     param_loc = res.x
     #param_loc[-1] = 0. # as we set kappa_LA_lsCTC494_2 = 0 so it does not decompose LA
 

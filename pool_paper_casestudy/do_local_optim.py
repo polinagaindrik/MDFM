@@ -181,12 +181,12 @@ if __name__ == "__main__":
     param_ode_bnds = tuple(
             [(.2, 1.), (.2, 1.), (.2, 1.)] + # mu_opt
             #[(0.9, 1.2), (700., 14000.), (0.25, 0.5)] + # omegaT_exp + ki_T_inhib + n 
-            [(0.05, 3.0), (1, 8000)] + 
+            [(0.05, 3.0), (1, 1000)] + 
             [(8.0, 9.0), (8., 9.), (8., 9.0)]  + # N_max_exp
             [(.2, 1.)] + # kappa_T
             [(0.2, 1)] + [(2., 10)] +   # kappa_LA ls23K
             [(0.1, 1.)] + [(3.5, 10)] +   # kappa_LA lsCTC494
-            [(0., 2.)] + [(0., 2.)]     # kappa_LA lm
+            [(0., 0.)] + [(0., 2.)]     # kappa_LA lm
         )
     calibr_setup["param_bnds"] = param_ode_bnds
     param_ode = param_opt[n_cl* n_exps_estim:]

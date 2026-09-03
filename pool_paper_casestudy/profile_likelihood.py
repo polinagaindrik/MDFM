@@ -171,7 +171,7 @@ def _optimize_one_point(
                 args=(param_index, val, calibr_setup, jac_spasity),
                 method="L-BFGS-B",
                 bounds=free_bnds,
-                options={"maxiter": 500, "ftol": 1e-10, "gtol": 1e-8},
+                options={"maxiter": 300, "ftol": 1e-8, "gtol": 1e-8},
             )
             if res.fun < best_cost:
                 best_free, best_cost = res.x, res.fun
@@ -602,7 +602,7 @@ if __name__ == "__main__":
     data_array = extract_observables_from_df([dfs])
     x0_vals = param_opt[:n_cl*len(exps)]
     param_ode = param_opt[n_cl*len(exps):]
-    model = ode_model_coculture_wopH
+    model = ode_model_coculture_wopH_MM
     calibr_presetup = {
             "model": model,
             "output_path": path2,
@@ -614,14 +614,14 @@ if __name__ == "__main__":
             'x0': x0_vals
     }
     param_ode_bnds = tuple(
-            [(.3, .45), (.3, .5), (.2, 0.4)] + # mu_opt
+            [(.32, .4), (.35, .45), (.3, 0.37)] + # mu_opt
             #[(0.9, 1.2), (700., 14000.), (0.25, 0.5)] + # omegaT_exp + ki_T_inhib + n 
-            [(0.05, 3.0), (1, 8000)] + 
-            [(8.0, 8.4), (8.1, 8.5), (8.5, 9.)]  + # N_max_exp
-            [(.4, .85)] + # kappa_T
-            [(0.2, 1)] + [(2., 5.)] +   # kappa_LA ls23K
-            [(0.1, 0.8)] + [(3.5, 7.)] +   # kappa_LA lsCTC494
-            [(-1, 1)] + [(-1, 2.)]     # kappa_LA lm
+            [(0.45, .7), (30, 400)] + 
+            [(8.05, 8.35), (8.2, 8.4), (8.55, 8.95)]  + # N_max_exp
+            [(.45, .95)] + # kappa_T
+            [(0.4, 0.9)] + [(2., 5.)] +   # kappa_LA ls23K
+            [(0.15, 0.6)] + [(3.5, 6.5)] +   # kappa_LA lsCTC494
+            [(0.0, 0.0)] + [(0., 1.5)]     # kappa_LA lm
         )
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = param_ode_bnds
@@ -641,7 +641,7 @@ if __name__ == "__main__":
 
     ode_param_names = [
         r"$\mu_{Ls23K}$", r"$\mu_{LsCTC494}$", r"$\mu_{Lm}$",
-        r"$\omega_T^{Lm}$", r"$K_{inhib}$", r"$n$",
+        r"$\omega_T^{Lm}$", r"$K$",
         r"$N^{Ls23K}_{texp}$", r"$N^{LsCTC494}_{texp}$", r"$N^{Lm}_{texp}$",
         r"$\kappa_{T} \cdot 10^{-5}$",
         r"$\kappa_{LA}^{Ls23K} \cdot 10^{-9}$", r"$\kappa_{LA/G}^{Ls23K} \cdot 10^{-9}$",
@@ -651,13 +651,13 @@ if __name__ == "__main__":
     
     df, cis = run_profile_likelihood_all(
         param_ode, calibr_setup,
-        span=3., n_points=12, method="local",
+        span=2., n_points=15, method="local",
         n_jobs=20,              # <-- parallelize across grid points
         per_point_workers=1,    # <-- irrelevant for method="local", leave at 1
-        out_csv=path2+"profile_likelihood_results.csv",
-        plot_path=path2+"profile_likelihood.png",
+        out_csv=path2+f"profile_likelihood_results{add_name}.csv",
+        plot_path=path2+f"profile_likelihood{add_name}.png",
         param_names=ode_param_names,
-        n_restarts=3, jitter_frac=0.05
+        n_restarts=5, jitter_frac=0.05
     )
 
     '''

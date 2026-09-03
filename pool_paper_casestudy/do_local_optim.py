@@ -139,4 +139,4 @@ if __name__ == "__main__":
     fm.output.json_dump({"param_ode": param_to_save.astype(list)}, f"Result_calibration{add_name}_local.json", dir=path2)
 
     param_ode = list(param_loc)
-    plot_cases_separately(param_to_save , dfs_saved, model, path=path2, add_name='_localopt')
+    plot_cases_separately(param_to_save , dfs_saved, model, path=path2, add_name=f'{add_name}_localopt')

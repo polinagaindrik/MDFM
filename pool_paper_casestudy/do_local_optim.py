@@ -38,6 +38,8 @@ def cost(param, calibr_setup, jac_spasity):
                 param_ode_new[4*3+3+3] = 0.
             elif calibr_setup['model'] == ode_model_coculture3:
                 param_ode_new[4*3+3+3] = 0.
+            elif calibr_setup['model'] == ode_model_coculture_wopH:
+                param_ode_new[3+3+3] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
@@ -65,33 +67,41 @@ if __name__ == "__main__":
     #path2 = 'pool_paper_casestudy/out/all_sepexps_withpH_Chrderiv/'
     #path = 'pool_paper_casestudy/out/all_togetherexps_withpH_Chrderiv/'
     #path2 = 'pool_paper_casestudy/out/all_togetherexps_withpH_Chrderiv/'
-    path = 'pool_paper_casestudy/out/all_3expsLmLs23K_withpH_Chrderiv/'
-    path2 = 'pool_paper_casestudy/out/all_3expsLmLs23K_withpH_Chrderiv/'
-    model = ode_model_coculture3
+    #path = 'pool_paper_casestudy/out/all_3expsLmLs23K_withpH_Chrderiv/'
+    #path2 = 'pool_paper_casestudy/out/all_3expsLmLs23K_withpH_Chrderiv/'
+    path = 'pool_paper_casestudy/out/wo_pH_new/'
+    path2 = 'pool_paper_casestudy/out/wo_pH_new/'
+    add_name = '_5exps'
+    model = ode_model_coculture_wopH
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
 
-    # Get params from df (for interrupted exps)
-    param_opt, dfs_saved, df_optim2 = get_param_dfs(path, path2)
-    dfs = dfs_saved
-    #n_exps_saved = len(names)
-    exps_saved = sorted(list(set([s.split("_")[0] for s in dfs_saved.columns])))
-    n_exps_saved = len(exps_saved)
+    ## Get params from df (for interrupted exps)
+    #param_opt, dfs_saved, df_optim2 = get_param_dfs(path, path2)
+    #dfs = dfs_saved
+    ##n_exps_saved = len(names)
+    #exps_saved = sorted(list(set([s.split("_")[0] for s in dfs_saved.columns])))
+    #n_exps_saved = len(exps_saved)
 
     ## Get params from json (for sequential exps)
-    #_, dfs_saved, _ = get_param_dfs(path, path2)
-    #param_opt = fm.output.read_from_json('Result_calibration.json', dir=path2)["param_ode"]
-    #
+    dfs_saved = pd.read_pickle(path2+'dataframe_poolpaper_all.pkl')
+    param_opt = fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path2)["param_ode"]
+    exps_saved = sorted(list(set([s.split("_")[0] for s in dfs_saved.columns])))
+    n_exps_saved = len(exps_saved)
+    
     ## For monoculture exps
     #for exp in ['V04', 'V05']:
     #    clmns = dfs_saved.filter(like=exp)
     #    dfs = dfs.drop(columns=clmns)
     #names = names[:-2]
 
-    # For exps mono + co (Lm+Ls23K, 3 exps)
-    for exp in ['V02', 'V05']:
-        clmns = dfs_saved.filter(like=exp)
-        dfs = dfs.drop(columns=clmns)
-    names = ['Ls23K', 'LmCTC1034', 'Ls23K-LmCTC1034']
+    ## For exps mono + co (Lm+Ls23K, 3 exps)
+    #for exp in ['V02', 'V05']:
+    #    clmns = dfs_saved.filter(like=exp)
+    #    dfs = dfs.drop(columns=clmns)
+    #names = ['Ls23K', 'LmCTC1034', 'Ls23K-LmCTC1034']
+
+    # For all 5 exps: 
+    dfs = dfs_saved
 
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     n_exps = len(exps)
@@ -101,7 +111,6 @@ if __name__ == "__main__":
     data_array = extract_observables_from_df([dfs])
     x0_saved = param_opt[:n_cl*n_exps_estim]
     x0_vals = param_opt[:n_cl*n_exps]
-    model = ode_model_coculture3
     calibr_setup = {
             "model": model,
             "output_path": path2,
@@ -113,15 +122,15 @@ if __name__ == "__main__":
             'x0': x0_vals
     }
     param_ode = param_opt[n_cl* n_exps_estim:]
-    param_loc = minimize(cost, param_ode, args=(calibr_setup, None), method='L-BFGS-B', tol=1e-8, options={'maxiter': 250, 'disp': True}).x
+    param_loc = minimize(cost, param_ode, args=(calibr_setup, None), method='L-BFGS-B', tol=1e-8, options={'maxiter': 200, 'disp': True}).x
     #param_loc[-1] = 0. # as we set kappa_LA_lsCTC494_2 = 0 so it does not decompose LA
 
     #param_to_save = np.concatenate([x0_saved, param_loc]) # for all other exps
     param_to_save = np.concatenate([x0_saved[:n_cl], np.zeros((n_cl)), x0_saved[n_cl:n_cl*n_exps_saved],  np.zeros((n_cl)), param_loc]) # for Lm+Ls23K
-    fm.output.json_dump({"param_ode": param_to_save.astype(list)}, "Result_calibration_local.json", dir=path2)
+    fm.output.json_dump({"param_ode": param_to_save.astype(list)}, f"Result_calibration{add_name}_local.json", dir=path2)
     print("Locally optimized parameters:", param_loc)
 
     x0_vals = calibr_setup['x0']
     param_ode = list(param_loc)
     param_ode_new = np.copy(param_ode)
-    plot_cases_separately(np.concatenate([x0_saved, param_ode]) , dfs_saved, model, path=path2, add_name='_localopt')
+    plot_cases_separately(np.concatenate([x0_saved, param_ode]) , dfs_saved, model, path=path2, add_name=f'{add_name}_localopt')

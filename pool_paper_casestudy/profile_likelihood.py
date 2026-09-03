@@ -440,17 +440,17 @@ if __name__ == "__main__":
     # and obtained param_opt in your run of do_local_optim.py /
     # case_study_poolpaper2.py.
     # --------------------------------------------------------------
-    path2 = "pool_paper_casestudy/out/all_together_final/"
+    path2 = "pool_paper_casestudy/out/wo_pH_new/"
     n_cl = 4
 
-    result = fm.output.read_from_json("Result_calibration_5exps_local.json", dir="pool_paper_casestudy/out/all_together_final/")
+    result = fm.output.read_from_json("Result_calibration_5exps_local.json", dir=path2)
     param_opt = np.array(result["param_ode"])
     dfs = pd.read_pickle(path2+f'dataframe_poolpaper_all.pkl')
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     data_array = extract_observables_from_df([dfs])
     x0_vals = param_opt[:n_cl*len(exps)]
     param_ode = param_opt[n_cl*len(exps):]
-    model = ode_model_coculture3
+    model = ode_model_coculture_wopH
     calibr_presetup = {
             "model": model,
             "output_path": path2,
@@ -463,9 +463,6 @@ if __name__ == "__main__":
     }
     param_ode_bnds = tuple(
             [(.2, 1.) for _ in range (3)] + # mu_opt
-            [(1., 3.5), (6., 8.), (9., 14.),
-             (1., 3.5), (6., 8.), (9., 14.),
-             (1., 3.5), (6., 8.), (9., 14.)] +  # pH_min, pH_opt, pH_max
             [(0.5, 2.), (3000., 5000.), (0.3, 1.5)] + # omegaT_exp + ki_T_inhib + n  
             [(8., 9.), (8., 9.), (8., 9.)]  + # N_max_exp
             [(.1, 1.)] + # kappa_T
@@ -479,22 +476,32 @@ if __name__ == "__main__":
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = param_ode_bnds
 
+    #ode_param_names = [
+    #    "mu_ls23K_opt", "mu_lsCTC494_opt", "mu_lm_opt",
+    #    #"pH_ls23K_min", "pH_ls23K_opt", "pH_ls23K_max",
+    #    #"pH_lsCTC494_min", "pH_lsCTC494_opt", "pH_lsCTC494_max",
+    #    #"pH_lm_min", "pH_lm_opt", "pH_lm_max",
+    #    "omegaT_lm", "k_T_inhib", "n",
+    #    "N_ls23K_texp", "N_lsCTC494_texp", "N_lm_texp",
+    #    "kappa_T_0",
+    #    "kappa_LA_ls23K_exp", "kappa_LA_ls23K_2_exp",
+    #    "kappa_LA_lsCTC494_exp", "kappa_LA_lsCTC494_2_exp",
+    #    "kappa_LA_lm_exp", "kappa_LA_lm_2_exp",
+    #]
+
     ode_param_names = [
-        "mu_ls23K_opt", "mu_lsCTC494_opt", "mu_lm_opt",
-        "pH_ls23K_min", "pH_ls23K_opt", "pH_ls23K_max",
-        "pH_lsCTC494_min", "pH_lsCTC494_opt", "pH_lsCTC494_max",
-        "pH_lm_min", "pH_lm_opt", "pH_lm_max",
-        "omegaT_lm", "k_T_inhib", "n",
-        "N_ls23K_texp", "N_lsCTC494_texp", "N_lm_texp",
-        "kappa_T_0",
-        "kappa_LA_ls23K_exp", "kappa_LA_ls23K_2_exp",
-        "kappa_LA_lsCTC494_exp", "kappa_LA_lsCTC494_2_exp",
-        "kappa_LA_lm_exp", "kappa_LA_lm_2_exp",
+        r"$\mu_{Ls23K}$", r"$\mu_{LsCTC494}$", r"$\mu_{Lm}$",
+        r"$\omegaT_{Lm}$", r"$K_{inhib}$", r"$n$",
+        r"$N^{Ls23K}_{texp}$", r"$N^{LsCTC494}_{texp}$", r"$N^{Lm}_{texp}$",
+        r"$\kappa_{T} \cdot 10^{-5}$",
+        r"$\kappa_{LA}^{Ls23K} \cdot 10^{-9}$", r"$\kappa_{LA/G}^{Ls23K} \cdot 10^{-9}$",
+        r"$\kappa_{LA}^{LsCTC494} \cdot 10^{-9}$", r"$\kappa_{LA/G}^{LsCTC494} \cdot 10^{-9}$",
+        r"$\kappa_{LA}^{Lm} \cdot 10^{-9}$", r"$\kappa_{LA/G}^{Lm} \cdot 10^{-9}$",
     ]
 
     df, cis = run_profile_likelihood_all(
          param_ode, calibr_setup,
-         span=0.9, n_points=12, method="local",
+         span=0.9, n_points=9, method="local",
          n_jobs=1,              # parallelize across grid points (safe for method='local')
          per_point_workers=20,
          out_csv=path2+"profile_likelihood_results.csv",

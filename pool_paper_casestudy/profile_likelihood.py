@@ -1,3 +1,61 @@
+"""
+Profile likelihood for pool_paper_casestudy (MDFM repo)
+=========================================================
+
+Adapted to the `cost(param, calibr_setup, jac_spasity)` signature used in
+`pool_paper_casestudy/do_local_optim.py`, following the same fix-one-parameter /
+re-optimize-the-rest pattern already used in
+`fusion_model/parameter_estimation/likelihood_functions.py::calculate_profile_likelihood`
+(that generic version uses a different `ll_func(param, dfs, model, P_matrix, s_x)`
+signature and won't run as-is on this case study).
+
+Includes:
+  - multiprocessing across grid points (one worker process per (parameter, value) pair)
+  - plotting of the resulting profile-likelihood curves with the chi2-based
+    threshold and confidence interval
+
+CAVEAT ON THE CHI2 THRESHOLD
+-----------------------------
+`cost_arithmetic_mean` (the aggregation function used here) returns a *mean
+squared residual*, not `-2*logL`. The chi2-based confidence interval below is
+only statistically exact if `cost` is proportional to `-2*logL` (e.g.
+`n * MSE / sigma^2` under i.i.d. Gaussian noise). Treat `confidence_interval_from_profile`
+as a convenience utility -- calibrate `scale` (or pass your own threshold) if you
+need a rigorous interval. This mirrors what `likelihood_functions.py` already
+does elsewhere in the repo, so it is consistent with how the rest of the codebase
+reports these intervals, but it is an approximation, not a guarantee.
+
+CAVEAT ON MULTIPROCESSING
+---------------------------
+`method="global"` already parallelizes *within* each grid point via
+`differential_evolution(..., workers=...)`. Also parallelizing *across* grid
+points (n_jobs > 1) on top of that oversubscribes your CPU cores. If you use
+`method="global"`, keep `n_jobs=1` (default) and control parallelism only
+through `per_point_workers`, or explicitly divide your cores between the two
+levels (n_jobs * per_point_workers <= number of cores).
+`method="local"` (L-BFGS-B) is single-threaded per point, so `n_jobs > 1` is
+the recommended way to parallelize it.
+
+Drop this file into `pool_paper_casestudy/` (same level as `do_local_optim.py`)
+so the relative imports resolve, or adjust the `sys.path` / import lines below.
+"""
+
+import os
+import sys
+
+sys.path.append(os.getcwd())
+import multiprocessing as mp
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.optimize import minimize
+from scipy.stats import chi2
+
+import fusion_model as fm
+from pool_paper_casestudy.pool_model_functions import *
+from pool_paper_casestudy.do_local_optim import cost  # your cost(param, calibr_setup, jac_spasity)
+
 
 import concurrent.futures
 import signal
@@ -598,5 +656,5 @@ if __name__ == "__main__":
          per_point_workers=20,
          out_csv=path2+"profile_likelihood_results.csv",
          plot_path=path2+"profile_likelihood.png",
-        param_names=ode_param_names,
+         param_names=ode_param_names,
 )

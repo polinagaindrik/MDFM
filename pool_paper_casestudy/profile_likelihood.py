@@ -167,10 +167,11 @@ def _optimize_one_point(
             res = minimize(
                 _cost_fixed_param,
                 x0_r,
+                tol=1e-8,
                 args=(param_index, val, calibr_setup, jac_spasity),
                 method="L-BFGS-B",
                 bounds=free_bnds,
-                options={"maxiter": 200},
+                options={"maxiter": 500, "ftol": 1e-10, "gtol": 1e-8},
             )
             if res.fun < best_cost:
                 best_free, best_cost = res.x, res.fun
@@ -566,9 +567,9 @@ def plot_profile_likelihood(
             name = param_names.get(idx) if isinstance(param_names, dict) else (
                 param_names[idx] if idx < len(param_names) else None
             )
-        ax.set_title(name if name else f"param[{idx}]", fontsize=11)
-        ax.set_xlabel("parameter value", fontsize=9)
-        ax.set_ylabel("cost", fontsize=9)
+        ax.set_title(name if name else f"param[{idx}]", fontsize=12)
+        ax.set_xlabel("parameter value", fontsize=10)
+        ax.set_ylabel("cost", fontsize=10)
         ax.tick_params(labelsize=8)
 
     for ax_j in range(n, len(axes_flat)):
@@ -592,8 +593,9 @@ if __name__ == "__main__":
     # --------------------------------------------------------------
     path2 = "pool_paper_casestudy/out/wo_pH_new/"
     n_cl = 4
+    add_name = '_MM'
 
-    result = fm.output.read_from_json("Result_calibration_5exps_local.json", dir=path2)
+    result = fm.output.read_from_json(f"Result_calibration_5exps{add_name}_local.json", dir=path2)
     param_opt = np.array(result["param_ode"])
     dfs = pd.read_pickle(path2+f'dataframe_poolpaper_all.pkl')
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
@@ -612,13 +614,14 @@ if __name__ == "__main__":
             'x0': x0_vals
     }
     param_ode_bnds = tuple(
-            [(.2, 1.) for _ in range (3)] + # mu_opt
-            [(0.8, 1.2), (3000., 5000.), (0.25, 0.45)] + # omegaT_exp + ki_T_inhib + n  
-            [(8.1, 8.6), (8.1, 8.6), (8.5, 9.2)]  + # N_max_exp
-            [(.2, 0.9)] + # kappa_T
-            [(0., 10)] + [(2., 5.)] +   # kappa_LA ls23K
-            [(0., 10)] + [(3., 10.)] +   # kappa_LA lsCTC494
-            [(-0.1, 1)] + [(-0.1, 1.)]     # kappa_LA lm
+            [(.3, .45), (.3, .5), (.2, 0.4)] + # mu_opt
+            #[(0.9, 1.2), (700., 14000.), (0.25, 0.5)] + # omegaT_exp + ki_T_inhib + n 
+            [(0.05, 3.0), (1, 8000)] + 
+            [(8.0, 8.4), (8.1, 8.5), (8.5, 9.)]  + # N_max_exp
+            [(.4, .85)] + # kappa_T
+            [(0.2, 1)] + [(2., 5.)] +   # kappa_LA ls23K
+            [(0.1, 0.8)] + [(3.5, 7.)] +   # kappa_LA lsCTC494
+            [(-1, 1)] + [(-1, 2.)]     # kappa_LA lm
         )
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = param_ode_bnds
@@ -638,20 +641,51 @@ if __name__ == "__main__":
 
     ode_param_names = [
         r"$\mu_{Ls23K}$", r"$\mu_{LsCTC494}$", r"$\mu_{Lm}$",
-        r"$\omegaT_{Lm}$", r"$K_{inhib}$", r"$n$",
+        r"$\omega_T^{Lm}$", r"$K_{inhib}$", r"$n$",
         r"$N^{Ls23K}_{texp}$", r"$N^{LsCTC494}_{texp}$", r"$N^{Lm}_{texp}$",
         r"$\kappa_{T} \cdot 10^{-5}$",
         r"$\kappa_{LA}^{Ls23K} \cdot 10^{-9}$", r"$\kappa_{LA/G}^{Ls23K} \cdot 10^{-9}$",
         r"$\kappa_{LA}^{LsCTC494} \cdot 10^{-9}$", r"$\kappa_{LA/G}^{LsCTC494} \cdot 10^{-9}$",
         r"$\kappa_{LA}^{Lm} \cdot 10^{-9}$", r"$\kappa_{LA/G}^{Lm} \cdot 10^{-9}$",
     ]
-
+    
     df, cis = run_profile_likelihood_all(
         param_ode, calibr_setup,
-        span=0.9, n_points=12, method="local",
-        n_jobs=22,              # <-- parallelize across grid points
+        span=3., n_points=12, method="local",
+        n_jobs=20,              # <-- parallelize across grid points
         per_point_workers=1,    # <-- irrelevant for method="local", leave at 1
         out_csv=path2+"profile_likelihood_results.csv",
         plot_path=path2+"profile_likelihood.png",
         param_names=ode_param_names,
+        n_restarts=3, jitter_frac=0.05
     )
+
+    '''
+
+    # Re-run the single-parameter profile
+    K_INDEX = 4  # k_T_inhib's position in param_ode
+
+    grid, profile_cost, profile_params = profile_likelihood_for_param(
+        param_ode, K_INDEX, calibr_setup,
+        span=3.0, n_points=15, method="local",
+        n_jobs=20, n_restarts=3, jitter_frac=0.05,
+    )
+
+    cost_opt = cost(param_ode, calibr_setup, None)
+
+    scale, n_data, sigma_hat2 = estimate_profile_scale(
+        param_ode, calibr_setup, cost_opt,
+        n_free_params=len(free_param_indices(calibr_setup["param_bnds"])),
+    )
+    print(f"scale={scale:.6g}, n_data={n_data}, sigma_hat2={sigma_hat2:.6g}")
+
+    df_k = pd.DataFrame({"param_index": K_INDEX, "param_value": grid, "cost": profile_cost})
+
+    fig = plot_profile_likelihood(
+        df_k, param_ode, cost_opt,
+        ci_results={K_INDEX: confidence_interval_from_profile(grid, profile_cost, cost_opt, scale=scale)},
+        scale=scale,
+        param_names={K_INDEX: r"$K_{inhib}$"},
+        save_path="pool_paper_casestudy/out/wo_pH_new/profile_K_inhib_only.png",
+    )
+    '''

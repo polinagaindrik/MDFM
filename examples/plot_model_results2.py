@@ -41,7 +41,7 @@ def plot_sampled_parameter(mu, sigma, smpl_p, path=''):
     fig, ax = plt.subplots()
     x = np.linspace(0., 5, 100)
     pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
-    ax.plot(x, pdf, label=f'Initial distribution\n (mean={mu:.2f}, Var={sigma:.2f})')#, color=fm.plotting.green_colors[0])
+    ax.plot(x, pdf, label=f'Lognormal({mu:.2f}, {sigma**2:.2f})')#, color=fm.plotting.green_colors[0])
     #pdf2 = stats.lognorm.pdf(smpl_p.flatten(), s=sigma, scale=np.exp(mu))
     colors = [fm.plotting.blue_colors[2], fm.plotting.red_colors[2]]
     for i in range (len(smpl_p.T)):
@@ -49,7 +49,7 @@ def plot_sampled_parameter(mu, sigma, smpl_p, path=''):
         ax.scatter(smpl_p[:, i], pdf2, color=colors[i], label=f'Sampled value (Species {i+1})')
     ax.set_xlim(0, 5)
     ax.set_xlabel(r'Growth rate $\alpha$')
-    ax.set_ylabel(r'Probability distribution $P(\alpha)$')
+    ax.set_ylabel(r'Probability distribution $\pi(\alpha)$')
     plt.legend()
     plt.savefig(path+'alph_distribution_sampled_values.pdf', bbox_inches='tight')
     plt.close(fig)
@@ -61,7 +61,7 @@ if __name__ == "__main__":
     n_cl = 2
     n_media = 2
     relnoise = 0.
-    n_exps = 5
+    n_exps = 20
 
     path2 = f'out/main_param_distrib2_{int(n_exps)}exp_divx/'
     exp_temps = fm.output.read_from_json(''+'exp_temps_model_paper.json', dir=path2)
@@ -234,17 +234,19 @@ if __name__ == "__main__":
     plot_sampled_parameter(mu, sigma, [alph_exps[1]], path=path2)
 
     ## Plot comparison for different curves of alpha distribution:
-    n_exps_vals = [5, 20]
+    n_exps_vals = [3, 5, 10, 20, 30]#, 50]
     fig, ax = plt.subplots()
-    x = np.linspace(0., 5, 100)
-    mu, sigma = 0.5, 0.5
-    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
-    ax.plot(x, pdf, label=f'"Real" distribution\n (mu={mu:.2f}, sigma={sigma:.2f})', color='k', linewidth=3)
+    x = np.linspace(0., 6, 100)
     for n in n_exps_vals:
         path2 = f'out/main_param_distrib2_{int(n)}exp_divx/'
         exp_temps = fm.output.read_from_json(''+'exp_temps_model_paper.json', dir=path2)
-        res = fm.output.read_from_json('Result_calibration.json', dir=path2)
-        param_opt = res['param_ode']
+
+        #res = fm.output.read_from_json('Result_calibration.json', dir=path2)
+        #param_opt = res['param_ode']
+
+        df_optim2 = pd.read_csv(path2+"optimization_history1.csv")
+        param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1-n_cl*n_media]
+
         alph_opt = param_opt[n_cl + n_cl:2*n_cl + n_cl*len(exp_temps)]
 
         # Calculate mu sigma for alpha distributions
@@ -253,10 +255,14 @@ if __name__ == "__main__":
         print(f"Optimized: Mu: {mu_opt}, Sigma: {sigma_opt}")
 
         pdf = stats.lognorm.pdf(x, s=sigma_opt, scale=np.exp(mu_opt))
-        ax.plot(x, pdf, label=f'Estimation\n (mu={mu_opt:.2f}, sigma={sigma_opt:.2f}) {n} curves')
+        ax.plot(x, pdf, label=f'Estimation ({n} experiments)', linestyle='dashed')
+    mu, sigma = 0.5, 0.5
+    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
+    ax.plot(x, pdf, label=f'Initial Lognormal({mu:.2f}, {sigma**2:.2f})', color='k', linewidth=3)
+
     ax.set_xlabel(r'Growth rate $\alpha$')
-    ax.set_ylabel(r'Probability distribution $P(\alpha)$')
-    ax.set_xlim(0, 5)
+    ax.set_ylabel(r'Probability distribution $\pi(\alpha)$')
+    ax.set_xlim(0, 6)
     plt.legend()
     plt.savefig('out/'+'alph_distribution_comparison_n_exps.png', bbox_inches='tight')
     plt.close(fig)

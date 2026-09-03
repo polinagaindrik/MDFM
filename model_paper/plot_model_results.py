@@ -8,16 +8,15 @@ import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     plt.rcParams['figure.dpi'] = 500
-    n_cl = 4
+    n_cl = 10
     n_media = 2
-    relnoise = 0.2
+    relnoise = 0.
 
-    path = 'model_paper/out/'#f'model_paper/out/{int(n_cl)}_dim/calibration/' #
-    path2 = path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
+    #path = 'model_paper/out/'#f'model_paper/out/{int(n_cl)}_dim/calibration/'#
+    #path2 = path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
+    path = f'model_paper/out/noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
+    path2 = path
     add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
-    #path = f'model_paper/out/{int(n_cl)}_dim_{n_media}media_sel/calibration/'
-    #path2 =f'model_paper/out/{int(n_cl)}_dim_{n_media}media_sel/calibration/'
-    #add_name = f'_{int(n_cl)}dim_{int(n_media)}media_sel'
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
     data = fm.dtf.filter_dataframe_regex('V.._', data)

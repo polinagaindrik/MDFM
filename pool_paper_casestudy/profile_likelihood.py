@@ -614,14 +614,14 @@ if __name__ == "__main__":
             'x0': x0_vals
     }
     param_ode_bnds = tuple(
-            [(.32, .4), (.35, .45), (.3, 0.37)] + # mu_opt
+            [(.34, .38), (.38, .44), (.32, .355)] + # mu_opt
             #[(0.9, 1.2), (700., 14000.), (0.25, 0.5)] + # omegaT_exp + ki_T_inhib + n 
-            [(0.45, .7), (30, 400)] + 
-            [(8.05, 8.35), (8.2, 8.4), (8.55, 8.95)]  + # N_max_exp
-            [(.45, .95)] + # kappa_T
-            [(0.4, 0.9)] + [(2., 5.)] +   # kappa_LA ls23K
-            [(0.15, 0.6)] + [(3.5, 6.5)] +   # kappa_LA lsCTC494
-            [(0.0, 0.0)] + [(0., 1.5)]     # kappa_LA lm
+            [(0.46, .6), (0.6, 3)] + 
+            [(8.13, 8.34), (8.22, 8.4), (8.55, 8.95)]  + # N_max_exp
+            [(.45, .85)] + # kappa_T
+            [(0.45, 0.85)] + [(2.1, 4.5)] +   # kappa_LA ls23K
+            [(0.15, 0.45)] + [(3.5, 6)] +   # kappa_LA lsCTC494
+            [(0., 0.0)] + [(0.2, 1.2)]     # kappa_LA lm
         )
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = param_ode_bnds
@@ -638,11 +638,10 @@ if __name__ == "__main__":
     #    "kappa_LA_lsCTC494_exp", "kappa_LA_lsCTC494_2_exp",
     #    "kappa_LA_lm_exp", "kappa_LA_lm_2_exp",
     #]
-
     ode_param_names = [
         r"$\mu_{Ls23K}$", r"$\mu_{LsCTC494}$", r"$\mu_{Lm}$",
-        r"$\omega_T^{Lm}$", r"$K$",
-        r"$N^{Ls23K}_{texp}$", r"$N^{LsCTC494}_{texp}$", r"$N^{Lm}_{texp}$",
+        r"$\omega_T^{Lm}$", r"$K \cdot 10^{-2}$",
+        r"$\log_{10}{N^{Ls23K}_{t}}$", r"$\log_{10}{N^{LsCTC494}_{t}}$", r"$\log_{10}{N^{Lm}_{t}}$",
         r"$\kappa_{T} \cdot 10^{-5}$",
         r"$\kappa_{LA}^{Ls23K} \cdot 10^{-9}$", r"$\kappa_{LA/G}^{Ls23K} \cdot 10^{-9}$",
         r"$\kappa_{LA}^{LsCTC494} \cdot 10^{-9}$", r"$\kappa_{LA/G}^{LsCTC494} \cdot 10^{-9}$",
@@ -651,7 +650,7 @@ if __name__ == "__main__":
     
     df, cis = run_profile_likelihood_all(
         param_ode, calibr_setup,
-        span=2., n_points=15, method="local",
+        span=2., n_points=20, method="local",
         n_jobs=20,              # <-- parallelize across grid points
         per_point_workers=1,    # <-- irrelevant for method="local", leave at 1
         out_csv=path2+f"profile_likelihood_results{add_name}.csv",
@@ -662,13 +661,13 @@ if __name__ == "__main__":
 
     '''
 
-    # Re-run the single-parameter profile
-    K_INDEX = 4  # k_T_inhib's position in param_ode
+    # Re-run the single-parameter profile for omega
+    OMEGA_INDEX = 3
 
     grid, profile_cost, profile_params = profile_likelihood_for_param(
-        param_ode, K_INDEX, calibr_setup,
+        param_ode, OMEGA_INDEX, calibr_setup,
         span=3.0, n_points=15, method="local",
-        n_jobs=20, n_restarts=3, jitter_frac=0.05,
+        n_jobs=20, n_restarts=6, jitter_frac=0.05,
     )
 
     cost_opt = cost(param_ode, calibr_setup, None)
@@ -679,13 +678,36 @@ if __name__ == "__main__":
     )
     print(f"scale={scale:.6g}, n_data={n_data}, sigma_hat2={sigma_hat2:.6g}")
 
-    df_k = pd.DataFrame({"param_index": K_INDEX, "param_value": grid, "cost": profile_cost})
+    # --- insert here: merge new omega rows into the existing MM results CSV ---
+    OUT_CSV = path2 + f"profile_likelihood_results{add_name}.csv"
+
+    new_rows = []
+    for g, c, full_p in zip(grid, profile_cost, profile_params):
+        row = {"param_index": OMEGA_INDEX, "param_value": g, "cost": c}
+        for j, pv in enumerate(full_p):
+            row[ode_param_names[j]] = pv
+        new_rows.append(row)
+    df_new = pd.DataFrame(new_rows)
+
+    if os.path.exists(OUT_CSV):
+        df_existing = pd.read_csv(OUT_CSV)
+        df_existing = df_existing[df_existing["param_index"] != OMEGA_INDEX]
+        df_combined = pd.concat([df_existing, df_new], ignore_index=True)
+    else:
+        df_combined = df_new
+
+    df_combined = df_combined.sort_values(["param_index", "param_value"]).reset_index(drop=True)
+    df_combined.to_csv(OUT_CSV, index=False)
+    print(f"Updated {OUT_CSV}: {len(df_new)} rows for param_index={OMEGA_INDEX}")
+    # --- end insert ---
+
+    df_k = pd.DataFrame({"param_index": OMEGA_INDEX, "param_value": grid, "cost": profile_cost})
 
     fig = plot_profile_likelihood(
         df_k, param_ode, cost_opt,
-        ci_results={K_INDEX: confidence_interval_from_profile(grid, profile_cost, cost_opt, scale=scale)},
+        ci_results={OMEGA_INDEX: confidence_interval_from_profile(grid, profile_cost, cost_opt, scale=scale)},
         scale=scale,
-        param_names={K_INDEX: r"$K_{inhib}$"},
-        save_path="pool_paper_casestudy/out/wo_pH_new/profile_K_inhib_only.png",
+        param_names={OMEGA_INDEX: ode_param_names[OMEGA_INDEX]},
+        save_path=path2 + "profile_omega_only.png",
     )
-    '''
+    ''' 

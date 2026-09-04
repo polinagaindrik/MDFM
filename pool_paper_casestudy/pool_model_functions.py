@@ -440,7 +440,7 @@ def ode_model_coculture_wopH_MM(t, x, param, x0, ode_args):
     (x_ls23K, x_lsCTC494, x_lm_sen, x_lm_res, R, T, LA, pH) = x
 
     (mu_ls23K, mu_lsCTC494, mu_lm,
-    omega3, K3,                        # <- MM: 2 slots, not 3
+    omega3, K3_0,                        # <- MM: 2 slots, not 3
     N_ls23K_texp, N_lsCTC494_texp, N_lm_texp,
     kappa_T_0,
     kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp,
@@ -455,7 +455,7 @@ def ode_model_coculture_wopH_MM(t, x, param, x0, ode_args):
     kappa_LA_ls23K, kappa_LA_ls23K_2, kappa_LA_lsCTC494, kappa_LA_lsCTC494_2, kappa_LA_lm, kappa_LA_lm_2 = \
         10**(-9) * np.array([kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp,
                               kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp])
-
+    K3 = K3_0*100
     toxin_death = omega3 * x_lm_sen * np.abs(T) / (K3 + np.abs(T))   # Michaelis-Menten
 
     return [
@@ -655,8 +655,9 @@ def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_index
         ax.set_xlim(-0.05, np.max(t_model))
         ax.set_yscale('log')
         fig, ax = set_labels(fig, ax, r'Time, $t$ [h]', r'Bacterial Count [CFU/mL]')
-        fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', r'pH; Lactic Acid [g/L]')
-        ax2.set_ylim(-0.5, 7)
+        #fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', r'pH; Lactic Acid [g/L]')
+        fig, ax2 = set_labels(fig, ax2, r'Time, $t$ [h]', r'Lactic Acid [g/L]')
+        ax2.set_ylim(-0.5, 6.5)
         legend_elements = [
             Line2D([0], [0], color=clrs_exp[j], label=lbls_exp[j], marker=mrkrs_exp[j], linestyle=lst_exp[j])
             for j in range (len(index))]
@@ -668,7 +669,7 @@ def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_index
             legend_box = [1.0, 0.35]
         else:
             legend_box = [1.0, 0.2]
-        plt.legend(loc='center right', bbox_to_anchor=legend_box, handles=legend_elements, ncol=1, fontsize=15, handlelength=2.4)
+        plt.legend(loc='center right', bbox_to_anchor=legend_box, handles=legend_elements, ncol=1, fontsize=15, handlelength=2.8)
         plt.savefig(path + f"Figures-pool_model_real_data_exp_{names[i]}"+add_name+".pdf", bbox_inches="tight")
         plt.close(fig)
 

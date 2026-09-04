@@ -114,12 +114,8 @@ if __name__ == "__main__":
     add_name = ''
 
     ################ Control parameters: ######################## 
-    #path = 'pool_paper_casestudy/out/all_sepexps_withpH_Chrderiv/'
-    #path2 = 'pool_paper_casestudy/out/all_sepexps_withpH_Chrderiv/'
-    #path = 'pool_paper_casestudy/out/all_togetherexps_withpH_Chrderiv/'
-    #path2 = 'pool_paper_casestudy/out/all_togetherexps_withpH_Chrderiv/'
-    #path = 'pool_paper_casestudy/out/all_3expsLmLs23K_withpH_Chrderiv/'
-    #path2 = 'pool_paper_casestudy/out/all_3expsLmLs23K_withpH_Chrderiv/'
+    #path = 'pool_paper_casestudy/out/wo_pH_new/'
+    #path2 = 'pool_paper_casestudy/out/wo_pH_new/'
     path = 'pool_paper_casestudy/out/wo_pH_new/'
     path2 = 'pool_paper_casestudy/out/wo_pH_new/'
     add_name = '_5exps_MM'
@@ -133,7 +129,8 @@ if __name__ == "__main__":
     dfs_saved = pd.read_pickle(path2+'dataframe_poolpaper_all.pkl')
     param_opt = fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path2)["param_ode"]
 
-    #dfs = dfs_saved
+    ## For all setups: 
+    dfs = dfs_saved
     #n_exps_saved = len(names)
     #exps_saved = sorted(list(set([s.split("_")[0] for s in dfs_saved.columns])))
     #n_exps_saved = len(exps_saved)
@@ -156,8 +153,6 @@ if __name__ == "__main__":
     #    dfs = dfs.drop(columns=clmns)
     #names = ['Ls23K', 'LmCTC1034', 'Ls23K-LmCTC1034']
 
-    # For all 5 exps: 
-    dfs = dfs_saved
 
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     n_exps = len(exps)
@@ -194,7 +189,7 @@ if __name__ == "__main__":
 
     res = multistart_minimize(
         cost, param_ode, calibr_setup,
-        n_restarts=1, jitter_frac=0.15,
+        n_restarts=5, jitter_frac=0.15,
         seed=0,
     )
     param_loc = res.x

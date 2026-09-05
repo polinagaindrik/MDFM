@@ -357,14 +357,14 @@ def estimate_profile_scale(param_opt, calibr_setup, cost_opt, n_free_params, jac
     Gaussian residual noise:
 
         cost_profile - cost_opt <= chi2.ppf(confidence_level, 1) * scale
-        sigma_hat^2 = cost_opt * n_data / (n_data - n_free_params)   (bias-corrected)
+        sigma_hat^2 = cost_opt * n_data / (n_data)
         scale = sigma_hat^2 / n_data
 
     Returns (scale, n_data, sigma_hat2). Raises if n_data <= n_free_params
     (model over-parameterized relative to the data actually used in cost()).
     """
     n_data = count_data_points(param_opt, calibr_setup, jac_spasity)
-    dof_resid = n_data - n_free_params
+    dof_resid = n_data #- n_free_params
     if dof_resid <= 0:
         raise ValueError(
             f"n_data ({n_data}) <= n_free_params ({n_free_params}); can't estimate "

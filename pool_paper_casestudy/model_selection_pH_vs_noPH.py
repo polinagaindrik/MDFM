@@ -1,33 +1,3 @@
-"""
-Model selection: pH-dependent vs pH-independent (wo_pH) models
-====================================================================
-
-Compares the full pH-dependent growth model (mu(pH) via pH_min/opt/max
-triplets per species) against the simplified model that drops pH
-dependence entirely, using AIC/BIC -- same approach as
-model_selection_hill_vs_mm.py, reused directly from that file.
-
-These two models are not simply nested by fixing one parameter (dropping
-pH dependence removes 9 parameters at once -- 3 species x pH_min/opt/max),
-so a standard 1-dof nested likelihood-ratio test doesn't directly apply.
-AIC/BIC don't require nesting and instead ask: does the added pH
-mechanism explain enough extra variance in this dataset to be worth its
-9 extra parameters?
-
-    AIC = n*ln(RSS/n) + 2*(k+1)
-    BIC = n*ln(RSS/n) + (k+1)*ln(n)
-
-IMPORTANT: both models must be evaluated on the EXACT same data (same
-experiments, same dfs/data_array) for this comparison to be valid --
-compare_models() warns if n_data differs between the two runs.
-
-Run directly (python model_selection_pH_vs_noPH.py) after editing the
-CONFIG block below -- in particular double-check the pH model's function
-name, bounds, and result JSON filename/path against what you actually
-saved; the values below are reconstructed from context earlier in this
-project and may not exactly match your saved run.
-"""
-
 import os
 import sys
 
@@ -35,19 +5,18 @@ sys.path.append(os.getcwd())
 import numpy as np
 import pandas as pd
 
-import fusion_model as fm
-from pool_paper_casestudy.pool_model_functions import *
-from pool_paper_casestudy.do_local_optim import cost
-from profile_likelihood import count_data_points, free_param_indices
+from pool_paper_casestudy import fusion_core as fm
+from pool_paper_casestudy.fusion_core.dtf import extract_observables_from_df
+from pool_paper_casestudy.fusion_core.mdl import ode_model_coculture_wopH_MM, ode_model_coculture_withpH_MM
+from pool_paper_casestudy.local_optimization import cost
+from pool_paper_casestudy.fusion_core.model_selection import compare_models, evaluate_model
 
-# reuse the AIC/BIC machinery instead of duplicating it
-from model_selection_hill_vs_mm import compute_aic_bic, compare_models, evaluate_model
+def evaluate_model(param_ode, calibr_setup, jac_spasity=None):
+    """See `fusion_core.model_selection.evaluate_model` (this case study's `cost` is used)."""
+    return fm.model_selection.evaluate_model(cost, param_ode, calibr_setup, jac_spasity)
 
 
 if __name__ == "__main__":
-    # ================================================================
-    # EDIT THESE, THEN RUN THIS FILE DIRECTLY
-    # ================================================================
     n_cl = 4
 
     # ---- pH-independent model (wo_pH) ----
@@ -74,7 +43,7 @@ if __name__ == "__main__":
         "model": ode_model_coculture_wopH_MM,
         "param_bnds": tuple(
             [(.2, 1.) for _ in range(3)] +           # mu_opt
-            [(0.05, 3.0), (1, 1000)] +     # omegaT_exp + K
+            [(0.05, 3.0), (1, 1000)] +              # omegaT_exp + K
             [(8., 9.), (8., 9.), (8., 9.)] +          # N_max_exp
             [(.1, 1.)] +                              # kappa_T
             [(.1, 10)] + [(1., 100.)] +
@@ -83,13 +52,10 @@ if __name__ == "__main__":
         ),
     }
 
-    # ---- pH-dependent model ----
-    # NOTE: verify path, JSON filename, model function name, and bounds
-    # below against your actual saved with-pH calibration run -- these
-    # are reconstructed from earlier context and may need adjustment.
+    #  pH-dependent model 
     path_pH = 'pool_paper_casestudy/out/lininter/lininter_all/'
     PH_JSON = "Result_calibration_5exps_MM_local.json"
-    PH_MODEL_FUNC = ode_model_coculture_withpH_MM  # <-- confirm this matches what was actually fit
+    PH_MODEL_FUNC = ode_model_coculture_withpH_MM 
 
     dfs_pH = pd.read_pickle(path_pH + "dataframe_poolpaper_all.pkl")
     exps_pH = sorted(list(set([s.split("_")[0] for s in dfs_pH.columns])))
@@ -114,7 +80,7 @@ if __name__ == "__main__":
             [(1., 3.5), (6., 8.), (9., 14.)] +          # pH_ls23K_min, opt, max
             [(1., 3.5), (6., 8.), (9., 14.)] +          # pH_lsCTC494_min, opt, max
             [(1., 4.), (6., 8.), (9., 14.)] +           # pH_lm_min, opt, max
-            [(0.05, 3.0), (1, 1000)] +        # omegaT_exp + K
+            [(0.05, 3.0), (1, 1000)] +                  # omegaT_exp + K
             [(8., 9.), (8., 9.), (8., 9.)] +            # N_max_exp
             [(.1, 1.)] +                                 # kappa_T
             [(.1, 10)] + [(1., 100.)] +
@@ -139,15 +105,3 @@ if __name__ == "__main__":
 
     out_csv = path_nopH + "model_selection_pH_vs_noPH.csv"
     df_comparison.to_csv(out_csv)
-    print(f"\nSaved comparison table to {out_csv}")
-
-    print(
-        "\nInterpretation note: dropping pH dependence removes 9 parameters at once "
-        "(3 pH_min/opt/max triplets). A result favoring wo_pH means the pH-response "
-        "shape isn't earning its added complexity given this dataset -- which could "
-        "mean either (a) pH genuinely doesn't matter much for growth in these "
-        "experiments' pH range, or (b) the experiments don't span enough of the pH "
-        "range to identify the pH_min/opt/max parameters well (worth checking with "
-        "profile likelihood on the pH model specifically, the same way K_inhib's "
-        "identifiability was checked earlier)."
-    )

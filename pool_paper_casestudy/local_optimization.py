@@ -2,16 +2,15 @@ import os
 import sys
 
 sys.path.append(os.getcwd())
-import fusion_model as fm
-from pool_paper_casestudy.pool_model_functions import *
+from pool_paper_casestudy import fusion_core as fm
+from pool_paper_casestudy.fusion_core.dtf import extract_observables_from_df
+from pool_paper_casestudy.fusion_core.plotting import plot_cases_separately
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 from scipy.optimize import minimize
 
-def multistart_minimize(cost_func, param_ode_init, calibr_setup, n_restarts=6, jitter_frac=0.15,
-                         biological_guess=None, seed=None, method='L-BFGS-B', tol=1e-8, maxiter=200):
+def multistart_minimize(cost_func, param_ode_init, calibr_setup, n_restarts=6, jitter_frac=0.15, seed=None, method='L-BFGS-B', tol=1e-8, maxiter=200):
     """
     Run L-BFGS-B from multiple starting points, keep the best result.
 
@@ -32,13 +31,6 @@ def multistart_minimize(cost_func, param_ode_init, calibr_setup, n_restarts=6, j
 
     starts = []
     starts.append(("unperturbed", np.array(param_ode_init, dtype=float)))
-
-    if biological_guess is not None:
-        bio_start = np.array(param_ode_init, dtype=float)
-        for idx, val in biological_guess.items():
-            bio_start[idx] = val
-        bio_start = np.clip(bio_start, lo_arr, hi_arr)
-        starts.append(("biological_guess", bio_start))
 
     n_random = max(0, n_restarts - len(starts))
     for r in range(n_random):
@@ -61,7 +53,6 @@ def multistart_minimize(cost_func, param_ode_init, calibr_setup, n_restarts=6, j
 def cost(param, calibr_setup, jac_spasity):
     n_cl = calibr_setup["n_cl"]
     exps = calibr_setup["exps"]
-    n_exps = len(exps)
     param_ode = param#[n_cl*n_exps:]
     param_ode_new = np.copy(param_ode)
     x0_vals = calibr_setup['x0']
@@ -79,23 +70,23 @@ def cost(param, calibr_setup, jac_spasity):
         #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
         if exp != 'LsCTC494-Lm' and exp != 'V05':
             # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            if calibr_setup['model'] == ode_model_coculture:
+            if calibr_setup['model'] == fm.mdl.ode_model_coculture:
                 param_ode_new[2*4 + 2 + 3+1] = 0.
-            elif calibr_setup['model'] == ode_model_coculture2:
+            elif calibr_setup['model'] == fm.mdl.ode_model_coculture2:
                 param_ode_new[4*3+3+3] = 0.
-            elif calibr_setup['model'] == ode_model_coculture3:
+            elif calibr_setup['model'] == fm.mdl.ode_model_coculture3:
                 param_ode_new[4*3+3+3] = 0.
-            elif calibr_setup['model'] == ode_model_coculture_wopH:
+            elif calibr_setup['model'] == fm.mdl.ode_model_coculture_wopH:
                 param_ode_new[3+3+3] = 0.
-            elif calibr_setup['model'] == ode_model_coculture_wopH_MM:
+            elif calibr_setup['model'] == fm.mdl.ode_model_coculture_wopH_MM:
                 param_ode_new[8] = 0.
-            elif calibr_setup['model'] == ode_model_coculture_wopH_expsat:
+            elif calibr_setup['model'] == fm.mdl.ode_model_coculture_wopH_expsat:
                 param_ode_new[8] = 0.
-            elif calibr_setup['model'] == ode_model_coculture_withpH_MM:
+            elif calibr_setup['model'] == fm.mdl.ode_model_coculture_withpH_MM:
                 param_ode_new[17] = 0.
-            ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
+            ll_x[i] = fm.mdl.sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
-            ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
+            ll_x[i] = fm.mdl.sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
     ll_x = ll_x[ll_x != 0]
     return calibr_setup["aggregation_func"]([ll_x, np.min(np.concatenate([np.zeros((1, len(param))), param.reshape(1, -1)], axis=0), axis=0)**2])
 
@@ -113,15 +104,12 @@ def calculate_model_params(cost_func, calibr_setup):
 
 if __name__ == "__main__":
     n_cl = 4
-    add_name = ''
 
     ################ Control parameters: ######################## 
-    #path = 'pool_paper_casestudy/out/wo_pH_new/'
-    #path2 = 'pool_paper_casestudy/out/wo_pH_new/'
-    path = 'pool_paper_casestudy/out/wo_pH_new/'
-    path2 = 'pool_paper_casestudy/out/wo_pH_new/'
+    path = 'pool_paper_casestudy/out/wo_pH/'
+    path2 = 'pool_paper_casestudy/out/wo_pH/'
     add_name = '_5exps_MM'
-    model = ode_model_coculture_wopH_MM
+    model = fm.mdl.ode_model_coculture_wopH_MM
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
 
     ### Get params from df (for interrupted exps)
@@ -177,8 +165,7 @@ if __name__ == "__main__":
     }
     param_ode_bnds = tuple(
             [(.2, 1.), (.2, 1.), (.2, 1.)] + # mu_opt
-            #[(0.9, 1.2), (700., 14000.), (0.25, 0.5)] + # omegaT_exp + ki_T_inhib + n 
-            [(0.05, 3.0), (1, 1000)] + 
+            [(0.05, 3.0), (1, 1000)] +  # omega, K_m
             [(8.0, 9.0), (8., 9.), (8., 9.0)]  + # N_max_exp
             [(.2, 1.)] + # kappa_T
             [(0.2, 1)] + [(2., 10)] +   # kappa_LA ls23K
@@ -187,7 +174,6 @@ if __name__ == "__main__":
         )
     calibr_setup["param_bnds"] = param_ode_bnds
     param_ode = param_opt[n_cl* n_exps_estim:]
-    # indices of omega3, K3 in the 15-length MM param_ode vector
 
     res = multistart_minimize(
         cost, param_ode, calibr_setup,
@@ -195,10 +181,7 @@ if __name__ == "__main__":
         seed=0,
     )
     param_loc = res.x
-    #param_loc[-1] = 0. # as we set kappa_LA_lsCTC494_2 = 0 so it does not decompose LA
-
     param_to_save = np.concatenate([x0_saved, param_loc]) # for all other exps
-    #param_to_save = np.concatenate([x0_saved[:n_cl], np.zeros((n_cl)), x0_saved[n_cl:n_cl*n_exps_saved],  np.zeros((n_cl)), param_loc]) # for Lm+Ls23K (old ver)
     fm.output.json_dump({"param_ode": param_to_save.astype(list)}, f"Result_calibration{add_name}_local.json", dir=path2)
 
     param_ode = list(param_loc)

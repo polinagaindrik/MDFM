@@ -16,7 +16,7 @@ import os
 import sys
 
 sys.path.append(os.getcwd())
-import fusion_model as fm
+from pool_paper_casestudy import fusion_core as fm
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -63,15 +63,6 @@ plt.rc('xtick', labelsize=13)
 plt.rc('ytick', labelsize=13)
 
 
-# Actual order of `param` as unpacked in the ODE function / as the CSV's
-# parameter columns are laid out (this is the order param_index refers to):
-#   mu_ls23K, mu_lsCTC494, mu_lm,
-#   omega3, K3,
-#   N_ls23K_texp, N_lsCTC494_texp, N_lm_texp,
-#   kappa_T_0,
-#   kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp,
-#   kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp,
-#   kappa_LA_lm_exp, kappa_LA_lm_2_exp
 MODEL_PARAM_ORDER = [
     "mu_ls23K", "mu_lsCTC494", "mu_lm",
     "omega3", "K3",

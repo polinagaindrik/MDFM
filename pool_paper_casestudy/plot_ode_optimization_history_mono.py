@@ -1,13 +1,10 @@
 import os
 import sys
 sys.path.append(os.getcwd())
-import fusion_model as fm
-from pool_paper_casestudy.pool_model_functions import *
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
+from pool_paper_casestudy import fusion_core as fm
+from pool_paper_casestudy.fusion_core.mdl import ode_model_coculture_withpH_MM
+from pool_paper_casestudy.fusion_core.data import get_param_dfs
+from pool_paper_casestudy.fusion_core.plotting import plot_cases_separately
 
 
 if __name__ == "__main__":
@@ -15,11 +12,9 @@ if __name__ == "__main__":
     relnoise = 0.
 
     path = 'out/'
-    path2 = 'pool_paper_casestudy/out/test/'
-    #path = 'pool_paper_casestudy/out/all_sepexps_withpH_Chrderiv/'
-    #path2 = 'pool_paper_casestudy/out/all_sepexps_withpH_Chrderiv/'
+    path2 = "pool_paper_casestudy/out/with_pH/"
     add_name = ''
-    model = ode_model_coculture3
+    model = ode_model_coculture_withpH_MM
 
     _, dfs, df_optim2 = get_param_dfs(path, path2)
     fm.plotting.plot_cost_function(df_optim2, path=path2)

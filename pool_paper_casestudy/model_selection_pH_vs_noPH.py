@@ -51,8 +51,8 @@ if __name__ == "__main__":
     n_cl = 4
 
     # ---- pH-independent model (wo_pH) ----
-    path_nopH = "pool_paper_casestudy/out/wo_pH_new/"
-    NOPH_JSON = "Result_calibration_5exps_local.json"
+    path_nopH = "pool_paper_casestudy/out/wo_pH/"
+    NOPH_JSON = "Result_calibration_5exps_MM_local.json"
 
     dfs_nopH = pd.read_pickle(path_nopH + "dataframe_poolpaper_all.pkl")
     exps_nopH = sorted(list(set([s.split("_")[0] for s in dfs_nopH.columns])))
@@ -71,15 +71,15 @@ if __name__ == "__main__":
         "exps": exps_nopH,
         "data_array": data_array_nopH,
         "x0": x0_nopH,
-        "model": ode_model_coculture_wopH,
+        "model": ode_model_coculture_wopH_MM,
         "param_bnds": tuple(
             [(.2, 1.) for _ in range(3)] +           # mu_opt
-            [(0.5, 2.), (1., 8000.), (0.3, 1.5)] +    # omegaT_exp + k_T_inhib + n
+            [(0.05, 3.0), (1, 1000)] +     # omegaT_exp + K
             [(8., 9.), (8., 9.), (8., 9.)] +          # N_max_exp
             [(.1, 1.)] +                              # kappa_T
             [(.1, 10)] + [(1., 100.)] +
             [(.1, 10)] + [(1., 100.)] +
-            [(.1, 10)] + [(1., 100.)]
+            [(0., 0.)] + [(1., 100.)]
         ),
     }
 
@@ -87,9 +87,9 @@ if __name__ == "__main__":
     # NOTE: verify path, JSON filename, model function name, and bounds
     # below against your actual saved with-pH calibration run -- these
     # are reconstructed from earlier context and may need adjustment.
-    path_pH = "pool_paper_casestudy/out/lininter_final/"
-    PH_JSON = "Result_calibration_5exps_local.json"
-    PH_MODEL_FUNC = ode_model_coculture3  # <-- confirm this matches what was actually fit
+    path_pH = 'pool_paper_casestudy/out/lininter/lininter_all/'
+    PH_JSON = "Result_calibration_5exps_MM_local.json"
+    PH_MODEL_FUNC = ode_model_coculture_withpH_MM  # <-- confirm this matches what was actually fit
 
     dfs_pH = pd.read_pickle(path_pH + "dataframe_poolpaper_all.pkl")
     exps_pH = sorted(list(set([s.split("_")[0] for s in dfs_pH.columns])))
@@ -114,12 +114,12 @@ if __name__ == "__main__":
             [(1., 3.5), (6., 8.), (9., 14.)] +          # pH_ls23K_min, opt, max
             [(1., 3.5), (6., 8.), (9., 14.)] +          # pH_lsCTC494_min, opt, max
             [(1., 4.), (6., 8.), (9., 14.)] +           # pH_lm_min, opt, max
-            [(0.5, 2.), (1., 8000.), (0.3, 1.5)] +       # omegaT_exp + k_T_inhib + n
+            [(0.05, 3.0), (1, 1000)] +        # omegaT_exp + K
             [(8., 9.), (8., 9.), (8., 9.)] +            # N_max_exp
             [(.1, 1.)] +                                 # kappa_T
             [(.1, 10)] + [(1., 100.)] +
             [(.1, 10)] + [(1., 100.)] +
-            [(.1, 10)] + [(1., 100.)]
+            [(0., 0.)] + [(1., 100.)]
         ),
     }
     # ================================================================

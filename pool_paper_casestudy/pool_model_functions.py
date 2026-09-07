@@ -210,6 +210,8 @@ def cost(param, calibr_setup, jac_spasity):
                 param_ode_new[8] = 0.
             elif calibr_setup['model'] == ode_model_coculture_wopH_expsat:
                 param_ode_new[8] = 0.
+            elif calibr_setup['model'] == ode_model_coculture_withpH_MM:
+                param_ode_new[17] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])
@@ -471,6 +473,51 @@ def ode_model_coculture_wopH_MM(t, x, param, x0, ode_args):
             + (kappa_LA_lm + kappa_LA_lm_2*R)*(x_lm_sen + x_lm_res),
         0.
     ]
+
+
+def ode_model_coculture_withpH_MM(t, x, param, x0, ode_args):
+    #(x_ls23K0, x_lsCTC4940, x_lm_sen0, x_lm_res0, R0, T0, LA0, pH0) = x0
+    (x_ls23K, x_lsCTC494, x_lm_sen, x_lm_res, R, T, LA, pH) = x
+
+    (mu_ls23K_opt, mu_lsCTC494_opt, mu_lm_opt,
+    pH_ls23K_min, pH_ls23K_opt, pH_ls23K_max,
+    pH_lsCTC494_min, pH_lsCTC494_opt, pH_lsCTC494_max,
+    pH_lm_min, pH_lm_opt, pH_lm_max,
+    omega3, K3_0, 
+    N_ls23K_texp, N_lsCTC494_texp, N_lm_texp,
+    kappa_T_0,
+    kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp,
+    ) = param
+
+    (pH_cond, n_cl,) = ode_args
+    #pH = pH_func(t, pH_cond)
+    pH = interpolate_series(t, pH_cond)
+
+    mu_ls23K = mu_ls23K_opt * (pH - pH_ls23K_min) * (pH_ls23K_max - pH) / ((pH_ls23K_opt - pH_ls23K_min) * (pH_ls23K_max - pH_ls23K_min))
+    mu_lsCTC494 = mu_lsCTC494_opt * (pH - pH_lsCTC494_min) * (pH_lsCTC494_max - pH) / ((pH_lsCTC494_opt - pH_lsCTC494_min) * (pH_lsCTC494_max - pH_lsCTC494_min))
+    mu_lm = mu_lm_opt * (pH - pH_lm_min) * (pH_lm_max - pH) / ((pH_lm_opt - pH_lm_min) * (pH_lm_max - pH_lm_min))
+
+    N_ls23K_t = 10**N_ls23K_texp
+    N_lsCTC494_t = 10**N_lsCTC494_texp
+    N_lm_t = 10**N_lm_texp
+    kappa_T = 10**(-5) * kappa_T_0
+
+    kappa_LA_ls23K, kappa_LA_ls23K_2, kappa_LA_lsCTC494, kappa_LA_lsCTC494_2, kappa_LA_lm, kappa_LA_lm_2 = 10**(-9) * np.array([kappa_LA_ls23K_exp, kappa_LA_ls23K_2_exp, kappa_LA_lsCTC494_exp, kappa_LA_lsCTC494_2_exp, kappa_LA_lm_exp, kappa_LA_lm_2_exp])
+    K3 = K3_0*100
+    toxin_death = omega3 * x_lm_sen * np.abs(T) / (K3 + np.abs(T))   # Michaelis-Menten
+    
+    return [
+        mu_ls23K * R * x_ls23K,
+        mu_lsCTC494 * R * x_lsCTC494,
+        mu_lm * R * x_lm_sen - toxin_death,
+        mu_lm * R * x_lm_res,
+        -R*(mu_ls23K*x_ls23K*(1/N_ls23K_t) + mu_lsCTC494*x_lsCTC494*(1/N_lsCTC494_t) + mu_lm*(x_lm_sen +
+        x_lm_res)*(1/N_lm_t)),
+        kappa_T * x_lsCTC494 * R,  #  ??
+        (kappa_LA_ls23K + kappa_LA_ls23K_2*R)*x_ls23K + (kappa_LA_lsCTC494 + kappa_LA_lsCTC494_2*R)*x_lsCTC494 + (kappa_LA_lm + kappa_LA_lm_2*R)*(x_lm_sen+x_lm_res),
+        0.
+    ]
+
     
 def observable(t, x):
     n = np.array([x[0]+x[1], x[2]+x[3]])
@@ -609,6 +656,8 @@ def plot_cases_separately(param_opt, dfs, model, path='', add_name='', exp_index
         param_ode_new[8] = 0.
     elif model == ode_model_coculture_wopH_expsat:
         param_ode_new[8] = 0.
+    elif model == ode_model_coculture_withpH_MM:
+        param_ode_new[17] = 0.
 
     days, [obs_x] = extract_observables_from_df([dfs])
     t_model = np.linspace(days[0], days[-1]+5, 100)

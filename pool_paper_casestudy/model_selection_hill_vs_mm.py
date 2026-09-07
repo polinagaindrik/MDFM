@@ -14,13 +14,14 @@ maximum-likelihood noise estimate sigma_hat^2, rather than sharing one
 scale across models. This is the standard approach for comparing
 non-nested regression models (Burnham & Anderson).
 
-    AIC = n*ln(RSS/n) + 2*(k+1)
-    BIC = n*ln(RSS/n) + (k+1)*ln(n)
+    sigma_hat^2 = RSS/n            (plain MLE, no degrees-of-freedom correction)
+    AIC = -2logL + 2*(n_params+1)
+    BIC = -2logL + (n_params+1)*ln(n)
 
 RSS/n = cost_opt (your cost_arithmetic_mean already returns the mean,
-so RSS = cost_opt * n_data). The "+1" in (k+1) accounts for sigma^2
-itself being an estimated parameter, standard convention for Gaussian
-least-squares AIC/BIC.
+so RSS = cost_opt * n_data). The "+1" in (n_params+1) accounts for
+sigma^2 itself being an estimated parameter, standard convention for
+Gaussian least-squares AIC/BIC.
 
 Lower AIC/BIC = preferred model. Delta-AIC/BIC and (for AIC) Akaike
 weights are reported for interpretability:
@@ -53,28 +54,51 @@ def compute_aic_bic(cost_opt, n_data, n_params):
     """
     cost_opt  : cost_arithmetic_mean at this model's own optimum (RSS/n_data)
     n_data    : number of individual residual terms (from count_data_points)
-    n_params  : number of free model parameters (NOT including sigma)
+    n_params  : number of free model parameters (NOT including sigma^2)
 
-    Returns dict with RSS, neg2logL, k (n_params+1), AIC, BIC.
+    sigma_hat2 : plain MLE estimate of the residual variance, RSS/n_data
+                 (no n_params correction -- see profile_likelihood.py's
+                 estimate_profile_scale() for the bias-corrected variant
+                 used elsewhere in this project).
+    k          : n_params + 1, since sigma^2 is estimated via MLE
+                 alongside the model parameters (standard AIC/BIC
+                 convention for Gaussian least-squares).
+    AICc       : small-sample-corrected AIC (Burnham & Anderson),
+                 AICc = AIC + 2k(k+1)/(n_data-k-1). Recommended over
+                 plain AIC whenever n_data/k < 40 (see AICC_WARN_RATIO
+                 below); undefined/unstable if n_data <= k+1.
+
+    Returns dict with RSS, sigma_hat2, neg2logL, k, AIC, AICc, BIC.
     """
     RSS = cost_opt * n_data
     if RSS <= 0:
         raise ValueError(f"RSS={RSS} <= 0; can't take log. Check cost_opt/n_data.")
 
-    neg2logL = n_data * np.log(RSS / n_data) + n_data * (np.log(2 * np.pi) + 1)
-    k = n_params #+ 1  # +1 for sigma^2, estimated via MLE alongside the model params
+    sigma_hat2 = RSS / n_data  # == cost_opt, written explicitly for clarity
+    neg2logL = n_data * np.log(sigma_hat2) + n_data * (np.log(2 * np.pi) + 1)
+    k = n_params + 1  # +1 for sigma^2, estimated via MLE alongside the model params
 
     AIC = neg2logL + 2 * k
     BIC = neg2logL + k * np.log(n_data)
+
+    if n_data - k - 1 <= 0:
+        raise ValueError(
+            f"n_data-k-1={n_data-k-1} <= 0; AICc is undefined here (too many "
+            "parameters relative to the data -- the model can't be reliably "
+            "compared at all, let alone with the small-sample correction)."
+        )
+    AICc = AIC + (2 * k * (k + 1)) / (n_data - k - 1)
 
     return {
         "cost_opt": cost_opt,
         "RSS": RSS,
         "n_data": n_data,
         "n_params": n_params,
+        "sigma_hat2": sigma_hat2,
         "k": k,
         "neg2logL": neg2logL,
         "AIC": AIC,
+        "AICc": AICc,
         "BIC": BIC,
     }
 
@@ -85,8 +109,8 @@ def compare_models(model_results, verbose=True):
                      (n_data should be the same across models if they were fit
                      to the same dataset -- a mismatch is flagged below)
 
-    Returns a DataFrame with AIC, BIC, delta-AIC, delta-BIC, and Akaike
-    weights for each model, sorted by AIC (best first).
+    Returns a DataFrame with sigma_hat2, -2logL, AIC, BIC, delta-AIC,
+    delta-BIC, and Akaike weights for each model, sorted by AIC (best first).
     """
     rows = []
     for label, r in model_results.items():
@@ -107,21 +131,42 @@ def compare_models(model_results, verbose=True):
 
     df = df.sort_values("AIC")
     df["delta_AIC"] = df["AIC"] - df["AIC"].min()
+    df["delta_AICc"] = df["AICc"] - df["AICc"].min()
     df["delta_BIC"] = df["BIC"] - df["BIC"].min()
 
     # Akaike weights: relative likelihood of each model given the set
     rel_likelihood = np.exp(-0.5 * df["delta_AIC"])
     df["akaike_weight"] = rel_likelihood / rel_likelihood.sum()
 
+    # n/k rule of thumb (Burnham & Anderson): AICc recommended when n/k < 40
+    df["n_over_k"] = df["n_data"] / df["k"]
+    low_ratio = df[df["n_over_k"] < 40]
+    if len(low_ratio) and verbose:
+        ratios = ", ".join(f"{m}: n/k={v:.3g}" for m, v in low_ratio["n_over_k"].items())
+        print(
+            f"NOTE: n_data/k < 40 for {ratios} -- plain AIC is unreliable at this "
+            "sample-size-to-parameter ratio; prefer AICc for these models "
+            "(Burnham & Anderson)."
+        )
+
     if verbose:
         print("\nModel comparison (sorted by AIC, best first):")
-        print(df[["cost_opt", "n_data", "n_params", "AIC", "delta_AIC", "akaike_weight", "BIC", "delta_BIC"]]
+        print(df[["sigma_hat2", "neg2logL", "n_data", "k", "n_over_k", "AIC", "delta_AIC",
+                   "AICc", "delta_AICc", "akaike_weight", "BIC", "delta_BIC"]]
+              .rename(columns={"neg2logL": "-2logL"})
               .to_string(float_format=lambda x: f"{x:.6g}"))
 
         best_aic = df.index[0]
+        best_aicc = df.sort_values("AICc").index[0]
         best_bic = df.sort_values("BIC").index[0]
         print(f"\nAIC prefers: {best_aic}")
+        print(f"AICc prefers: {best_aicc}")
         print(f"BIC prefers: {best_bic}")
+        if best_aic != best_aicc:
+            print(
+                "AIC and AICc disagree on the preferred model -- given n_data/k is "
+                "low for at least one model here, trust AICc over plain AIC."
+            )
         if best_aic != best_bic:
             print(
                 "AIC and BIC disagree -- BIC penalizes extra parameters more heavily "
@@ -130,14 +175,14 @@ def compare_models(model_results, verbose=True):
                 "the stricter BIC standard."
             )
         for label in df.index:
-            d = df.loc[label, "delta_AIC"]
+            d = df.loc[label, "delta_AICc"]
             if d < 2:
                 verdict = "essentially indistinguishable from the best model"
             elif d < 10:
                 verdict = "some support against, relative to the best model"
             else:
                 verdict = "effectively ruled out relative to the best model"
-            print(f"  {label}: delta_AIC={d:.3g} -> {verdict}")
+            print(f"  {label}: delta_AICc={d:.3g} -> {verdict}")
 
     return df
 
@@ -221,10 +266,13 @@ if __name__ == "__main__":
     hill_stats = evaluate_model(param_ode_hill, calibr_hill)
     mm_stats = evaluate_model(param_ode_mm, calibr_mm)
 
-    print(f"Hill: cost_opt={hill_stats['cost_opt']:.6g}, n_data={hill_stats['n_data']}, "
-          f"n_params={hill_stats['n_params']}")
-    print(f"MM:   cost_opt={mm_stats['cost_opt']:.6g}, n_data={mm_stats['n_data']}, "
-          f"n_params={mm_stats['n_params']}")
+    hill_full = compute_aic_bic(hill_stats["cost_opt"], hill_stats["n_data"], hill_stats["n_params"])
+    mm_full = compute_aic_bic(mm_stats["cost_opt"], mm_stats["n_data"], mm_stats["n_params"])
+
+    print(f"Hill: -2logL={hill_full['neg2logL']:.6g}, sigma^2={hill_full['sigma_hat2']:.6g}, "
+          f"n_data={hill_full['n_data']}, n_params={hill_full['n_params']}, k={hill_full['k']}")
+    print(f"MM:   -2logL={mm_full['neg2logL']:.6g}, sigma^2={mm_full['sigma_hat2']:.6g}, "
+          f"n_data={mm_full['n_data']}, n_params={mm_full['n_params']}, k={mm_full['k']}")
 
     df_comparison = compare_models({
         "Hill": hill_stats,

@@ -91,6 +91,8 @@ def cost(param, calibr_setup, jac_spasity):
                 param_ode_new[8] = 0.
             elif calibr_setup['model'] == ode_model_coculture_wopH_expsat:
                 param_ode_new[8] = 0.
+            elif calibr_setup['model'] == ode_model_coculture_withpH_MM:
+                param_ode_new[17] = 0.
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode_new, x_max[i])
         else:
             ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, x_max[i])

@@ -79,18 +79,3 @@ if __name__ == "__main__":
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     n_exps = len(exps)
     param_opt, calibr_setup = data_calibration_poolpaper([dfs], path=path_new)
-
-    x0_vals = param_opt[:n_cl*n_exps]
-    param_ode = list(param_opt[n_cl*n_exps:])
-    param_ode_new = np.copy(param_ode)
-    exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
-    for i in range (len(exps)):
-        data = dfs.filter(like=f'V{i+1:02d}')
-        #if exp != 'LsCTC494' and exp != 'LsCTC494-Lm' and exp != 'V01' and exp != 'V05':
-        if exps[i] != 'LsCTC494-Lm' and exps[i] != 'V05':
-            # !! if diff model mu(pH) change 3*n_cl to 2*n_cl !!!
-            #param_ode_new[2*4 + 2 + 3+1] = 0.
-            param_ode_new[4*3+3+3] = 0.
-            plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
-        else:
-            plot_all_curves(param_ode, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')

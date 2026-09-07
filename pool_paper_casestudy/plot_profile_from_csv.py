@@ -356,7 +356,7 @@ if __name__ == "__main__":
 
     # The value printed as "Auto-estimated scale: ... scale=X" during
     # your original profile-likelihood run (see estimate_profile_scale()).
-    SCALE = 0.000230382
+    SCALE = 0.000213134
 
     MAKE_GRID_PLOT = True
     GRID_OUT_PATH = "pool_paper_casestudy/out/wo_pH/finalresult/5exps/profile_likelihood_grid.png"

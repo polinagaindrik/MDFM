@@ -2,8 +2,11 @@ import os
 import sys
 
 sys.path.append(os.getcwd())
-import fusion_model as fm
-from pool_paper_casestudy.pool_model_functions import *
+from pool_paper_casestudy import fusion_core as fm
+from pool_paper_casestudy.fusion_core.mdl import ode_model_coculture3, cost
+from pool_paper_casestudy.fusion_core.pest import calculate_model_params
+from pool_paper_casestudy.fusion_core.data import experimental_values
+from pool_paper_casestudy.fusion_core.plotting import plot_all_curves
 
 import numpy as np
 import pandas as pd

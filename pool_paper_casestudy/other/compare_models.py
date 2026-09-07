@@ -5,10 +5,13 @@ import pandas as pd
 from scipy.optimize import minimize
 from scipy.stats import chi2
 
-import fusion_model as fm
-from profile_likelihood import count_data_points
-from pool_paper_casestudy.pool_model_functions import *
-from pool_paper_casestudy.do_local_optim import cost
+from pool_paper_casestudy import fusion_core as fm
+from pool_paper_casestudy.profile_likelihood import count_data_points
+from pool_paper_casestudy.fusion_core.dtf import extract_observables_from_df
+from pool_paper_casestudy.fusion_core.mdl import (
+    ode_model_coculture_wopH, ode_model_coculture_wopH_MM, ode_model_coculture_wopH_expsat,
+)
+from pool_paper_casestudy.local_optimization import cost
 
 path2 = "pool_paper_casestudy/out/wo_pH_new/"
 n_cl = 4

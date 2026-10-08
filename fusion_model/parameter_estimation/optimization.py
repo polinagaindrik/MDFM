@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import os
+import multiprocessing as mp
 import numpy as np
 from scipy.optimize import differential_evolution, minimize
 from scipy.optimize._differentialevolution import DifferentialEvolutionSolver
@@ -49,8 +50,44 @@ def calculate_model_params(cost_func, calibr_setup, local_polish=False, local_op
 
 
 # Local refinement of a (global) optimization result
+class _LocalObjective:
+    """Cost as a function of the free parameters only (picklable for multiprocessing)."""
+    def __init__(self, cost_func, param_init, free, calibr_setup, jac_spasity):
+        self.cost_func, self.param_init, self.free = cost_func, param_init, free
+        self.calibr_setup, self.jac_spasity = calibr_setup, jac_spasity
+
+    def full(self, z):
+        x = self.param_init.copy()
+        x[self.free] = z
+        return x
+
+    def __call__(self, z):
+        try:
+            c = self.cost_func(self.full(z), self.calibr_setup, self.jac_spasity)
+        except Exception:
+            return 1e10
+        return c if np.isfinite(c) else 1e10
+
+
+def _local_run(task):
+    """One L-BFGS-B run (one start of the multistart). Runs in a worker process when n_jobs > 1."""
+    r, objective, z0, bounds, options, print_every = task
+    history = []
+
+    def callback(intermediate_result):
+        history.append((objective.full(intermediate_result.x), float(intermediate_result.fun)))
+        if print_every and len(history) % print_every == 0:
+            print(f'  [start {r}] iteration {len(history)}: cost = {intermediate_result.fun:.10g}', flush=True)
+
+    res = minimize(objective, z0, method='L-BFGS-B', bounds=bounds, callback=callback, options=options)
+    print(f'  [start {r}] cost = {res.fun:.10g}, iterations = {res.nit}, success = {res.success} ({res.message})',
+          flush=True)
+    return r, np.array(res.x), float(res.fun), bool(res.success), history
+
+
 def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, maxiter=500, ftol=1e-12, gtol=1e-8,
-                       n_restarts=1, jitter_frac=0.02, seed=0, history_file=output_file_local, print_every=10):
+                       n_restarts=1, jitter_frac=0.02, seed=0, history_file=output_file_local, print_every=10,
+                       n_jobs=1):
     """
     L-BFGS-B minimization of cost_func starting from param_init (e.g. the result of
     differential_evolution) to reach the exact local optimum.
@@ -58,8 +95,13 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     Only free parameters (lower bound < upper bound) are optimized; fixed ones (e.g. the
     diagonal k_ii = 0 or predefined S entries) stay at their value.
     n_restarts > 1 adds starts from random perturbations of param_init (jitter_frac times the
-    bound width); the best result is kept. The cost of every iteration of the best run
-    is written to history_file (columns as in optimization_history1.csv).
+    bound width); the best result is kept. Start 0 is always param_init itself.
+    n_jobs      : number of processes running the starts in parallel (one start per process;
+                  -1 = all CPU cores, capped at n_restarts). Each start is sequential, so more
+                  processes than starts gives no speed-up.
+    The cost of every iteration of the best run is written to history_file (columns as in
+    optimization_history1.csv); the history of every start is written to
+    <history_file>_start<r>.csv when n_restarts > 1.
     Returns (param_opt, cost_opt). The local result is only accepted if it is not worse
     than param_init.
     """
@@ -70,17 +112,9 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     param_init = np.clip(param_init, lo, hi)
     free = np.where(hi > lo)[0]
     rng = np.random.default_rng(seed)
+    objective = _LocalObjective(cost_func, param_init, free, calibr_setup, jac_spasity)
 
-    def full(z):
-        x = param_init.copy()
-        x[free] = z
-        return x
-
-    def f(z):
-        c = cost_func(full(z), calibr_setup, jac_spasity)
-        return c if np.isfinite(c) else 1e10
-
-    cost_init = f(param_init[free])
+    cost_init = objective(param_init[free])
     print(f'Local optimization: start cost = {cost_init:.10g} ({len(free)} free parameters)', flush=True)
 
     starts = [param_init[free]]
@@ -88,35 +122,51 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
         z = param_init[free] + rng.normal(0., jitter_frac, size=len(free)) * (hi[free] - lo[free])
         starts.append(np.clip(z, lo[free], hi[free]))
 
-    best = None
-    for r, z0 in enumerate(starts):
-        history = []
+    bounds = list(zip(lo[free], hi[free]))
+    options = {'maxiter': maxiter, 'ftol': ftol, 'gtol': gtol}
+    tasks = [(r, objective, z0, bounds, options, print_every) for r, z0 in enumerate(starts)]
 
-        def callback(intermediate_result):
-            history.append((full(intermediate_result.x), intermediate_result.fun))
-            if print_every and len(history) % print_every == 0:
-                print(f'  [start {r}] iteration {len(history)}: cost = {intermediate_result.fun:.10g}', flush=True)
+    if n_jobs is None or n_jobs == 0:
+        n_jobs = 1
+    if n_jobs < 0:
+        n_jobs = os.cpu_count() or 1
+    n_proc = min(n_jobs, len(tasks))
+    if n_proc > 1:
+        print(f'Running {len(tasks)} local optimizations in {n_proc} parallel processes', flush=True)
+        with mp.Pool(processes=n_proc) as pool:
+            results = list(pool.imap_unordered(_local_run, tasks))
+    else:
+        results = [_local_run(t) for t in tasks]
+    results.sort(key=lambda res: res[0])
 
-        res = minimize(f, z0, method='L-BFGS-B', bounds=list(zip(lo[free], hi[free])), callback=callback,
-                       options={'maxiter': maxiter, 'ftol': ftol, 'gtol': gtol})
-        print(f'  [start {r}] cost = {res.fun:.10g}, iterations = {res.nit}, success = {res.success} ({res.message})',
-              flush=True)
-        if best is None or res.fun < best[0].fun:
-            best = (res, history)
-
-    res, history = best
     if history_file:
         os.makedirs(os.path.dirname(history_file) or '.', exist_ok=True)
-        with open(history_file, 'w') as fh:
-            fh.write('iteration,' + ''.join(f'p{i},' for i in range(len(param_init))) + 'cost\n')
-            for it, (x, c) in enumerate(history, 1):
-                fh.write(f'{it},' + ''.join(f'{p},' for p in x) + f'{c}\n')
 
-    if res.fun > cost_init:
+        def _write_history(fname, history):
+            with open(fname, 'w') as fh:
+                fh.write('iteration,' + ''.join(f'p{i},' for i in range(len(param_init))) + 'cost\n')
+                for it, (x, c) in enumerate(history, 1):
+                    fh.write(f'{it},' + ''.join(f'{p},' for p in x) + f'{c}\n')
+
+        if len(results) > 1:
+            base, ext = os.path.splitext(history_file)
+            for r, _, _, _, history in results:
+                _write_history(f'{base}_start{r}{ext}', history)
+
+    if len(results) > 1:
+        print('Local optimization summary:', flush=True)
+        for r, _, c, ok, _ in results:
+            print(f'  start {r}: cost = {c:.10g}, success = {ok}', flush=True)
+
+    r_best, z_best, c_best, _, history_best = min(results, key=lambda res: res[2])
+    if history_file:
+        _write_history(history_file, history_best)
+
+    if c_best > cost_init:
         print('Local optimization did not improve the cost; keeping the initial parameters.', flush=True)
         return param_init, cost_init
-    print(f'Local optimization: cost {cost_init:.10g} -> {res.fun:.10g}', flush=True)
-    return full(res.x), float(res.fun)
+    print(f'Local optimization: cost {cost_init:.10g} -> {c_best:.10g} (best start: {r_best})', flush=True)
+    return objective.full(z_best), c_best
 
 
 def calculate_model_params_direct_local(ll_func, dfs, calibr_setup, rnd_seed=8097):

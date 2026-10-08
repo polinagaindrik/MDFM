@@ -100,7 +100,7 @@ def get_cluster_dataframe(df, clusters):
 
 
 def merge_dfs(dfs, sort=True):
-    return pd.concat(dfs).groupby(level=0, sort=sort).sum()
+    return pd.concat(dfs).groupby(level=0, sort=sort).sum(min_count=1)
 
 
 def get_meas_days(df, exp):

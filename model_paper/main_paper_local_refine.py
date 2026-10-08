@@ -31,7 +31,9 @@ if __name__ == "__main__":
     add_name = f"_{n_cl}dim_{n_media}media"
     path = f"model_paper/out/{n_cl}_dim/calibration/"
     MAXITER = 1000
-    N_RESTARTS = 1  # >1: additional starts from random perturbations of the global result
+    N_RESTARTS = 4  # start 0 = global result, others = random perturbations of it
+    JITTER_FRAC = 0.02  # size of the perturbations (fraction of the bound width)
+    N_JOBS = 4  # starts run in parallel processes (-1 = all cores)
 
     dfs, result, _ = load_calibration(path, add_name)
     df_mibi, df_maldi, df_ngs = dfs
@@ -64,7 +66,7 @@ if __name__ == "__main__":
 
     start = time.time()
     param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
-                                                     maxiter=MAXITER, n_restarts=N_RESTARTS,
+                                                     maxiter=MAXITER, n_restarts=N_RESTARTS, jitter_frac=JITTER_FRAC, n_jobs=N_JOBS,
                                                      history_file=path + "optimization_history_local.csv")
     print((time.time() - start) / 60., "min")
 

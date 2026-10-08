@@ -56,8 +56,10 @@ if __name__ == "__main__":
                         f'Result_calibration{add_name}_global.json', dir=path_new)
 
     # 2) Local refinement (L-BFGS-B) from the global result -> exact local optimum
+    #    n_restarts: start 0 = global result, the others = random perturbations of it (jitter_frac*bound width)
+    #    n_jobs: starts run in parallel processes (-1 = all cores)
     param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
-                                                     maxiter=1000, n_restarts=1,
+                                                     maxiter=1000, n_restarts=4, jitter_frac=0.02, n_jobs=4,
                                                      history_file=path_new+'optimization_history_local.csv')
     print((time.time()-start)/60., 'min (global + local)')
 

@@ -1,12 +1,13 @@
 """
-Profile likelihood / identifiability analysis for the model_paper calibration
-=============================================================================
+Profile likelihood for model_paper (MDFM repo)
+==============================================
 
-Loads a saved calibration (Result_calibration<add_name>.json + the data frames
-written by main_paper_calibr.py), rebuilds the calibration setup and runs a
-profile likelihood with local (L-BFGS-B) re-optimization, using the engine in
-fusion_model/parameter_estimation/profile_likelihood.py
-(same approach as pool_paper_casestudy/profile_likelihood.py).
+Counterpart of ``pool_paper_casestudy/profile_likelihood.py``. The engine
+(fusion_model/parameter_estimation/profile_likelihood.py) has the same API as
+``pool_paper_casestudy/fusion_core/likelihood.py``; this file only supplies the
+case-specific plumbing: it injects ``cost`` (= fm.pest.cost_withS) and
+re-exports every function under the same name/signature as the pool_paper
+wrappers, so calls can be copied between the two projects.
 
 Parameter vector layout (cost_withS, model fusion_model2):
     [ x0 (n_cl per experiment, log10) | lambda_1 (n_cl) | lambda_exp (n_cl) |
@@ -17,6 +18,8 @@ neither profiled nor re-optimized.
 
 Run from the repository root:
     python model_paper/profile_likelihood_model_paper.py
+Re-plot afterwards (without recomputing):
+    python model_paper/plot_profile_from_csv.py
 """
 import os
 import sys
@@ -27,6 +30,40 @@ from fusion_model.parameter_estimation import profile_likelihood as pl
 import numpy as np
 import pandas as pd
 
+cost = fm.pest.cost_withS  # cost(param, calibr_setup, jac_spasity)
+
+
+# ----------------------------------------------------------------------
+# Thin case-study wrappers (same names/signatures as pool_paper_casestudy/profile_likelihood.py)
+# ----------------------------------------------------------------------
+free_param_indices = pl.free_param_indices
+confidence_interval_from_profile = pl.confidence_interval_from_profile
+plot_profile_likelihood = pl.plot_profile_likelihood
+
+
+def count_data_points(param, calibr_setup, jac_spasity=None):
+    """See `profile_likelihood.count_data_points` (this case study's `cost` is used)."""
+    return pl.count_data_points(cost, param, calibr_setup, jac_spasity)
+
+
+def estimate_profile_scale(param_opt, calibr_setup, cost_opt, n_free_params, jac_spasity=None):
+    """See `profile_likelihood.estimate_profile_scale` (this case study's `cost` is used)."""
+    return pl.estimate_profile_scale(cost, param_opt, calibr_setup, cost_opt, n_free_params, jac_spasity=jac_spasity)
+
+
+def profile_likelihood_for_param(param_opt, param_index, calibr_setup, *args, **kwargs):
+    """See `profile_likelihood.profile_likelihood_for_param` (this case study's `cost` is used)."""
+    return pl.profile_likelihood_for_param(cost, param_opt, param_index, calibr_setup, *args, **kwargs)
+
+
+def run_profile_likelihood_all(param_opt, calibr_setup, *args, **kwargs):
+    """See `profile_likelihood.run_profile_likelihood_all` (this case study's `cost` is used)."""
+    return pl.run_profile_likelihood_all(cost, param_opt, calibr_setup, *args, **kwargs)
+
+
+# ----------------------------------------------------------------------
+# Loading the model_paper calibration
+# ----------------------------------------------------------------------
 
 def load_calibration(path, add_name):
     """Data frames, estimated parameters and (if present) true in-silico parameters."""
@@ -36,9 +73,8 @@ def load_calibration(path, add_name):
         f_raw = os.path.join(path, f"dataframe_{k}{add_name}.pkl")
         dfs.append(pd.read_pickle(f_pre if os.path.exists(f_pre) else f_raw))
     result = fm.output.read_from_json(f"Result_calibration{add_name}.json", dir=path)
-    true_file = os.path.join(path, "Result_temp_together_real.json")
     true_params = None
-    if os.path.exists(true_file):
+    if os.path.exists(os.path.join(path, "Result_temp_together_real.json")):
         tr = fm.output.read_from_json("Result_temp_together_real.json", dir=path)
         true_params = np.concatenate([np.ravel(tr["param_ode"]), np.ravel(tr["s_x"])])
     return dfs, result, true_params
@@ -77,45 +113,21 @@ def make_param_names(exps, bact, media):
     return names
 
 
-if __name__ == "__main__":
-    # ================================================================
-    # Settings
-    # ================================================================
-    n_cl = 4
-    n_media = 2
-    add_name = f"_{n_cl}dim_{n_media}media"
-    path = f"model_paper/out/{n_cl}_dim/calibration/"
-    out_path = f"model_paper/out/{n_cl}_dim/profile_likelihood/"
-
-    # What to profile: 'ode' (growth/interaction parameters), 'ode+S', or 'all' (incl. x0)
-    PROFILE = "ode+S"
-    # True: initial values x0 are held at the estimate (much faster, but the
-    # profiles are then conditional on x0 and therefore somewhat too narrow).
-    # False: x0 are re-optimized as nuisance parameters at every profile point.
-    FIX_X0 = False
-
-    # Objective: 'neg2logL' -> Gaussian -2 log L with one noise variance per data
-    # type (chi2 threshold applies directly, recommended); 'calibration' -> the
-    # cost used for calibration (cost_sum_and_geometric_mean) with a manual SCALE.
-    OBJECTIVE = "neg2logL"
-    SCALE = 1.0  # only used for OBJECTIVE='calibration'
-
-    N_JOBS = 16  # one worker per (parameter, direction) walk
-    # ================================================================
-
-    os.makedirs(out_path, exist_ok=True)
+def build_calibr_setup(path, add_name, n_cl, n_media, objective="neg2logL"):
+    """calibr_setup (incl. param_bnds and data_array) for a saved calibration.
+    objective: 'neg2logL' (GaussianNeg2LogLik, scale=1) or 'calibration'
+    (cost_sum_and_geometric_mean, as used for calibration)."""
     dfs, result, true_params = load_calibration(path, add_name)
     df_mibi, df_maldi, df_ngs = dfs
     exps = sorted(list(set([s.split("_")[0] for s in df_mibi.columns])))
     media = sorted(list(set([s.split("_")[-1].split("-")[0] for s in df_maldi.columns])))
     bact = list(df_maldi.index)
     assert len(bact) == n_cl and len(media) == n_media, (bact, media)
-
     calibr_presetup = {
         "model": fm.mdl.fusion_model2,
         "T_x": result["T_x"],
         "workers": 1,
-        "output_path": out_path,
+        "output_path": path,
         "n_cl": n_cl,
         "n_media": n_media,
         "dfs": dfs,
@@ -127,43 +139,71 @@ if __name__ == "__main__":
     calibr_setup = fm.pest.define_calibr_setup_insilico(
         calibr_presetup, inhib=True, s_x_predefined=s_x_predefined_from_maldi(df_maldi, media), s_x=None)
     calibr_setup["data_array"] = fm.dtf.extract_observables_from_df(dfs)
-
-    if OBJECTIVE == "neg2logL":
+    if objective == "neg2logL":
         calibr_setup["aggregation_func"] = pl.make_gaussian_neg2loglik(calibr_setup["data_array"])
-        scale = 1.0
-    else:
-        scale = SCALE
-
     param_opt = np.array(result["param_ode"], dtype=float)
     param_names = make_param_names(exps, bact, media)
     assert len(param_opt) == len(calibr_setup["param_bnds"]) == len(param_names)
+    return calibr_setup, param_opt, param_names, true_params
 
-    # index blocks
-    n_x0 = n_cl * len(exps)
+
+if __name__ == "__main__":
+    # --------------------------------------------------------------
+    # Settings
+    # --------------------------------------------------------------
+    n_cl = 4
+    n_media = 2
+    relnoise = 0.1
+    add_name = f"_{int(n_cl)}dim_{int(n_media)}media"
+    path2 = f"model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/"
+    out_path = path2 + "profile_likelihood/"
+
+    PROFILE = "ode+S"       # 'ode', 'ode+S' or 'all' (incl. x0)
+    FIX_X0 = False          # True: x0 held at the estimate (faster, profiles conditional on x0)
+    OBJECTIVE = "neg2logL"  # 'neg2logL' (scale = 1) or 'calibration' (scale='auto' as in pool_paper)
+
+    os.makedirs(out_path, exist_ok=True)
+    calibr_setup, param_opt, ode_param_names, true_params = build_calibr_setup(
+        path2, add_name, n_cl, n_media, objective=OBJECTIVE)
+
+    n_exps = len(calibr_setup["exps"])
+    n_x0 = n_cl * n_exps
     n_ode = 4 * n_cl + 2 + n_cl * n_cl
     idx_x0 = list(range(n_x0))
     idx_ode = list(range(n_x0, n_x0 + n_ode))
     idx_S = list(range(n_x0 + n_ode, len(param_opt)))
     profile_indices = {"ode": idx_ode, "ode+S": idx_ode + idx_S, "all": None}[PROFILE]
-    fixed_indices = idx_x0 if FIX_X0 else ()
-
     tag = f"{add_name}_{PROFILE.replace('+', '')}_{OBJECTIVE}" + ("_fixx0" if FIX_X0 else "")
-    df, ci, param_ref, cost_ref = pl.run_profile_likelihood(
-        fm.pest.cost_withS, param_opt, calibr_setup,
+
+    df, cis = run_profile_likelihood_all(
+        param_opt, calibr_setup,
+        span=1., n_points=30, method="local",
+        n_jobs=20,              # <-- parallelize across (parameter, direction) walks
+        per_point_workers=1,    # <-- irrelevant for method="local", leave at 1
+        out_csv=out_path + f"profile_likelihood_results{tag}.csv",
+        plot_path=out_path + f"profile_likelihood{tag}.png",
+        param_names=ode_param_names,
+        n_restarts=1, jitter_frac=0.05,
+        # optional extras (model_paper):
         profile_indices=profile_indices,
-        fixed_indices=fixed_indices,
-        refine=True,
-        scale=scale,
-        confidence_level=0.95,
-        init_step_frac=0.01, max_step_frac=0.1, max_points=30, stop_factor=1.5,
-        anchor_start=True, n_jitter=0,
-        n_jobs=N_JOBS,
-        param_names=param_names,
-        out_csv=os.path.join(out_path, f"profile_likelihood{tag}.csv"),
-        plot_path=os.path.join(out_path, f"profile_likelihood{tag}.png"),
+        fixed_indices=idx_x0 if FIX_X0 else (),
+        refine=True,            # polish the optimum with the profiling objective first
+        stop_factor=1.5,        # stop a walk once Delta > 1.5 * threshold (None: whole grid)
         true_params=true_params,
     )
 
-    # To re-plot later without recomputing:
-    # pl.plot_profile_likelihood_from_csv(os.path.join(out_path, f"profile_likelihood{tag}.csv"),
-    #                                     true_params=true_params, save_path=...)
+    '''
+    # Re-run the single-parameter profile for one parameter, e.g. N_1
+    IDX = ode_param_names.index(r"$N_1$")
+    grid, profile_cost, profile_params = profile_likelihood_for_param(
+        param_opt, IDX, calibr_setup,
+        span=0.2, n_points=15, method="local",
+        n_jobs=2, n_restarts=1, jitter_frac=0.05,
+    )
+    cost_opt = cost(param_opt, calibr_setup, None)
+    scale, n_data, sigma_hat2 = estimate_profile_scale(
+        param_opt, calibr_setup, cost_opt,
+        n_free_params=len(free_param_indices(calibr_setup["param_bnds"])),
+    )
+    print(confidence_interval_from_profile(grid, profile_cost, cost_opt, scale=scale))
+    '''

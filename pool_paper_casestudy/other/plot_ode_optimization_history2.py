@@ -1,8 +1,13 @@
 import os
 import sys
 sys.path.append(os.getcwd())
-import fusion_model as fm
-from pool_paper_casestudy.pool_model_functions import *
+from pool_paper_casestudy import fusion_core as fm
+from pool_paper_casestudy.fusion_core.dtf import extract_observables_from_df
+from pool_paper_casestudy.fusion_core.mdl import (
+    ode_model_coculture3, set_initial_vals, observable, cost,
+)
+from pool_paper_casestudy.fusion_core.data import get_param_dfs
+from pool_paper_casestudy.fusion_core.plotting import colors_all, set_labels, plot_all_curves
 
 import numpy as np
 import pandas as pd

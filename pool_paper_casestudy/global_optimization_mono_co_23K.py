@@ -2,16 +2,16 @@ import os
 import sys
 
 sys.path.append(os.getcwd())
-import fusion_model as fm
-from pool_paper_casestudy.pool_model_functions import *
+from pool_paper_casestudy import fusion_core as fm
+from pool_paper_casestudy.fusion_core.mdl import cost, ode_model_coculture_withpH_MM
+from pool_paper_casestudy.fusion_core.pest import calculate_model_params
+from pool_paper_casestudy.fusion_core.data import experimental_values
 
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
-def data_calibration_poolpaper(dfs, path=""):
+def data_calibration_poolpaper(dfs, path="", add_name="", n_cl=4):
     exps_calibr = sorted(list(set([s.split("_")[0] for s in dfs[0].columns])))
-    model = ode_model_coculture3
+    model = ode_model_coculture_withpH_MM
     calibr_presetup = {
         "model": model, #ode_model_coculture,
         "workers": workers,  # number of threads for multiprocessing
@@ -44,12 +44,12 @@ def data_calibration_poolpaper(dfs, path=""):
             [(1., 3.5), (6., 8.), (9., 14.),
              (1., 1),   (8., 8.), (14., 14.),
              (1., 3.5), (6., 8.), (9., 14.)] +  # pH_min, pH_opt, pH_max
-            [(0., 0.)] + [(1., 1.)] + [(1, 1)] + # omegaT_exp + ki_T_inhib + n  
+            [(0.05, 3.0), (1, 1000)] +  # omega, K_m
             [(8., 9.), (0., 0.), (8., 9.)] + # N_max_exp
             [(0., 0.)] + # kappa_T
             [(.1, 10)] + [(1., 100.)] +   # kappa_LA ls23K
             [(0., 0.)] + [(0., 0.)] +   # kappa_LA lsCTC494
-            [(.1, 10)] + [(1., 100.)]   # kappa_LA lm
+            [(0., 0.)] + [(1., 100.)]   # kappa_LA lm
         )  
     calibr_setup = calibr_presetup
     calibr_setup["param_bnds"] = x0_bnds_all + param_ode_bnds
@@ -63,11 +63,11 @@ def data_calibration_poolpaper(dfs, path=""):
 
 
 if __name__ == "__main__":
-    path = "pool_paper_casestudy/out/"
+    path_new = "pool_paper_casestudy/out/with_pH/"
     workers = -1
     n_cl = 4
-    model = ode_model_coculture3
-    path_new = path + "test/"
+    model = ode_model_coculture_withpH_MM
+    add_name = "_mono_co_23K_MM_withpH"
     
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
     skip_rows = [34, 8,  58, 109, 83]
@@ -87,11 +87,4 @@ if __name__ == "__main__":
 
     exps = sorted(list(set([s.split("_")[0] for s in dfs.columns])))
     n_exps = len(exps)
-    param_opt, calibr_setup = data_calibration_poolpaper([dfs], path=path_new)
-
-    x0_vals = param_opt[:n_cl*n_exps]
-    param_ode = list(param_opt[n_cl*n_exps:])
-    param_ode_new = np.copy(param_ode)
-    for i, exp in enumerate(exps):
-        data = dfs.filter(like=exp)
-        plot_all_curves(param_ode_new, x0_vals[n_cl*i:n_cl*(i+1)], model=model, data=data, path=path_new, add_name=f'_estim_realdata_{names[i]}')
+    param_opt, calibr_setup = data_calibration_poolpaper([dfs], path=path_new, add_name=add_name, n_cl=n_cl)

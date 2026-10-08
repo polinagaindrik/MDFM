@@ -24,12 +24,18 @@ if __name__ == "__main__":
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in data[1].columns])))
     df_x = pd.read_pickle(path2+f'dataframe_x{add_name}.pkl')
 
-    step = 1
-    optim_file2 = f"optimization_history{int(step)}.csv"
-    df_optim2 = pd.read_csv(path+optim_file2)
     T_x = [0.] +[1. for _ in range(n_cl-1)]
-    # Take optimal parameter values on last optimization step
-    param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
+    # 'json': final result Result_calibration<add_name>.json (after local refinement)
+    # 'history': last step of the global optimization history (optimization_history1.csv)
+    RESULT_SOURCE = 'json'
+    if RESULT_SOURCE == 'json':
+        param_opt = np.array(fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path)['param_ode'], dtype=float)
+    else:
+        step = 1
+        optim_file2 = f"optimization_history{int(step)}.csv"
+        df_optim2 = pd.read_csv(path+optim_file2)
+        # Take optimal parameter values on last optimization step
+        param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
     s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
     param_ode = param_opt[:-n_cl*n_media]
 

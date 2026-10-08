@@ -87,7 +87,7 @@ def _local_run(task):
 
 def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, maxiter=500, ftol=1e-12, gtol=1e-8,
                        n_restarts=1, jitter_frac=0.02, seed=0, history_file=output_file_local, print_every=10,
-                       n_jobs=1):
+                       n_jobs=1, maxfun=None):
     """
     L-BFGS-B minimization of cost_func starting from param_init (e.g. the result of
     differential_evolution) to reach the exact local optimum.
@@ -96,6 +96,10 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     diagonal k_ii = 0 or predefined S entries) stay at their value.
     n_restarts > 1 adds starts from random perturbations of param_init (jitter_frac times the
     bound width); the best result is kept. Start 0 is always param_init itself.
+    maxfun      : max. number of cost evaluations per start. The gradient is computed by finite
+                  differences (one evaluation per free parameter), so scipy's default of 15000 stops
+                  a 74-parameter fit after ~170 iterations. Default None: 2*(n_free+1)*maxiter, i.e.
+                  maxiter is the effective limit.
     n_jobs      : number of processes running the starts in parallel (one start per process;
                   -1 = all CPU cores, capped at n_restarts). Each start is sequential, so more
                   processes than starts gives no speed-up.
@@ -123,7 +127,9 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
         starts.append(np.clip(z, lo[free], hi[free]))
 
     bounds = list(zip(lo[free], hi[free]))
-    options = {'maxiter': maxiter, 'ftol': ftol, 'gtol': gtol}
+    if maxfun is None:
+        maxfun = 2 * (len(free) + 1) * maxiter
+    options = {'maxiter': maxiter, 'maxfun': maxfun, 'ftol': ftol, 'gtol': gtol}
     tasks = [(r, objective, z0, bounds, options, print_every) for r, z0 in enumerate(starts)]
 
     if n_jobs is None or n_jobs == 0:

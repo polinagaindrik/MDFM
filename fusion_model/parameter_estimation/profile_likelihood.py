@@ -183,6 +183,9 @@ def _local_fit(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *,
     hi = np.array([b[1] for b in bnds], dtype=float)
     opts = {"maxiter": 200, "ftol": 1e-10, "gtol": 1e-6}
     opts.update(minimize_options or {})
+    # finite-difference gradients cost one evaluation per parameter; scipy's default
+    # maxfun=15000 would otherwise stop large fits long before maxiter
+    opts.setdefault("maxfun", 2 * (len(opt_idx) + 1) * opts["maxiter"])
     rng = rng if rng is not None else np.random.default_rng()
 
     def f(z):

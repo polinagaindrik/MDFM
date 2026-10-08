@@ -28,12 +28,14 @@ import time
 if __name__ == "__main__":
     n_cl = 4
     n_media = 2
+    relnoise = 0.1
     add_name = f"_{n_cl}dim_{n_media}media"
-    path = f"model_paper/out/{n_cl}_dim/calibration/"
+    path = f"model_paper/out/model_complexity/{n_cl}_dim_{n_media}media_exp_{int(relnoise*100)}noise/calibration/"
+
     MAXITER = 1000
-    N_RESTARTS = 4  # start 0 = global result, others = random perturbations of it
-    JITTER_FRAC = 0.02  # size of the perturbations (fraction of the bound width)
-    N_JOBS = 4  # starts run in parallel processes (-1 = all cores)
+    N_RESTARTS = 3  # start 0 = global result, others = random perturbations of it
+    JITTER_FRAC = 0.01  # size of the perturbations (fraction of the bound width)
+    N_JOBS = 3  # starts run in parallel processes (-1 = all cores)
 
     dfs, result, _ = load_calibration(path, add_name)
     df_mibi, df_maldi, df_ngs = dfs
@@ -43,7 +45,7 @@ if __name__ == "__main__":
     calibr_presetup = {
         "model": fm.mdl.fusion_model2,
         "T_x": result["T_x"],
-        "workers": 1,
+        #"workers": 1,
         "output_path": path,
         "n_cl": n_cl,
         "n_media": n_media,

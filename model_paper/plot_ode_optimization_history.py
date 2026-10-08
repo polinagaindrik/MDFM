@@ -8,13 +8,13 @@ import pandas as pd
 
 
 if __name__ == "__main__":
-    n_cl = 6
+    n_cl = 4
     n_media = 2
     relnoise = 0.1
 
     #path = 'model_paper/out/'#f'model_paper/out/{int(n_cl)}_dim/calibration/'#
     #path2 = path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
-    path = f'model_paper/out/model_complexity/{n_cl}_dim_{n_media}media_exp_{int(relnoise*100)}noise/calibration/'
+    path = f'model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
     path2 = path
     add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']

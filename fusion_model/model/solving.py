@@ -34,6 +34,9 @@ def calc_obs_model(data, param_x0, calibr_setup, t_model):
 
 # The model solution for given ODEs
 def model_ODE_solution(model, t, param, x0, const, t0=0., jac=None, jac_spasity=None):
+    # parameters may come as a list (e.g. read from a JSON result file); the models need arrays
+    param = np.asarray(param, dtype=float)
+    x0 = np.asarray(x0, dtype=float)
     sol_model = solve_ivp(model, [t0, t[-1]], x0, dense_output=False, method='LSODA', max_step=0.1, t_eval=t, args=(param, x0, const),
                           rtol=1e-5, atol=1e-5, jac=jac)#, lband=const[1], uband=2*const[1])#, jac_spasity=jac_spasity
     return sol_model.y

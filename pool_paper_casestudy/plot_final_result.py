@@ -2,12 +2,11 @@ import os
 import sys
 
 sys.path.append(os.getcwd())
-import fusion_model as fm
-from pool_paper_casestudy.pool_model_functions import *
+from pool_paper_casestudy import fusion_core as fm
+from pool_paper_casestudy.fusion_core.mdl import ode_model_coculture_wopH_MM
+from pool_paper_casestudy.fusion_core.plotting import plot_cases_separately
 
-import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 def get_param_dfs(path, path2):
     optim_file2 = "optimization_history1.csv"
@@ -22,8 +21,8 @@ if __name__ == "__main__":
     add_name = ''
     model = ode_model_coculture_wopH_MM
     names = ['Ls23K', 'LsCTC494', 'Lm', 'Ls23K-Lm', 'LsCTC494-Lm']
-    path = 'pool_paper_casestudy/out/wo_pH_new/'
-    path2 = 'pool_paper_casestudy/out/wo_pH_new/'
+    path = 'pool_paper_casestudy/out/wo_pH/'
+    path2 = 'pool_paper_casestudy/out/wo_pH/'
     dfs_saved = pd.read_pickle(path2+'dataframe_poolpaper_all.pkl')
 
     # Monoculture experiments results:

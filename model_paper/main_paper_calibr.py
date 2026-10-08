@@ -48,12 +48,26 @@ if __name__ == "__main__":
     fm.output.json_dump(calibr_presetup['exp_temps'], 'exp_temps_model_paper.json', dir='model_paper/')
     calibr_setup = fm.pest.define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=s_x_predefined, s_x=None)
     
-    param_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_setup)[0]
-    print((time.time()-start)/60., 'min')
+    # 1) Global optimization (differential evolution)
+    param_glob, cost_glob = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_setup)
+    print((time.time()-start)/60., 'min (global)')
+    s_x_glob = np.array(param_glob)[-n_cl*n_media:].reshape((n_media, n_cl))
+    fm.output.json_dump({'param_ode': param_glob.astype(list), 's_x': s_x_glob, 'T_x': T_x, 'cost': cost_glob},
+                        f'Result_calibration{add_name}_global.json', dir=path_new)
+
+    # 2) Local refinement (L-BFGS-B) from the global result -> exact local optimum
+    #    n_restarts: start 0 = global result, the others = random perturbations of it (jitter_frac*bound width)
+    #    n_jobs: starts run in parallel processes (-1 = all cores)
+    param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
+                                                     maxiter=1000, n_restarts=4, jitter_frac=0.02, n_jobs=4,
+                                                     history_file=path_new+'optimization_history_local.csv')
+    print((time.time()-start)/60., 'min (global + local)')
 
     s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
     param_ode = param_opt[:-n_cl*n_media]
     calibr_setup['s_x'] = s_x
 
-    fm.output.json_dump({'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x}, f'Result_calibration{add_name}.json', dir=path_new)
+    # Final (refined) result keeps the usual file name, so all downstream scripts use it
+    fm.output.json_dump({'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt},
+                        f'Result_calibration{add_name}.json', dir=path_new)
     param_opt = fm.output.read_from_json(''+f'Result_calibration{add_name}.json', dir=path_new)['param_ode']

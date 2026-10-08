@@ -189,7 +189,8 @@ def extract_observables_from_df_mibi(df_mibi, days, exps, media):
                 df0 = df_mibi.filter(like=exp+'_').filter(like=med).filter(like=f'_{int(d):02d}_')
                 if np.shape(df0)[-1] != 0.:
                     obs_mibi[i, j, k] = np.mean(df0.T['Average'])
-                    std_mibi[i, j, k] = float(df0.T['Standard deviation'].values)
+                    # np.mean (like 'Average' above): float() on a 1-element array fails in numpy >= 2.x
+                    std_mibi[i, j, k] = np.mean(df0.T['Standard deviation'].astype(float))
                 else:
                     obs_mibi[i, j, k], std_mibi[i, j, k] = np.nan, np.nan
     return obs_mibi, std_mibi

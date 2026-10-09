@@ -190,6 +190,7 @@ if __name__ == "__main__":
         refine=True,            # polish the optimum with the profiling objective first
         stop_factor=1.5,        # stop a walk once Delta > 1.5 * threshold (None: whole grid)
         true_params=true_params,
+        verbose=1,              # 1: one line per profile point with overall progress/ETA; 2: + inner iterations
     )
 
     '''

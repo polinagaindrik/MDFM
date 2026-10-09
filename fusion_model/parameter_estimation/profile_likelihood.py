@@ -64,6 +64,7 @@ mean squared residual -- see the CAVEAT ON THE CHI2 THRESHOLD there.
 
 import os
 import json
+import time
 import signal
 import threading
 import multiprocessing as mp
@@ -197,9 +198,36 @@ def _build_grid(param_opt, param_index, param_bnds, span, n_points):
     return np.sort(np.unique(np.concatenate([grid, [p_opt_val]])))
 
 
+# ----------------------------------------------------------------------
+# Progress reporting
+# ----------------------------------------------------------------------
+
+def _fmt_time(seconds):
+    seconds = int(round(max(0., seconds)))
+    return f"{seconds // 3600}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}"
+
+
+class _Progress:
+    """Counter of finished profile points shared by all worker processes (elapsed time, ETA)."""
+    def __init__(self, total):
+        self.total = int(total)
+        self.count = mp.Value("i", 0)
+        self.t0 = time.time()
+
+    def add(self, n=1):
+        with self.count.get_lock():
+            self.count.value += n
+            done = self.count.value
+        elapsed = time.time() - self.t0
+        eta = elapsed / done * (self.total - done) if done > 0 else float("nan")
+        pct = 100. * done / self.total if self.total else 100.
+        return (f"total {done}/{self.total} points ({pct:.1f}%), elapsed {_fmt_time(elapsed)}"
+                + (f", ETA {_fmt_time(eta)}" if np.isfinite(eta) else ""))
+
+
 def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, method="local",
                 extra_starts=(), n_restarts=1, jitter_frac=0.05, rng=None, per_point_workers=1,
-                minimize_options=None, solve_timeout=30, evaluator=None):
+                minimize_options=None, solve_timeout=30, evaluator=None, label=None, print_every=0):
     """
     Minimize cost_func over the entries opt_idx of the full parameter vector;
     all other entries are held at their value in x_start.
@@ -208,12 +236,13 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
     method='global': differential_evolution (x_start in the initial population).
     evaluator      : CostEvaluator with a process pool -> the finite-difference gradient
                      of L-BFGS-B is evaluated in parallel (method='local').
-    Returns (best_cost, best_full_vector, success).
+    label, print_every : print the cost every print_every L-BFGS-B iterations (0: silent).
+    Returns (best_cost, best_full_vector, success, n_iterations).
     """
     x_start = np.asarray(x_start, dtype=float)
     opt_idx = np.asarray(opt_idx, dtype=int)
     if len(opt_idx) == 0:
-        return _safe_cost(cost_func, x_start, calibr_setup, jac_spasity, solve_timeout), x_start.copy(), True
+        return _safe_cost(cost_func, x_start, calibr_setup, jac_spasity, solve_timeout), x_start.copy(), True, 0
 
     bnds = [calibr_setup["param_bnds"][j] for j in opt_idx]
     lo = np.array([b[0] for b in bnds], dtype=float)
@@ -229,7 +258,7 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
         res = differential_evolution(f, list(zip(lo, hi)), x0=np.clip(x_start[opt_idx], lo, hi),
                                      tol=1e-6, atol=1e-6, maxiter=100, popsize=15, polish=True,
                                      init="latinhypercube", updating="deferred", workers=per_point_workers)
-        best_c, best_z, best_ok = float(res.fun), res.x, bool(res.success)
+        best_c, best_z, best_ok, nit = float(res.fun), res.x, bool(res.success), int(res.nit)
     elif method == "local":
         opts = {"maxiter": 300, "ftol": 1e-10, "gtol": 1e-8}
         opts.update(minimize_options or {})
@@ -239,14 +268,32 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
         starts = [x_start[opt_idx]] + [np.asarray(xs, dtype=float)[opt_idx] for xs in extra_starts]
         for _ in range(max(0, int(n_restarts) - 1)):
             starts.append(x_start[opt_idx] + rng.normal(0., jitter_frac, size=len(opt_idx)) * (hi - lo))
-        best_c, best_z, best_ok = np.inf, starts[0], False
+        best_c, best_z, best_ok, nit = np.inf, starts[0], False, 0
         fg = None if evaluator is None else fd_fun_and_grad(evaluator, x_start, opt_idx, lo, hi)
-        for z0 in starts:
+        t0 = time.time()
+        def _make_callback(r):
+            # scipy passes the OptimizeResult only to callbacks whose single argument is
+            # named `intermediate_result`, hence the factory instead of default arguments
+            it = [0]
+            start_txt = f" start {r + 1}/{len(starts)}" if len(starts) > 1 else ""
+
+            def callback(intermediate_result):
+                it[0] += 1
+                if print_every and it[0] % print_every == 0:
+                    print(f"    {label or 'fit'}{start_txt}: iteration {it[0]}, cost = {intermediate_result.fun:.8g}, "
+                          f"{_fmt_time(time.time() - t0)}", flush=True)
+            return callback
+
+        for r, z0 in enumerate(starts):
+            callback = _make_callback(r)
+
             if fg is None:
-                res = minimize(f, np.clip(z0, lo, hi), method="L-BFGS-B", bounds=list(zip(lo, hi)), options=opts)
+                res = minimize(f, np.clip(z0, lo, hi), method="L-BFGS-B", bounds=list(zip(lo, hi)), options=opts,
+                               callback=callback)
             else:
                 res = minimize(fg, np.clip(z0, lo, hi), jac=True, method="L-BFGS-B", bounds=list(zip(lo, hi)),
-                               options=opts)
+                               options=opts, callback=callback)
+            nit += int(res.nit)
             if res.fun < best_c:
                 best_c, best_z, best_ok = float(res.fun), res.x, bool(res.success)
     else:
@@ -254,11 +301,12 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
 
     x_best = x_start.copy()
     x_best[opt_idx] = best_z
-    return best_c, x_best, best_ok
+    return best_c, x_best, best_ok, nit
 
 
 def refine_optimum(cost_func, param_opt, calibr_setup, jac_spasity=None, fixed_indices=(),
-                   n_restarts=1, jitter_frac=0.02, seed=0, minimize_options=None, solve_timeout=60, n_jobs=1):
+                   n_restarts=1, jitter_frac=0.02, seed=0, minimize_options=None, solve_timeout=60, n_jobs=1,
+                   print_every=10):
     """
     Local L-BFGS-B polish of param_opt with the *same* objective that is used
     for profiling. Needed when the profiling objective differs from the
@@ -266,21 +314,27 @@ def refine_optimum(cost_func, param_opt, calibr_setup, jac_spasity=None, fixed_i
     calibration did not end exactly at a minimum; otherwise Delta becomes
     negative near the estimate.
     n_jobs > 1: the finite-difference gradient is evaluated in n_jobs processes.
+    print_every: print the cost every print_every iterations (0: silent).
     """
     param_opt = np.asarray(param_opt, dtype=float)
     opt_idx = free_param_indices(calibr_setup["param_bnds"], fixed_indices)
     c0 = _safe_cost(cost_func, param_opt, calibr_setup, jac_spasity, solve_timeout)
-    print(f"refine_optimum: local re-fit of {len(opt_idx)} free parameters "
+    maxiter = (minimize_options or {}).get("maxiter", 300)
+    print(f"refine_optimum: local re-fit of {len(opt_idx)} free parameters, start cost = {c0:.8g}, "
+          f"max. {maxiter} iterations "
           f"({'parallel gradient in ' + str(n_jobs) + ' processes' if n_jobs > 1 else 'serial'}) ...", flush=True)
+    t0 = time.time()
     with CostEvaluator(_TimedCost(cost_func, solve_timeout), calibr_setup, jac_spasity,
                        n_jobs=n_jobs if n_jobs > 1 else 1) as ev:
-        c, x, ok = _fit_others(cost_func, param_opt, opt_idx, calibr_setup, jac_spasity, method="local",
-                               n_restarts=n_restarts, jitter_frac=jitter_frac, rng=np.random.default_rng(seed),
-                               minimize_options=minimize_options, solve_timeout=solve_timeout,
-                               evaluator=ev if n_jobs > 1 else None)
+        c, x, ok, nit = _fit_others(cost_func, param_opt, opt_idx, calibr_setup, jac_spasity, method="local",
+                                    n_restarts=n_restarts, jitter_frac=jitter_frac, rng=np.random.default_rng(seed),
+                                    minimize_options=minimize_options, solve_timeout=solve_timeout,
+                                    evaluator=ev if n_jobs > 1 else None, label="refine_optimum",
+                                    print_every=print_every)
     if c > c0:
         c, x = c0, param_opt
-    print(f"refine_optimum: cost {c0:.8g} -> {c:.8g} (success={ok}, {len(opt_idx)} free parameters)", flush=True)
+    print(f"refine_optimum: cost {c0:.8g} -> {c:.8g} (success={ok}, {nit} iterations, "
+          f"{_fmt_time(time.time() - t0)})", flush=True)
     return x, c
 
 
@@ -300,9 +354,15 @@ def _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grid, calibr_s
     threshold = chi2.ppf(cfg["confidence_level"], 1) * cfg["scale"]
     stop_delta = None if cfg["stop_factor"] is None else cfg["stop_factor"] * threshold
 
+    name = cfg["param_names"][idx] if cfg.get("param_names") else f"param[{idx}]"
+    tag = f"param[{idx}] {name} ({'+' if direction > 0 else '-'})"
+    verbose = int(cfg["verbose"]) if cfg["verbose"] else 0
+    progress = cfg.get("progress")
+
     x_prev = np.array(param_opt, dtype=float)
     rows = []
     for k, val in enumerate(side):
+        t_point = time.time()
         x_start = x_prev.copy()
         x_start[idx] = val
         extra = []
@@ -310,18 +370,29 @@ def _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grid, calibr_s
             x_anchor = np.array(param_opt, dtype=float)
             x_anchor[idx] = val
             extra.append(x_anchor)
-        c, x_new, ok = _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity,
-                                   method=cfg["method"], extra_starts=extra, n_restarts=cfg["n_restarts"],
-                                   jitter_frac=cfg["jitter_frac"], rng=rng,
-                                   per_point_workers=cfg["per_point_workers"],
-                                   minimize_options=cfg["minimize_options"],
-                                   solve_timeout=cfg["solve_timeout"], evaluator=cfg.get("evaluator"))
+        c, x_new, ok, nit = _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity,
+                                        method=cfg["method"], extra_starts=extra, n_restarts=cfg["n_restarts"],
+                                        jitter_frac=cfg["jitter_frac"], rng=rng,
+                                        per_point_workers=cfg["per_point_workers"],
+                                        minimize_options=cfg["minimize_options"],
+                                        solve_timeout=cfg["solve_timeout"], evaluator=cfg.get("evaluator"),
+                                        label=f"{tag} point {k + 1}/{len(side)}",
+                                        print_every=10 if verbose >= 2 else 0)
+        dt = time.time() - t_point
         rows.append({"param_index": idx, "direction": direction, "param_value": float(val),
-                     "cost": c, "success": ok, "x": x_new})
-        if cfg["verbose"]:
-            print(f"  param[{idx}] = {val:.6g}  ->  cost = {c:.6g}", flush=True)
+                     "cost": c, "success": ok, "nit": nit, "time_s": dt, "x": x_new})
         x_prev = x_new
-        if stop_delta is not None and (c - cost_opt) > stop_delta:
+        stop = stop_delta is not None and (c - cost_opt) > stop_delta
+        # points not computed because of the early stop count as done for the overall progress
+        total_txt = progress.add(1 + (len(side) - k - 1 if stop else 0)) if progress is not None else ""
+        if verbose:
+            print(f"  [{time.strftime('%H:%M:%S')}] {tag} point {k + 1}/{len(side)}: value = {val:.6g}, "
+                  f"cost = {c:.8g}, Delta = {(c - cost_opt) / cfg['scale']:.4g}, {nit} it., {_fmt_time(dt)}"
+                  f"{'' if ok else ' (not converged)'}" + (f" | {total_txt}" if total_txt else ""), flush=True)
+            if stop:
+                print(f"  [{time.strftime('%H:%M:%S')}] {tag}: Delta > {cfg['stop_factor']} x threshold, "
+                      f"skipping the remaining {len(side) - k - 1} points of this side", flush=True)
+        if stop:
             break
     return rows
 
@@ -373,12 +444,17 @@ def _run_walks(cost_func, param_opt, cost_opt, grids, tasks, calibr_setup, jac_s
 
 
 def _make_cfg(param_bnds, fixed_indices, method, confidence_level, scale, per_point_workers, n_restarts,
-              jitter_frac, stop_factor, anchor_start, minimize_options, solve_timeout, verbose):
+              jitter_frac, stop_factor, anchor_start, minimize_options, solve_timeout, verbose,
+              param_names=None, progress=None):
     return dict(free_idx=free_param_indices(param_bnds, fixed_indices), method=method,
                 confidence_level=confidence_level, scale=float(scale), per_point_workers=per_point_workers,
                 n_restarts=n_restarts, jitter_frac=jitter_frac, stop_factor=stop_factor,
                 anchor_start=anchor_start, minimize_options=minimize_options,
-                solve_timeout=solve_timeout, verbose=verbose)
+                solve_timeout=solve_timeout, verbose=verbose, param_names=param_names, progress=progress)
+
+
+def _n_points_side(grid, p_hat, direction):
+    return int(np.sum(grid > p_hat)) if direction > 0 else int(np.sum(grid < p_hat))
 
 
 # ----------------------------------------------------------------------
@@ -415,8 +491,11 @@ def profile_likelihood_for_param(
     param_opt = np.asarray(param_opt, dtype=float)
     grid = _build_grid(param_opt, param_index, calibr_setup["param_bnds"], span, n_points)
     cost_opt = _safe_cost(cost_func, param_opt, calibr_setup, jac_spasity, solve_timeout)
+    progress = _Progress(len(grid) - 1)
     cfg = _make_cfg(calibr_setup["param_bnds"], fixed_indices, method, 0.95, 1.0, per_point_workers,
-                    n_restarts, jitter_frac, stop_factor, anchor_start, minimize_options, solve_timeout, verbose)
+                    n_restarts, jitter_frac, stop_factor, anchor_start, minimize_options, solve_timeout, verbose,
+                    progress=progress)
+    print(f"Profiling param[{param_index}]: {len(grid) - 1} points, cost_opt = {cost_opt:.8g}", flush=True)
     results = {float(param_opt[param_index]): (cost_opt, param_opt.copy())}
 
     def on_done(idx, direction, rows):
@@ -595,6 +674,9 @@ def run_profile_likelihood_all(
     solve_timeout     : seconds per cost evaluation before it counts as failed
     resume            : skip walks already stored in <out_csv>_partial.csv (same cost_opt)
     true_params       : true parameter vector (in-silico data), marked in the plot
+    verbose           : 0/False: only summaries; 1/True: one line per profile point (value, cost,
+                        Delta, iterations, time, overall progress with ETA) and the refit's cost every
+                        10 iterations; 2: additionally every 10 L-BFGS-B iterations inside each point
 
     Returns (df, ci_results) with ci_results = {param_index: (lo, hi)} as in pool_paper.
     Also writes <out_csv>_summary.json (cost_opt, scale, CIs, identifiability status).
@@ -615,10 +697,12 @@ def run_profile_likelihood_all(
         print(f"Skipping fixed parameters (nothing to profile): {skipped}")
     profile_indices = [int(i) for i in profile_indices if i in free_idx]
 
+    t_start = time.time()
     if refine:
         param_opt, cost_opt = refine_optimum(cost_func, param_opt, calibr_setup, jac_spasity,
                                              fixed_indices=fixed_indices, minimize_options=minimize_options,
-                                             solve_timeout=solve_timeout, n_jobs=n_jobs)
+                                             solve_timeout=solve_timeout, n_jobs=n_jobs,
+                                             print_every=10 if verbose else 0)
     else:
         cost_opt = _safe_cost(cost_func, param_opt, calibr_setup, jac_spasity, solve_timeout)
 
@@ -631,7 +715,8 @@ def run_profile_likelihood_all(
 
     grids = {idx: _build_grid(param_opt, idx, bnds, span, n_points) for idx in profile_indices}
     cfg = _make_cfg(bnds, fixed_indices, method, confidence_level, scale, per_point_workers, n_restarts,
-                    jitter_frac, stop_factor, anchor_start, minimize_options, solve_timeout, verbose)
+                    jitter_frac, stop_factor, anchor_start, minimize_options, solve_timeout, verbose,
+                    param_names=names)
 
     if method == "global" and n_jobs > 1:
         print("WARNING: method='global' already parallelizes within each grid point via "
@@ -652,14 +737,21 @@ def run_profile_likelihood_all(
 
     tasks = [(i, d) for i in profile_indices for d in (-1, +1) if (i, d) not in done_tasks]
     n_eval = sum(len(grids[i]) - 1 for i in profile_indices)
+    n_todo = sum(_n_points_side(grids[i], param_opt[i], d) for i, d in tasks)
+    cfg["progress"] = _Progress(n_todo)
     print(f"Profiling {len(profile_indices)} free parameters, {n_eval} total (parameter, value) evaluations "
-          f"({len(tasks)} walks, cost_opt={cost_opt:.8g}, threshold={threshold:.6g}).", flush=True)
+          f"({len(tasks)} walks / {n_todo} points to compute, cost_opt={cost_opt:.8g}, "
+          f"threshold={threshold:.6g}).", flush=True)
+    if stop_factor is not None:
+        print(f"  (walks stop once Delta > {stop_factor} x threshold, so fewer points may be needed; "
+              f"skipped points count as done in the progress)", flush=True)
 
     def _records(rows):
         recs = []
         for r in rows:
             rec = {"param_index": r["param_index"], "direction": r["direction"], "param_value": r["param_value"],
-                   "cost": r["cost"], "success": r["success"], "cost_opt": cost_opt}
+                   "cost": r["cost"], "success": r["success"], "nit": r.get("nit"), "time_s": r.get("time_s"),
+                   "cost_opt": cost_opt}
             for j, pv in enumerate(r["x"]):
                 rec[names[j]] = pv
             recs.append(rec)
@@ -674,8 +766,12 @@ def run_profile_likelihood_all(
             pd.DataFrame(recs).to_csv(partial_csv, mode="a", index=False, header=not os.path.exists(partial_csv))
         new_records.extend(recs)
         state["done"] += 1
-        print(f"  progress: {state['done']}/{len(tasks)} walks (param[{idx}] {'+' if direction > 0 else '-'}, "
-              f"{len(rows)} points)", flush=True)
+        d_max = max(((r["cost"] - cost_opt) / scale for r in rows), default=float("nan"))
+        crossed = d_max > chi2.ppf(confidence_level, 1)
+        print(f"[{time.strftime('%H:%M:%S')}] walk {state['done']}/{len(tasks)} finished: param[{idx}] {names[idx]} "
+              f"({'+' if direction > 0 else '-'}), {len(rows)} points, max Delta = {d_max:.4g} "
+              f"({'threshold crossed' if crossed else 'threshold NOT crossed'}), "
+              f"elapsed {_fmt_time(time.time() - t_start)}", flush=True)
 
     _run_walks(cost_func, param_opt, cost_opt, grids, tasks, calibr_setup, jac_spasity, cfg, n_jobs, on_done)
 
@@ -731,6 +827,7 @@ def run_profile_likelihood_all(
                                    "upper_closed": status[i][2]} for i in profile_indices}},
                   f, indent=2)
     print(f"Saved summary (cost_opt, scale, CIs, identifiability) to {summary_path}")
+    print(f"Profile likelihood finished in {_fmt_time(time.time() - t_start)}", flush=True)
 
     if plot:
         plot_profile_likelihood(df, param_opt, cost_opt, ci_results=ci_results, confidence_level=confidence_level,

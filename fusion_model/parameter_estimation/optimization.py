@@ -50,6 +50,88 @@ def calculate_model_params(cost_func, calibr_setup, local_polish=False, local_op
 
 
 # Local refinement of a (global) optimization result
+# ----------------------------------------------------------------------
+# Parallel cost evaluation / finite-difference gradient for L-BFGS-B
+# ----------------------------------------------------------------------
+_EVAL = {}
+
+
+def _eval_init(cost_func, calibr_setup, jac_spasity):
+    _EVAL.update(cost_func=cost_func, calibr_setup=calibr_setup, jac_spasity=jac_spasity)
+
+
+def _eval_one(x):
+    try:
+        c = float(_EVAL['cost_func'](x, _EVAL['calibr_setup'], _EVAL['jac_spasity']))
+    except Exception:
+        return 1e10
+    return c if np.isfinite(c) else 1e10
+
+
+class CostEvaluator:
+    """
+    Evaluates cost_func(x, calibr_setup, jac_spasity) for a list of full parameter
+    vectors, in a pool of n_jobs processes (n_jobs > 1) or serially. Use as a
+    context manager so the pool is closed afterwards.
+    """
+    def __init__(self, cost_func, calibr_setup, jac_spasity=None, n_jobs=1):
+        self.n_jobs = int(n_jobs) if n_jobs and n_jobs > 0 else (os.cpu_count() or 1)
+        self.pool = None
+        self.args = (cost_func, calibr_setup, jac_spasity)
+        if self.n_jobs > 1:
+            self.pool = mp.Pool(processes=self.n_jobs, initializer=_eval_init, initargs=self.args)
+        else:
+            _eval_init(*self.args)
+
+    def __call__(self, xs):
+        if self.pool is not None:
+            return np.array(self.pool.map(_eval_one, xs, chunksize=1))
+        return np.array([_eval_one(x) for x in xs])
+
+    def close(self):
+        if self.pool is not None:
+            self.pool.close()
+            self.pool.join()
+            self.pool = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+
+def fd_fun_and_grad(evaluator, x_template, free, lo, hi, rel_step=None):
+    """
+    Returns fg(z) -> (cost, gradient) for minimize(..., jac=True), where z are the
+    entries `free` of the full vector x_template. The gradient is a forward finite
+    difference with scipy's default step (sqrt(eps) * max(1, |z|)); a step that would
+    leave the bounds is taken backwards. All n_free + 1 cost evaluations of one call
+    are done in one batch by `evaluator` (in parallel if it has a pool).
+    """
+    x_template = np.asarray(x_template, dtype=float)
+    free = np.asarray(free, dtype=int)
+    lo, hi = np.asarray(lo, dtype=float), np.asarray(hi, dtype=float)
+    rel_step = np.sqrt(np.finfo(float).eps) if rel_step is None else rel_step
+
+    def fg(z):
+        z = np.asarray(z, dtype=float)
+        x0 = x_template.copy()
+        x0[free] = z
+        h = rel_step * np.maximum(1., np.abs(z))
+        h = np.where(z + h > hi, -h, h)
+        h = (z + h) - z  # exactly representable step
+        xs = [x0]
+        for i, j in enumerate(free):
+            x = x0.copy()
+            x[j] = z[i] + h[i]
+            xs.append(x)
+        c = evaluator(xs)
+        return float(c[0]), (c[1:] - c[0]) / h
+
+    return fg
+
+
 class _LocalObjective:
     """Cost as a function of the free parameters only (picklable for multiprocessing)."""
     def __init__(self, cost_func, param_init, free, calibr_setup, jac_spasity):
@@ -70,8 +152,10 @@ class _LocalObjective:
 
 
 def _local_run(task):
-    """One L-BFGS-B run (one start of the multistart). Runs in a worker process when n_jobs > 1."""
-    r, objective, z0, bounds, options, print_every = task
+    """One L-BFGS-B run (one start of the multistart).
+    grad_jobs > 1: the finite-difference gradient is evaluated in a pool of grad_jobs
+    processes (only possible in the main process, i.e. when the starts run sequentially)."""
+    r, objective, z0, bounds, options, print_every, grad_jobs = task
     history = []
 
     def callback(intermediate_result):
@@ -79,7 +163,14 @@ def _local_run(task):
         if print_every and len(history) % print_every == 0:
             print(f'  [start {r}] iteration {len(history)}: cost = {intermediate_result.fun:.10g}', flush=True)
 
-    res = minimize(objective, z0, method='L-BFGS-B', bounds=bounds, callback=callback, options=options)
+    if grad_jobs > 1:
+        lo = np.array([b[0] for b in bounds]); hi = np.array([b[1] for b in bounds])
+        with CostEvaluator(objective.cost_func, objective.calibr_setup, objective.jac_spasity,
+                           n_jobs=grad_jobs) as ev:
+            fg = fd_fun_and_grad(ev, objective.param_init, objective.free, lo, hi)
+            res = minimize(fg, z0, jac=True, method='L-BFGS-B', bounds=bounds, callback=callback, options=options)
+    else:
+        res = minimize(objective, z0, method='L-BFGS-B', bounds=bounds, callback=callback, options=options)
     print(f'  [start {r}] cost = {res.fun:.10g}, iterations = {res.nit}, success = {res.success} ({res.message})',
           flush=True)
     return r, np.array(res.x), float(res.fun), bool(res.success), history
@@ -100,9 +191,11 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
                   differences (one evaluation per free parameter), so scipy's default of 15000 stops
                   a 74-parameter fit after ~170 iterations. Default None: 2*(n_free+1)*maxiter, i.e.
                   maxiter is the effective limit.
-    n_jobs      : number of processes running the starts in parallel (one start per process;
-                  -1 = all CPU cores, capped at n_restarts). Each start is sequential, so more
-                  processes than starts gives no speed-up.
+    n_jobs      : number of processes (-1 = all CPU cores).
+                  n_jobs <= n_restarts: the starts run in parallel, one start per process.
+                  n_jobs >  n_restarts: the starts run one after another and each uses n_jobs
+                  processes for its finite-difference gradient (n_free + 1 cost evaluations
+                  per iteration), which keeps all cores busy even for a single start.
     The cost of every iteration of the best run is written to history_file (columns as in
     optimization_history1.csv); the history of every start is written to
     <history_file>_start<r>.csv when n_restarts > 1.
@@ -130,18 +223,22 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     if maxfun is None:
         maxfun = 2 * (len(free) + 1) * maxiter
     options = {'maxiter': maxiter, 'maxfun': maxfun, 'ftol': ftol, 'gtol': gtol}
-    tasks = [(r, objective, z0, bounds, options, print_every) for r, z0 in enumerate(starts)]
-
     if n_jobs is None or n_jobs == 0:
         n_jobs = 1
     if n_jobs < 0:
         n_jobs = os.cpu_count() or 1
-    n_proc = min(n_jobs, len(tasks))
+    grad_jobs = n_jobs if n_jobs > len(starts) else 1
+    tasks = [(r, objective, z0, bounds, options, print_every, grad_jobs) for r, z0 in enumerate(starts)]
+
+    n_proc = 1 if grad_jobs > 1 else min(n_jobs, len(tasks))
     if n_proc > 1:
         print(f'Running {len(tasks)} local optimizations in {n_proc} parallel processes', flush=True)
         with mp.Pool(processes=n_proc) as pool:
             results = list(pool.imap_unordered(_local_run, tasks))
     else:
+        if grad_jobs > 1:
+            print(f'Running {len(tasks)} local optimization(s) one after another, each with a parallel '
+                  f'gradient in {grad_jobs} processes', flush=True)
         results = [_local_run(t) for t in tasks]
     results.sort(key=lambda res: res[0])
 

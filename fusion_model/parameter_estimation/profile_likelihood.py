@@ -40,7 +40,9 @@ Differences in *how* the points are computed (results are compatible):
   neighbouring solution included in the initial population;
   ``per_point_workers`` workers inside each point (see CAVEAT ON
   MULTIPROCESSING in the pool_paper module).
-* ``n_jobs`` parallelizes over walks, i.e. (parameter, direction) pairs.
+* ``n_jobs`` parallelizes over walks, i.e. (parameter, direction) pairs; when there
+  are fewer walks than n_jobs (and for the refit with ``refine=True``) it instead
+  parallelizes the finite-difference gradient inside each L-BFGS-B fit.
 
 Optional extras (keyword arguments with defaults; pool_paper calls work unchanged):
   profile_indices, fixed_indices, refine, stop_factor, anchor_start,
@@ -72,6 +74,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.optimize import minimize, differential_evolution
 from scipy.stats import chi2
+
+from .optimization import CostEvaluator, fd_fun_and_grad
 
 PENALTY = 1e10  # returned when the ODE solve fails / times out / gives NaN
 
@@ -163,6 +167,15 @@ def _safe_cost(cost_func, x_full, calibr_setup, jac_spasity, solve_timeout):
     return c if np.isfinite(c) else PENALTY
 
 
+class _TimedCost:
+    """cost_func with the solve timeout / failure handling of _safe_cost (picklable)."""
+    def __init__(self, cost_func, solve_timeout):
+        self.cost_func, self.solve_timeout = cost_func, solve_timeout
+
+    def __call__(self, x, calibr_setup, jac_spasity):
+        return _safe_cost(self.cost_func, x, calibr_setup, jac_spasity, self.solve_timeout)
+
+
 def free_param_indices(param_bnds, fixed_indices=()):
     """Indices whose bounds are not fixed (lo == hi), excluding fixed_indices."""
     fixed = set(int(i) for i in (fixed_indices or ()))
@@ -186,13 +199,15 @@ def _build_grid(param_opt, param_index, param_bnds, span, n_points):
 
 def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, method="local",
                 extra_starts=(), n_restarts=1, jitter_frac=0.05, rng=None, per_point_workers=1,
-                minimize_options=None, solve_timeout=30):
+                minimize_options=None, solve_timeout=30, evaluator=None):
     """
     Minimize cost_func over the entries opt_idx of the full parameter vector;
     all other entries are held at their value in x_start.
     method='local' : L-BFGS-B from x_start, from each vector in extra_starts and
                      from n_restarts - 1 random jitters of x_start; best is kept.
     method='global': differential_evolution (x_start in the initial population).
+    evaluator      : CostEvaluator with a process pool -> the finite-difference gradient
+                     of L-BFGS-B is evaluated in parallel (method='local').
     Returns (best_cost, best_full_vector, success).
     """
     x_start = np.asarray(x_start, dtype=float)
@@ -225,8 +240,13 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
         for _ in range(max(0, int(n_restarts) - 1)):
             starts.append(x_start[opt_idx] + rng.normal(0., jitter_frac, size=len(opt_idx)) * (hi - lo))
         best_c, best_z, best_ok = np.inf, starts[0], False
+        fg = None if evaluator is None else fd_fun_and_grad(evaluator, x_start, opt_idx, lo, hi)
         for z0 in starts:
-            res = minimize(f, np.clip(z0, lo, hi), method="L-BFGS-B", bounds=list(zip(lo, hi)), options=opts)
+            if fg is None:
+                res = minimize(f, np.clip(z0, lo, hi), method="L-BFGS-B", bounds=list(zip(lo, hi)), options=opts)
+            else:
+                res = minimize(fg, np.clip(z0, lo, hi), jac=True, method="L-BFGS-B", bounds=list(zip(lo, hi)),
+                               options=opts)
             if res.fun < best_c:
                 best_c, best_z, best_ok = float(res.fun), res.x, bool(res.success)
     else:
@@ -238,20 +258,26 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
 
 
 def refine_optimum(cost_func, param_opt, calibr_setup, jac_spasity=None, fixed_indices=(),
-                   n_restarts=1, jitter_frac=0.02, seed=0, minimize_options=None, solve_timeout=60):
+                   n_restarts=1, jitter_frac=0.02, seed=0, minimize_options=None, solve_timeout=60, n_jobs=1):
     """
     Local L-BFGS-B polish of param_opt with the *same* objective that is used
     for profiling. Needed when the profiling objective differs from the
     calibration one (GaussianNeg2LogLik vs. cost_sum_and_geometric_mean) or the
     calibration did not end exactly at a minimum; otherwise Delta becomes
     negative near the estimate.
+    n_jobs > 1: the finite-difference gradient is evaluated in n_jobs processes.
     """
     param_opt = np.asarray(param_opt, dtype=float)
     opt_idx = free_param_indices(calibr_setup["param_bnds"], fixed_indices)
     c0 = _safe_cost(cost_func, param_opt, calibr_setup, jac_spasity, solve_timeout)
-    c, x, ok = _fit_others(cost_func, param_opt, opt_idx, calibr_setup, jac_spasity, method="local",
-                           n_restarts=n_restarts, jitter_frac=jitter_frac, rng=np.random.default_rng(seed),
-                           minimize_options=minimize_options, solve_timeout=solve_timeout)
+    print(f"refine_optimum: local re-fit of {len(opt_idx)} free parameters "
+          f"({'parallel gradient in ' + str(n_jobs) + ' processes' if n_jobs > 1 else 'serial'}) ...", flush=True)
+    with CostEvaluator(_TimedCost(cost_func, solve_timeout), calibr_setup, jac_spasity,
+                       n_jobs=n_jobs if n_jobs > 1 else 1) as ev:
+        c, x, ok = _fit_others(cost_func, param_opt, opt_idx, calibr_setup, jac_spasity, method="local",
+                               n_restarts=n_restarts, jitter_frac=jitter_frac, rng=np.random.default_rng(seed),
+                               minimize_options=minimize_options, solve_timeout=solve_timeout,
+                               evaluator=ev if n_jobs > 1 else None)
     if c > c0:
         c, x = c0, param_opt
     print(f"refine_optimum: cost {c0:.8g} -> {c:.8g} (success={ok}, {len(opt_idx)} free parameters)", flush=True)
@@ -289,7 +315,7 @@ def _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grid, calibr_s
                                    jitter_frac=cfg["jitter_frac"], rng=rng,
                                    per_point_workers=cfg["per_point_workers"],
                                    minimize_options=cfg["minimize_options"],
-                                   solve_timeout=cfg["solve_timeout"])
+                                   solve_timeout=cfg["solve_timeout"], evaluator=cfg.get("evaluator"))
         rows.append({"param_index": idx, "direction": direction, "param_value": float(val),
                      "cost": c, "success": ok, "x": x_new})
         if cfg["verbose"]:
@@ -318,16 +344,31 @@ def _pool_task(task):
 
 
 def _run_walks(cost_func, param_opt, cost_opt, grids, tasks, calibr_setup, jac_spasity, cfg, n_jobs, on_done):
-    if n_jobs and n_jobs > 1 and len(tasks) > 1:
-        with mp.Pool(processes=min(n_jobs, len(tasks)), initializer=_pool_init,
+    """
+    Parallelization:
+      len(tasks) >= n_jobs : walks run in parallel, one (parameter, direction) walk per process
+      len(tasks) <  n_jobs : walks run one after another, each fit evaluates its
+                             finite-difference gradient in n_jobs processes (method='local')
+    """
+    n_jobs = n_jobs if n_jobs and n_jobs > 0 else (os.cpu_count() or 1)
+    if n_jobs > 1 and len(tasks) >= n_jobs:
+        print(f"Running {len(tasks)} walks in {n_jobs} parallel processes", flush=True)
+        with mp.Pool(processes=n_jobs, initializer=_pool_init,
                      initargs=(cost_func, param_opt, cost_opt, grids, calibr_setup, jac_spasity, cfg)) as pool:
             for idx, direction, rows in pool.imap_unordered(_pool_task, tasks):
                 on_done(idx, direction, rows)
-    else:
-        rng = np.random.default_rng(0)
+        return
+    rng = np.random.default_rng(0)
+    use_grad_pool = n_jobs > 1 and len(tasks) > 0 and cfg["method"] == "local"
+    if use_grad_pool:
+        print(f"Running {len(tasks)} walks one after another with a parallel gradient in {n_jobs} processes",
+              flush=True)
+    with CostEvaluator(_TimedCost(cost_func, cfg["solve_timeout"]), calibr_setup, jac_spasity,
+                       n_jobs=n_jobs if use_grad_pool else 1) as ev:
+        cfg_serial = dict(cfg, evaluator=ev if use_grad_pool else None)
         for idx, direction in tasks:
             rows = _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grids[idx],
-                                 calibr_setup, jac_spasity, cfg, rng)
+                                 calibr_setup, jac_spasity, cfg_serial, rng)
             on_done(idx, direction, rows)
 
 
@@ -383,7 +424,7 @@ def profile_likelihood_for_param(
             results[r["param_value"]] = (r["cost"], r["x"])
 
     _run_walks(cost_func, param_opt, cost_opt, {param_index: grid}, [(param_index, -1), (param_index, +1)],
-               calibr_setup, jac_spasity, cfg, min(n_jobs, 2), on_done)
+               calibr_setup, jac_spasity, cfg, n_jobs, on_done)
     nan_p = np.full_like(param_opt, np.nan)
     profile_cost = np.array([results.get(float(g), (np.nan, None))[0] for g in grid])
     profile_params = np.array([results[float(g)][1] if float(g) in results else nan_p for g in grid])
@@ -534,7 +575,9 @@ def run_profile_likelihood_all(
     method            : 'local' (L-BFGS-B, warm-started walks) or 'global' (differential_evolution)
     confidence_level  : pointwise threshold chi2.ppf(confidence_level, 1) * scale
     scale             : 'auto' (see estimate_profile_scale) or a float
-    n_jobs            : processes; one task = one (parameter, direction) walk
+    n_jobs            : processes. As many or more walks ((parameter, direction) pairs) than n_jobs:
+                        one walk per process. Fewer walks, and the refit (refine=True): the
+                        finite-difference gradient of each fit is evaluated in n_jobs processes.
     per_point_workers : differential_evolution workers per grid point (method='global' only)
     n_restarts        : starts per grid point incl. the warm start (others: random jitters)
     jitter_frac       : jitter size as a fraction of each parameter's bound width
@@ -575,7 +618,7 @@ def run_profile_likelihood_all(
     if refine:
         param_opt, cost_opt = refine_optimum(cost_func, param_opt, calibr_setup, jac_spasity,
                                              fixed_indices=fixed_indices, minimize_options=minimize_options,
-                                             solve_timeout=solve_timeout)
+                                             solve_timeout=solve_timeout, n_jobs=n_jobs)
     else:
         cost_opt = _safe_cost(cost_func, param_opt, calibr_setup, jac_spasity, solve_timeout)
 

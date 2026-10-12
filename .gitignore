@@ -24,4 +24,4 @@ env
 inputs_old
 experiments
 docs/build
-docs/_build
+docs/_build__pycache__/

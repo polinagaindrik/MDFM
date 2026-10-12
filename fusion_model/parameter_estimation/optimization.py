@@ -111,6 +111,7 @@ class CostEvaluator:
             self.pool.close()
             self.pool.join()
             self.pool = None
+        _eval_init(*self.args)  # later calls still work (serially) instead of returning the penalty
 
     def __enter__(self):
         return self

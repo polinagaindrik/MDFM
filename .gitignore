@@ -24,4 +24,7 @@ env
 inputs_old
 experiments
 docs/build
-docs/_build__pycache__/
+docs/_build
+__pycache__/
+*.nbi
+*.nbc

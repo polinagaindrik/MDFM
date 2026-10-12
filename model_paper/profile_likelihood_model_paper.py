@@ -161,6 +161,9 @@ if __name__ == "__main__":
     PROFILE = "ode+S"       # 'ode', 'ode+S' or 'all' (incl. x0)
     FIX_X0 = False          # True: x0 held at the estimate (faster, profiles conditional on x0)
     OBJECTIVE = "neg2logL"  # 'neg2logL' (scale = 1) or 'calibration' (scale='auto' as in pool_paper)
+    # ODE solver: numba-compiled fusion_model2 is used automatically if numba is installed (~6x faster,
+    # identical results). 'odeint' is ~2x faster again, results differ only at solver tolerance (~1e-5).
+    fm.mdl.solving.ODE_BACKEND = "solve_ivp"
 
     os.makedirs(out_path, exist_ok=True)
     calibr_setup, param_opt, ode_param_names, true_params = build_calibr_setup(

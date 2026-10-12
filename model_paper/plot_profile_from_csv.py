@@ -6,7 +6,8 @@ Counterpart of ``pool_paper_casestudy/plot_profile_from_csv.py``: reads a CSV
 produced by run_profile_likelihood_all() (columns: param_index, param_value,
 cost, <one column per parameter>) and regenerates the plots without
 recomputing anything. The scale is read from <csv>_summary.json (scale='auto'),
-or pass it explicitly as in pool_paper.
+or pass it explicitly as in pool_paper. While the profile run is still going
+(final CSV not written yet), the finished walks in <csv>_partial.csv are plotted.
 
 Run from the repository root:
     python model_paper/plot_profile_from_csv.py
@@ -40,12 +41,15 @@ if __name__ == "__main__":
     INDIVIDUAL_FILE_EXT = "pdf"
     # ================================================================
 
-    _, _, true_params = load_calibration(path2, add_name)  # in-silico truth, if available
+    _, result, true_params = load_calibration(path2, add_name)  # in-silico truth, if available
+    # estimate for the plot if the run has not finished yet (otherwise read from the run files)
+    param_opt = result["param_ode"]
 
     if MAKE_GRID_PLOT:
         plot_profile_likelihood_from_csv(CSV_PATH, confidence_level=0.95, scale=SCALE,
-                                         save_path=GRID_OUT_PATH, ncols=4, true_params=true_params)
+                                         save_path=GRID_OUT_PATH, ncols=4, true_params=true_params,
+                                         param_opt=param_opt)
     if MAKE_INDIVIDUAL_PLOTS:
         plot_profile_likelihood_individual(CSV_PATH, confidence_level=0.95, scale=SCALE,
                                            out_dir=INDIVIDUAL_OUT_DIR, file_ext=INDIVIDUAL_FILE_EXT,
-                                           true_params=true_params)
+                                           true_params=true_params, param_opt=param_opt)

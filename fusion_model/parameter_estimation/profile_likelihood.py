@@ -76,7 +76,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import minimize, differential_evolution
 from scipy.stats import chi2
 
-from .optimization import CostEvaluator, fd_fun_and_grad
+from .optimization import CostEvaluator, fd_fun_and_grad, die_with_parent
 
 PENALTY = 1e10  # returned when the ODE solve fails / times out / gives NaN
 
@@ -402,6 +402,7 @@ _G = {}
 
 
 def _pool_init(cost_func, param_opt, cost_opt, grids, calibr_setup, jac_spasity, cfg):
+    die_with_parent()
     _G.update(cost_func=cost_func, param_opt=param_opt, cost_opt=cost_opt, grids=grids,
               calibr_setup=calibr_setup, jac_spasity=jac_spasity, cfg=cfg,
               rng=np.random.default_rng(os.getpid()))

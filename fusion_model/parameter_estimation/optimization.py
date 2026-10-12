@@ -56,7 +56,25 @@ def calculate_model_params(cost_func, calibr_setup, local_polish=False, local_op
 _EVAL = {}
 
 
+def die_with_parent():
+    """
+    Worker initializer: the worker gets SIGTERM as soon as its parent process dies
+    (Linux prctl PR_SET_PDEATHSIG). Without this, killing the main process (kill <PID>,
+    or a crash) leaves the pool workers running as orphans. No-op on other systems.
+    """
+    try:
+        import ctypes
+        import signal as _signal
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        libc.prctl(1, _signal.SIGTERM)  # 1 = PR_SET_PDEATHSIG
+        if os.getppid() == 1:  # parent already gone before prctl took effect
+            os._exit(1)
+    except Exception:
+        pass
+
+
 def _eval_init(cost_func, calibr_setup, jac_spasity):
+    die_with_parent()
     _EVAL.update(cost_func=cost_func, calibr_setup=calibr_setup, jac_spasity=jac_spasity)
 
 
@@ -97,7 +115,10 @@ class CostEvaluator:
     def __enter__(self):
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, exc_type, *exc):
+        if exc_type is not None and self.pool is not None:  # error / Ctrl+C: don't wait for running tasks
+            self.pool.terminate()
+            self.pool = None
         self.close()
 
 
@@ -233,7 +254,7 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     n_proc = 1 if grad_jobs > 1 else min(n_jobs, len(tasks))
     if n_proc > 1:
         print(f'Running {len(tasks)} local optimizations in {n_proc} parallel processes', flush=True)
-        with mp.Pool(processes=n_proc) as pool:
+        with mp.Pool(processes=n_proc, initializer=die_with_parent) as pool:
             results = list(pool.imap_unordered(_local_run, tasks))
     else:
         if grad_jobs > 1:

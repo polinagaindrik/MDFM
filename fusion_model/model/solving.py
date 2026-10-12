@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.integrate import solve_ivp
+from scipy.integrate import solve_ivp, odeint
 
 
 def calc_obs_model(data, param_x0, calibr_setup, t_model):
@@ -32,13 +32,72 @@ def calc_obs_model(data, param_x0, calibr_setup, t_model):
     return x_count, obs_mibi, obs_maldi, obs_ngs, temps
 
 
+# ----------------------------------------------------------------------
+# Speed-up: compiled right-hand side for fusion_model2
+# ----------------------------------------------------------------------
+# ~75% of the time of a cost evaluation is spent in thousands of calls of the Python
+# right-hand side. If numba is installed, fusion_model2 (constant temperature) is evaluated
+# by a compiled copy with identical results (differences ~1e-12), ~6x faster per solve.
+# Settings (module attributes, e.g. fm.mdl.solving.ODE_BACKEND = 'odeint'):
+#   USE_NUMBA   : False -> always use the Python model function
+#   ODE_BACKEND : 'solve_ivp' (default, LSODA as before) or 'odeint' (same LSODA algorithm called
+#                 directly from Fortran, ~2.5x faster again; results differ only at the level
+#                 of the solver tolerance, e.g. ~5e-5 in -2 log L)
+USE_NUMBA = True
+ODE_BACKEND = 'solve_ivp'
+
+try:
+    import numba as _numba
+
+    @_numba.njit(cache=True)
+    def _fusion_model2_rhs_nb(x, temp, n_cl, param):
+        lambd = 10.0**param[:n_cl] * temp**param[n_cl:2*n_cl]
+        alph = param[2*n_cl:3*n_cl] * temp**param[3*n_cl:4*n_cl]
+        nmax = 10.0**param[4*n_cl] * temp**param[4*n_cl+1]
+        kij = param[4*n_cl+2:4*n_cl+2+n_cl*n_cl].reshape(n_cl, n_cl) * 5e-8
+        xa = x[n_cl:2*n_cl]
+        b = kij @ xa
+        growth = alph * x[-1] * xa / (1.0 + b)
+        out = np.empty_like(x)
+        out[:n_cl] = -x[:n_cl] * x[-1] * lambd
+        out[n_cl:2*n_cl] = x[:n_cl] * x[-1] * lambd + growth
+        out[-1] = -(1.0 / nmax) * np.sum(growth)
+        return out
+    _HAS_NUMBA = True
+except ImportError:
+    _HAS_NUMBA = False
+
+
+def _rhs(model, param, x0, const):
+    """Right-hand side f(t, x) -- compiled version for fusion_model2 at constant temperature."""
+    from .ode_structure import fusion_model2
+    temp_cond, n_cl = const[0], const[1]
+    if USE_NUMBA and _HAS_NUMBA and model is fusion_model2 and np.size(temp_cond) == 1:
+        temp, n_cl = float(np.ravel(temp_cond)[0]), int(n_cl)
+        param = np.ascontiguousarray(param, dtype=np.float64)
+        return lambda t, x: _fusion_model2_rhs_nb(x, temp, n_cl, param), True
+    return (lambda t, x: model(t, x, param, x0, const)), False
+
+
 # The model solution for given ODEs
 def model_ODE_solution(model, t, param, x0, const, t0=0., jac=None, jac_spasity=None):
     # parameters may come as a list (e.g. read from a JSON result file); the models need arrays
     param = np.asarray(param, dtype=float)
     x0 = np.asarray(x0, dtype=float)
-    sol_model = solve_ivp(model, [t0, t[-1]], x0, dense_output=False, method='LSODA', max_step=0.1, t_eval=t, args=(param, x0, const),
-                          rtol=1e-5, atol=1e-5, jac=jac)#, lband=const[1], uband=2*const[1])#, jac_spasity=jac_spasity
+    t = np.asarray(t, dtype=float)
+    f, compiled = _rhs(model, param, x0, const)
+    if ODE_BACKEND == 'odeint' and jac is None:
+        prepend = t[0] != t0
+        t_int = np.concatenate([[t0], t]) if prepend else t
+        y = odeint(f, x0, t_int, rtol=1e-5, atol=1e-5, hmax=0.1, tfirst=True)
+        return (y[1:] if prepend else y).T
+    if compiled and jac is None:
+        sol_model = solve_ivp(f, [t0, t[-1]], x0, dense_output=False, method='LSODA', max_step=0.1, t_eval=t,
+                              rtol=1e-5, atol=1e-5)
+    else:
+        sol_model = solve_ivp(model, [t0, t[-1]], x0, dense_output=False, method='LSODA', max_step=0.1, t_eval=t,
+                              args=(param, x0, const), rtol=1e-5, atol=1e-5, jac=jac)
+        #, lband=const[1], uband=2*const[1])#, jac_spasity=jac_spasity
     return sol_model.y
 
 

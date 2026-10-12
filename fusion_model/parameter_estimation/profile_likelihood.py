@@ -739,6 +739,11 @@ def run_profile_likelihood_all(
     n_eval = sum(len(grids[i]) - 1 for i in profile_indices)
     n_todo = sum(_n_points_side(grids[i], param_opt[i], d) for i, d in tasks)
     cfg["progress"] = _Progress(n_todo)
+    # run information, so that intermediate results (<csv>_partial.csv) can be plotted while running
+    with open(os.path.splitext(out_csv)[0] + "_run.json", "w") as f:
+        json.dump({"cost_opt": cost_opt, "scale": scale, "confidence_level": confidence_level,
+                   "param_opt": param_opt.tolist(), "param_names": names,
+                   "profile_indices": profile_indices}, f, indent=2)
     print(f"Profiling {len(profile_indices)} free parameters, {n_eval} total (parameter, value) evaluations "
           f"({len(tasks)} walks / {n_todo} points to compute, cost_opt={cost_opt:.8g}, "
           f"threshold={threshold:.6g}).", flush=True)
@@ -909,29 +914,68 @@ def plot_profile_likelihood(
     return fig
 
 
-def _read_csv_and_summary(csv_path, scale):
-    """CSV in pool_paper format + scale/cost_opt from <csv>_summary.json if present."""
-    df = pd.read_csv(csv_path)
-    names = [c for c in df.columns if c not in ("param_index", "param_value", "cost")]
-    summ_path = os.path.splitext(csv_path)[0] + "_summary.json"
-    summ = None
-    if os.path.exists(summ_path):
-        with open(summ_path) as f:
-            summ = json.load(f)
-    cost_opt = summ["cost_opt"] if summ else df["cost"].min()
+_META_COLS = ("param_index", "direction", "param_value", "cost", "success", "nit", "time_s", "cost_opt")
+
+
+def _read_csv_and_summary(csv_path, scale, param_opt=None):
+    """
+    Profile points + (scale, cost_opt, param_opt) for plotting.
+    * <csv> (finished run): CSV in pool_paper format + <csv>_summary.json.
+    * otherwise <csv>_partial.csv (run still going or stopped): all finished walks
+      + <csv>_run.json (written when the walks start). Missing information falls back
+      to: cost_opt from the partial CSV, scale = 1 (-2 log L objective), param_opt as
+      passed (e.g. from Result_calibration*.json) or the lowest-cost point.
+    """
+    base = os.path.splitext(csv_path)[0]
+    partial_csv = base + "_partial.csv"
+    info = None
+    for p in (base + "_summary.json", base + "_run.json"):
+        if os.path.exists(p):
+            with open(p) as f:
+                info = json.load(f)
+            break
+
+    if os.path.exists(csv_path):
+        df = pd.read_csv(csv_path)
+        names = [c for c in df.columns if c not in _META_COLS]
+    elif os.path.exists(partial_csv):
+        dfp = pd.read_csv(partial_csv)
+        names = [c for c in dfp.columns if c not in _META_COLS]
+        n_walks = len(dfp.groupby(["param_index", "direction"]))
+        print(f"NOTE: {csv_path} does not exist yet (run not finished?). Plotting the intermediate results "
+              f"from {partial_csv}: {n_walks} finished walks, {len(dfp)} points.")
+        if info is None:
+            info = {"cost_opt": float(dfp["cost_opt"].iloc[0])}
+        if param_opt is None and "param_opt" in info:
+            param_opt = np.asarray(info["param_opt"], dtype=float)
+        # add the optimum to every profile (as in the final CSV) if it is known
+        rows = [dfp[["param_index", "param_value", "cost"] + names]]
+        if param_opt is not None:
+            opt = {n: v for n, v in zip(names, param_opt)}
+            rows.append(pd.DataFrame([{"param_index": i, "param_value": param_opt[i], "cost": info["cost_opt"],
+                                       **opt} for i in sorted(dfp["param_index"].unique())]))
+        df = pd.concat(rows, ignore_index=True).sort_values(["param_index", "param_value"]).reset_index(drop=True)
+    else:
+        folder = os.path.dirname(csv_path) or "."
+        found = sorted(f for f in os.listdir(folder) if f.endswith(".csv")) if os.path.isdir(folder) else []
+        raise FileNotFoundError(f"Neither {csv_path} nor {partial_csv} exists. CSV files in {folder}: "
+                                f"{found if found else 'none (folder missing or empty)'}")
+
+    cost_opt = float(info["cost_opt"]) if info else float(df["cost"].min())
     if scale == "auto" or scale is None:
-        if summ:
-            scale = summ["scale"]
+        if info and "scale" in info:
+            scale = info["scale"]
         else:
-            raise ValueError("scale not provided and no <csv>_summary.json found: pass the scale "
-                             "printed as 'Auto-estimated scale: ... scale=X' during the run.")
-    if summ:
-        param_opt = np.array(summ["param_opt"])
-    else:  # estimate = grid point with the lowest cost of each profile
+            scale = 1.0
+            print("NOTE: no scale information found, using scale = 1 (correct for the -2 log L objective). "
+                  "Pass scale=<value> otherwise.")
+    if info and "param_opt" in info:
+        param_opt = np.asarray(info["param_opt"], dtype=float)
+    elif param_opt is None:  # estimate = grid point with the lowest cost of each profile
         param_opt = np.full(len(names), np.nan)
         for idx, sub in df.groupby("param_index"):
             param_opt[idx] = sub.loc[sub["cost"].idxmin(), "param_value"]
-    return df, names, float(scale), float(cost_opt), param_opt
+    return df, names, float(scale), cost_opt, np.asarray(param_opt, dtype=float)
 
 
 def plot_profile_likelihood_from_csv(
@@ -941,13 +985,16 @@ def plot_profile_likelihood_from_csv(
     save_path=None,
     ncols=4,
     true_params=None,
+    param_opt=None,
 ):
     """
     Regenerate the grid plot from a CSV written by run_profile_likelihood_all
     (same signature as pool_paper's plot_profile_from_csv.py). scale='auto'
-    reads the scale from <csv>_summary.json.
+    reads the scale from <csv>_summary.json. If the run has not finished, the finished
+    walks in <csv>_partial.csv are plotted. param_opt: estimate, used only if the run
+    files don't contain it.
     """
-    df, names, scale, cost_opt, param_opt = _read_csv_and_summary(csv_path, scale)
+    df, names, scale, cost_opt, param_opt = _read_csv_and_summary(csv_path, scale, param_opt)
     ci = {idx: confidence_interval_from_profile(sub["param_value"].to_numpy(), sub["cost"].to_numpy(), cost_opt,
                                                 confidence_level, scale=scale)
           for idx, sub in df.sort_values("param_value").groupby("param_index")}
@@ -965,6 +1012,7 @@ def plot_profile_likelihood_individual(
     file_ext="png",
     figsize=(5.5, 4.0),
     true_params=None,
+    param_opt=None,
 ):
     """
     One figure per parameter (as pool_paper's plot_profile_likelihood_individual,
@@ -972,7 +1020,7 @@ def plot_profile_likelihood_individual(
     """
     import re
     os.makedirs(out_dir, exist_ok=True)
-    df, names, scale, cost_opt, param_opt = _read_csv_and_summary(csv_path, scale)
+    df, names, scale, cost_opt, param_opt = _read_csv_and_summary(csv_path, scale, param_opt)
     threshold = chi2.ppf(confidence_level, 1)
 
     def _sanitize(name):

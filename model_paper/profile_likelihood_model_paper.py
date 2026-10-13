@@ -158,7 +158,7 @@ if __name__ == "__main__":
     path2 = f"model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/"
     out_path = path2 + "profile_likelihood/"
 
-    PROFILE = "ode+S"       # 'ode', 'ode+S' or 'all' (incl. x0)
+    PROFILE = "ode+S"       # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
     FIX_X0 = False          # True: x0 held at the estimate (faster, profiles conditional on x0)
     OBJECTIVE = "neg2logL"  # 'neg2logL' (scale = 1) or 'calibration' (scale='auto' as in pool_paper)
     # ODE solver: numba-compiled fusion_model2 is used automatically if numba is installed (~6x faster,
@@ -175,7 +175,9 @@ if __name__ == "__main__":
     idx_x0 = list(range(n_x0))
     idx_ode = list(range(n_x0, n_x0 + n_ode))
     idx_S = list(range(n_x0 + n_ode, len(param_opt)))
-    profile_indices = {"ode": idx_ode, "ode+S": idx_ode + idx_S, "all": None}[PROFILE]
+    profile_indices = {"x0": idx_x0, "ode": idx_ode, "ode+S": idx_ode + idx_S, "all": None}[PROFILE]
+    if FIX_X0 and PROFILE in ("x0", "all"):
+        raise ValueError("PROFILE=" + repr(PROFILE) + " profiles x0, so FIX_X0 must be False")
     tag = f"{add_name}_{PROFILE.replace('+', '')}_{OBJECTIVE}" + ("_fixx0" if FIX_X0 else "")
 
     df, cis = run_profile_likelihood_all(

@@ -264,7 +264,7 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
         text_lbl = '(c)'
         legend_box = [0.317, 0.427]
     ax.text(*coord_text, text_lbl, fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-    ax.legend(ncol=len(bact_all)//4, handles=lines, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
+    ax.legend(ncol=max(1, len(bact_all)//4), handles=lines, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
     #ax.legend(handlelength=1.3, ncol=len(bact_all)//4)#, bbox_to_anchor=(1, 1))
     plt.savefig(path+exp+add_name+'_realx.pdf', bbox_inches='tight')
     plt.close(fig)

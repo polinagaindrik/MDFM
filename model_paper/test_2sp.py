@@ -80,7 +80,7 @@ if __name__ == "__main__":
     RUN_PROFILE = True             # 4) profile likelihood
 
     # profile likelihood settings
-    PROFILE = 'ode+S'              # 'ode', 'ode+S' or 'all' (incl. x0)
+    PROFILE = 'ode+S'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
     FIX_X0 = False                 # True: x0 held at the estimate (faster, profiles conditional on x0)
     # ================================================================
 
@@ -167,7 +167,9 @@ if __name__ == "__main__":
         idx_x0 = list(range(n_x0))
         idx_ode = list(range(n_x0, n_x0 + n_ode))
         idx_S = list(range(n_x0 + n_ode, len(param_opt)))
-        profile_indices = {'ode': idx_ode, 'ode+S': idx_ode + idx_S, 'all': None}[PROFILE]
+        profile_indices = {'x0': idx_x0, 'ode': idx_ode, 'ode+S': idx_ode + idx_S, 'all': None}[PROFILE]
+        if FIX_X0 and PROFILE in ('x0', 'all'):
+            raise ValueError('PROFILE=' + repr(PROFILE) + ' profiles x0, so FIX_X0 must be False')
         tag = f"{add_name}_{PROFILE.replace('+', '')}" + ('_fixx0' if FIX_X0 else '')
         out_csv = out_path + f'profile_likelihood_results{tag}.csv'
 

@@ -2,7 +2,8 @@
 Profile likelihood for fusion_model / model_paper
 =================================================
 
-Same public API as ``pool_paper_casestudy/fusion_core/likelihood.py``
+Same public API as ``pool_paper_casestudy/fusion_core/likelihood.py`` in the
+separate pool-paper-casestudy repo (https://github.com/polinagaindrik/pool-paper-casestudy)
 (function names, argument names and defaults, return values, CSV format), so
 that calls, CSV files and plotting scripts are interchangeable between the two
 projects:

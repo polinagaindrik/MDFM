@@ -74,11 +74,13 @@ def die_with_parent():
 
 
 def _eval_init(cost_func, calibr_setup, jac_spasity):
+    """Initialize a worker's shared objective and calibration arguments."""
     die_with_parent()
     _EVAL.update(cost_func=cost_func, calibr_setup=calibr_setup, jac_spasity=jac_spasity)
 
 
 def _eval_one(x):
+    """Evaluate one parameter vector using the worker's configured objective."""
     try:
         c = float(_EVAL['cost_func'](x, _EVAL['calibr_setup'], _EVAL['jac_spasity']))
     except Exception:
@@ -93,6 +95,7 @@ class CostEvaluator:
     context manager so the pool is closed afterwards.
     """
     def __init__(self, cost_func, calibr_setup, jac_spasity=None, n_jobs=1):
+        """Create a serial or process-pool evaluator for the supplied objective."""
         self.n_jobs = int(n_jobs) if n_jobs and n_jobs > 0 else (os.cpu_count() or 1)
         self.pool = None
         self.args = (cost_func, calibr_setup, jac_spasity)
@@ -102,11 +105,13 @@ class CostEvaluator:
             _eval_init(*self.args)
 
     def __call__(self, xs):
+        """Evaluate the objective for each full parameter vector in xs."""
         if self.pool is not None:
             return np.array(self.pool.map(_eval_one, xs, chunksize=1))
         return np.array([_eval_one(x) for x in xs])
 
     def close(self):
+        """Shut down the worker pool and restore the serial evaluator state."""
         if self.pool is not None:
             self.pool.close()
             self.pool.join()
@@ -114,9 +119,11 @@ class CostEvaluator:
         _eval_init(*self.args)  # later calls still work (serially) instead of returning the penalty
 
     def __enter__(self):
+        """Return this evaluator for use in a context manager."""
         return self
 
     def __exit__(self, exc_type, *exc):
+        """Close the evaluator, terminating workers if the managed block failed."""
         if exc_type is not None and self.pool is not None:  # error / Ctrl+C: don't wait for running tasks
             self.pool.terminate()
             self.pool = None
@@ -137,6 +144,7 @@ def fd_fun_and_grad(evaluator, x_template, free, lo, hi, rel_step=None):
     rel_step = np.sqrt(np.finfo(float).eps) if rel_step is None else rel_step
 
     def fg(z):
+        """Evaluate cost and a finite-difference gradient for the free parameters."""
         z = np.asarray(z, dtype=float)
         x0 = x_template.copy()
         x0[free] = z
@@ -157,15 +165,18 @@ def fd_fun_and_grad(evaluator, x_template, free, lo, hi, rel_step=None):
 class _LocalObjective:
     """Cost as a function of the free parameters only (picklable for multiprocessing)."""
     def __init__(self, cost_func, param_init, free, calibr_setup, jac_spasity):
+        """Store the full parameter template and the indices optimized locally."""
         self.cost_func, self.param_init, self.free = cost_func, param_init, free
         self.calibr_setup, self.jac_spasity = calibr_setup, jac_spasity
 
     def full(self, z):
+        """Insert free-parameter values into a copy of the full parameter vector."""
         x = self.param_init.copy()
         x[self.free] = z
         return x
 
     def __call__(self, z):
+        """Evaluate the objective for free-parameter values, returning a penalty on failure."""
         try:
             c = self.cost_func(self.full(z), self.calibr_setup, self.jac_spasity)
         except Exception:
@@ -181,6 +192,7 @@ def _local_run(task):
     history = []
 
     def callback(intermediate_result):
+        """Record the current full parameter vector and cost during a local run."""
         history.append((objective.full(intermediate_result.x), float(intermediate_result.fun)))
         if print_every and len(history) % print_every == 0:
             print(f'  [start {r}] iteration {len(history)}: cost = {intermediate_result.fun:.10g}', flush=True)
@@ -268,6 +280,7 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
         os.makedirs(os.path.dirname(history_file) or '.', exist_ok=True)
 
         def _write_history(fname, history):
+            """Write a local optimization run's parameter and cost history to CSV."""
             with open(fname, 'w') as fh:
                 fh.write('iteration,' + ''.join(f'p{i},' for i in range(len(param_init))) + 'cost\n')
                 for it, (x, c) in enumerate(history, 1):
@@ -295,6 +308,7 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
 
 
 def calculate_model_params_direct_local(ll_func, dfs, calibr_setup, rnd_seed=8097):
+    """Fit model parameters with a direct local L-BFGS-B optimization."""
     # Use local optimization function
     #np.random.seed(rnd_seed)
     #calibr_setup['param_0'] = [np.random.uniform(*bnd) for bnd in calibr_setup['param_bnds']]
@@ -308,6 +322,7 @@ def calculate_model_params_direct_local(ll_func, dfs, calibr_setup, rnd_seed=809
 
 
 def calculate_prediction(cost_func, calibr_setup):
+    """Optimize prediction parameters and return the best vector and objective value."""
     jac_spasity = mdl.jacobian_sparsity(np.shape(calibr_setup['dfs'][1])[0])
     with open(output_file_predict, "w") as f:
         output = "iteration,"
@@ -323,11 +338,12 @@ def calculate_prediction(cost_func, calibr_setup):
 
 # Parameter estimation using minimizstion of the negative log-likelihood function (func)
 def optimization_func(func, bnds, args=(), workers=1):
-    return differential_evolution(func, args=args, tol=1e-6, atol=1e-6, maxiter=1000, mutation=(0.3, 1.9), recombination=0.7, popsize=30,
+    return differential_evolution(func, args=args, tol=1e-6, atol=1e-6, maxiter=10, mutation=(0.3, 1.9), recombination=0.7, popsize=30,
                                   bounds=bnds, init='latinhypercube', disp=True, polish=False, updating='deferred', workers=workers,
                                   strategy='randtobest1bin', callback=_callback_ll) #init='sobol'
 
 def optimization_func_prediction(func, bnds, args=(), workers=1):
+    """Run differential evolution with the prediction search settings."""
     return differential_evolution(func, args=args, tol=1e-3, atol=1e-3, maxiter=300, mutation=(0.3, 1.9), recombination=0.7, popsize=30,
                                   bounds=bnds, init='latinhypercube', disp=True, polish=False, updating='deferred', workers=workers,
                                   strategy='randtobest1bin', callback=_callback_ll_predict) #init='sobol'
@@ -354,6 +370,7 @@ def _callback_ll_predict(intermediate_result):
 
 ############################## Try: 2 step global optimization ###################################
 def calculate_model_params_direct_2steps(ll_func, dfs, calibr_setup):
+    """Run a two-stage global parameter search, seeding the second stage from the first."""
     jac_spasity = mdl.jacobian_sparsity(np.shape(dfs[1])[0])
     with open(output_file, "w") as f:
         output = "iteration,"
@@ -378,11 +395,13 @@ def calculate_model_params_direct_2steps(ll_func, dfs, calibr_setup):
     return optim_output2.x, optim_output2.fun
 
 def optimization_func_1step(func, bnds, args=(), workers=1):
+    """Create a first-stage differential-evolution solver for parameter fitting."""
     return DifferentialEvolutionSolver(func, args=args, tol=1e-2, atol=1e-3, maxiter=500, mutation=(1., 1.9), recombination=0.7, popsize=35,
                                   bounds=bnds, init='latinhypercube', disp=True, polish=False, updating='deferred', workers=workers,
                                   callback=_callback_ll, strategy='randtobest1bin') #init='sobol'
 
 def optimization_func_2step(func, bnds, init=None, args=(), workers=1):
+    """Run the second differential-evolution stage using an optional initial population."""
     return differential_evolution(func, args=args, tol=1e-5, atol=1e-6, maxiter=1000, mutation=(0.3, 1.5), recombination=0.7, popsize=35,
                                   bounds=bnds, init=init, disp=True, polish=False, updating='deferred', workers=workers,
                                   callback=_callback_ll2, strategy='best1bin') #init='sobol'

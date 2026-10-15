@@ -2,6 +2,7 @@ import numpy as np
 from .. import model as mdl
 
 def param_bnds_insilico_tempexponent(n_cl, inhib=True):
+    """Build ODE parameter bounds for the temperature-exponent in-silico model."""
     if inhib == True:  # noqa: E712
         inhib_bnds = [(0.01, 5.) if i!=j else (0., 0.)
                   for i in range (n_cl)
@@ -19,6 +20,7 @@ def param_bnds_insilico_tempexponent(n_cl, inhib=True):
 
 
 def param_bnds_insilico_templinear(n_cl, inhib=True):
+    """Build ODE parameter bounds for the linear-temperature in-silico model."""
     if inhib == True:  # noqa: E712
         inhib_bnds = [(0.02, 3.) if i!=j else (0., 0.)
                   for i in range (n_cl)

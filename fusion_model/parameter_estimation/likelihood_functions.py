@@ -6,6 +6,7 @@ from .optimization import optimization_func
 
 # Calculate joint probability array from 1D undependent probabilities along each parameter
 def get_joint_distrib_val_from_projections(index, param_arr, prob_projections):
+    """Combine per-parameter projection probabilities at one grid index."""
     param = np.array([param_arr[j][index[j]] for j in range (len(index))])
     prob = np.prod([prob_projections[j][index[j]] for j in range (len(index))])
     return [index, param, prob]
@@ -14,6 +15,7 @@ def get_joint_distrib_val_from_projections(index, param_arr, prob_projections):
 # Calculate the 1D probabilities along 1 parameter with index param_num given a joint probability of all parameters
 # Integrate out all other parameters except param_num (used to test obtained joint pribability)
 def get_prob_proj_from_joint(param_arr, prob_arr, param_num):
+    """Marginalize a joint probability array over all but one parameter."""
     change_axis = 0
     for i, p in enumerate(param_arr):
         if i != param_num:
@@ -27,10 +29,12 @@ def get_prob_proj_from_joint(param_arr, prob_arr, param_num):
 
 # Define parameter values to calculate probabilities give bounds and number of points
 def get_param_array(param_bnds, num_points):
+    """Create evenly spaced parameter grids from the supplied bounds."""
     return np.array([np.linspace(bnd[0], bnd[1], num_points) for bnd in param_bnds])
 
 
 def calculate_profile_likelihood(func_ll, calibr_setup, dfs, num_points=10):
+    """Evaluate profile likelihoods by fixing each parameter and optimizing the rest."""
     param_arr = get_param_array(calibr_setup['param_bnds'], num_points)
     profll_arr = np.zeros(np.shape(param_arr))
     n_param = len(param_arr)
@@ -45,10 +49,12 @@ def calculate_profile_likelihood(func_ll, calibr_setup, dfs, num_points=10):
 
 
 def func_for_profll(func_ll, p, p_fix, ind_param, dfs, model, Pmatrices, s_x):
+    """Evaluate a likelihood with one parameter inserted at its fixed index."""
     return func_ll(np.insert(p, ind_param, p_fix), dfs, model, Pmatrices, s_x)
 
 
 def confidence_intervals(param_arr, profll_arr, confidence_level=0.95):
+    """Estimate parameter confidence intervals from profile-likelihood thresholds."""
     threshold = chi2.ppf(confidence_level, 1)
     profll_opt = np.min(profll_arr)
     CI = []

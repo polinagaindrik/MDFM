@@ -3,6 +3,7 @@ from scipy.integrate import solve_ivp, odeint
 
 
 def calc_obs_model(data, param_x0, calibr_setup, t_model):
+    """Simulate each experiment and return bacterial counts and predicted observations."""
     (df_mibi, df_maldi, df_ngs,) = data
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     n_cl = np.shape(data[1])[0]
@@ -51,6 +52,7 @@ try:
 
     @_numba.njit(cache=True)
     def _fusion_model2_rhs_nb(x, temp, n_cl, param):
+        """Compute fusion_model2 derivatives in a Numba-compiled function."""
         lambd = 10.0**param[:n_cl] * temp**param[n_cl:2*n_cl]
         alph = param[2*n_cl:3*n_cl] * temp**param[3*n_cl:4*n_cl]
         nmax = 10.0**param[4*n_cl] * temp**param[4*n_cl+1]
@@ -69,7 +71,7 @@ except ImportError:
 
 
 def _rhs(model, param, x0, const):
-    """Right-hand side f(t, x) -- compiled version for fusion_model2 at constant temperature."""
+    """Return an ODE right-hand side, using the compiled model when supported."""
     from .ode_structure import fusion_model2
     temp_cond, n_cl = const[0], const[1]
     if USE_NUMBA and _HAS_NUMBA and model is fusion_model2 and np.size(temp_cond) == 1:
@@ -81,6 +83,7 @@ def _rhs(model, param, x0, const):
 
 # The model solution for given ODEs
 def model_ODE_solution(model, t, param, x0, const, t0=0., jac=None, jac_spasity=None):
+    """Integrate the selected model and return its state values at the requested times."""
     # parameters may come as a list (e.g. read from a JSON result file); the models need arrays
     param = np.asarray(param, dtype=float)
     x0 = np.asarray(x0, dtype=float)
@@ -103,11 +106,13 @@ def model_ODE_solution(model, t, param, x0, const, t0=0., jac=None, jac_spasity=
 
 # Get bacterial count array from bacterial states x
 def get_bacterial_count(x, n_cl, n_states):
+    """Sum each cluster's state components to obtain its total bacterial count."""
     return np.array([np.sum([x[i+n_cl*j] for j in range (n_states)], axis=0) for i in range (n_cl)])
 
 
 # Get [fpc(xi), fmrs(xi)]
 def media_filtering(t, n, s_x, x0, const):
+    """Apply media-specific cluster weights to bacterial counts."""
     (temp_cond, n_cl, media) = const
     f_media = np.array(s_x).reshape(-1, n_cl, 1) 
     x_filt = n.reshape((1,)+np.shape(n))*f_media #(n_media, n_sp, n_times)
@@ -115,27 +120,32 @@ def media_filtering(t, n, s_x, x0, const):
 
 
 def observable_MiBi(t, n, s_x, x0, const, t_meas, std=0.):
+    """Predict MiBi measurements by filtering counts and summing clusters per medium."""
     n = np.array([xx for tt, xx in zip(t, n.T) if tt in t_meas]).T
     f_x = media_filtering(t, n, s_x, x0, const)
     return t_meas, np.sum(f_x, axis=1)
 
 
 def observable_MiBi_woS(t, n, s_x, x0, const, t_meas, std=0.):
+    """Predict unfiltered MiBi measurements by summing cluster counts."""
     n = np.array([xx for tt, xx in zip(t, n.T) if tt in t_meas]).T
     return t_meas, np.sum(n, axis=0)
 
 
 def observable_MALDI(t, n, s_x, x0, const, t_meas, std=0.):
+    """Predict MALDI proportions after applying media weights, noise, and thresholding."""
     n = np.array([xx for tt, xx in zip(t, n.T) if tt in t_meas]).T
     f_x = media_filtering(t, n, s_x, x0, const)
     f_x = f_x + np.random.normal(0., std, size=np.shape(f_x))
+    # Remove low-abundance entries before normalizing each measurement to proportions.
     f_x[f_x<=0.005] = 0
     return t_meas, np.array([f/np.sum(f, axis=0) for f in f_x])
 
 
 def observable_NGS(t, n, T_x, x0, const, t_meas, std=0.):
+    """Predict normalized NGS proportions using transfer weights and optional noise."""
     n = np.array([xx for tt, xx in zip(t, n.T) if tt in t_meas]).T
-    # NGS filtering with T matrix
+    # Apply the NGS transfer weights, then clip negative noisy values and normalize to proportions.
     f_x = media_filtering(t, n, T_x, x0, const)[0]
     f_x = f_x + np.random.normal(0., std, size=np.shape(f_x))
     f_x[f_x<0] = 0
@@ -143,5 +153,6 @@ def observable_NGS(t, n, T_x, x0, const, t_meas, std=0.):
 
 
 def observable_x(t, n, s_x, x0, const, t_meas, std=0.):
+    """Return bacterial counts at the requested measurement times without filtering."""
     n = np.array([xx for tt, xx in zip(t, n.T) if tt in t_meas]).T
     return t_meas, n

@@ -6,6 +6,7 @@ from ..tools.dataframe_functions import filter_dataframe
 
 
 def plot_insilico_x(df, model, t, param, x0, n_cl, path='', add_name=''):
+    """Plot simulated bacterial trajectories alongside synthetic measurements."""
     t_model = np.linspace(min(t), max(t), 100)
     exps = sorted(list(set([s.split('_')[0] for s in df.columns])))
     for exp in exps:
@@ -39,6 +40,7 @@ def plot_insilico_x(df, model, t, param, x0, n_cl, path='', add_name=''):
 
 
 def plot_measurements_insilico(ax0, temp, df, clrs=None, lab='',  media=''):
+    """Draw the in-silico observations for one temperature on an existing axis."""
     if clrs is not None:
         exp_clrs = clrs
     else:

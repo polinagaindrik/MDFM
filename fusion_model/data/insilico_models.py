@@ -8,26 +8,31 @@ from ..tools import dataframe_functions as dtf
 
 
 def generate_x0_for_simulation(n_exp_max=20, n_cl_max=20, path='', add_name=''):
+   """Generate and save random log-scale initial values for simulated experiments."""
    x10 = np.random.uniform(1., 4., size=(n_exp_max, n_cl_max)) # Try with lognormal distribution
    json_dump({'x0': x10.astype(list)}, path+f'Initial_values_x0{add_name}.json')
    return x10
 
 
 def get_random_initial_vals(temps, n_cl):
+    """Generate random log-scale initial values and their corresponding model states."""
     x10 = np.random.uniform(1., 4., size=(len(temps), n_cl))
     return x10, set_initial_vals(x10, temps, n_cl)
 
 
 def set_initial_vals(x10, temps, n_cl):
+    """Convert log-scale bacterial initial values into the model's full state vectors."""
     return [[10**L0 for L0 in x10[i]] + [1. for _ in range (n_cl+1)] for i in range (len(temps))]
 
 
 def save_all_dfs(dfs, names=[''], path=''):
+    """Save a sequence of dataframes as named pickle files."""
     for df, n in zip(dfs, names):
         df.to_pickle(path+f'dataframe_{n}.pkl')
 
 
 def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name=''):
+    """Generate synthetic observations and align their MALDI and NGS bacteria."""
     data = insilico_model(n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name)
     dfs = data[:-1]
     (df_mibi, df_maldi, df_ngs) = dfs
@@ -54,6 +59,7 @@ def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, para
   
 '''
 def model_2sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
+    """Generate two-cluster, two-medium synthetic data using the linear model."""
     np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13., 17.])
     n_cl = 2
@@ -83,6 +89,7 @@ def model_2sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.,
 
 
 def model_3sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
+    """Generate three-cluster, two-medium synthetic data using the linear model."""
     np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13., 17.])
     n_cl = 3
@@ -112,6 +119,7 @@ def model_3sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.,
 
 
 def model_4sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
+    """Generate four-cluster, two-medium synthetic data using the linear model."""
     np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13., 17.])
     n_cl = 4
@@ -140,6 +148,7 @@ def model_4sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise
 
 
 def model_6sp_2media_inhib(temps, ntr, x10=None, inhib=False, noise=0., rel_noise=0., path=''):
+    """Generate six-cluster, two-medium synthetic data with optional inhibition."""
     np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13., 17.])
     n_cl = 6
@@ -169,6 +178,7 @@ def model_6sp_2media_inhib(temps, ntr, x10=None, inhib=False, noise=0., rel_nois
     return df_mibi, df_maldi, df_ngs, df_realx
 
 def model_6sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
+    """Generate six-cluster, two-medium synthetic data with exponential temperature effects."""
     np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13.])
     n_cl = 6
@@ -199,6 +209,7 @@ def model_6sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., r
 
 
 def model_10sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
+    """Generate ten-cluster, two-medium synthetic data with optional inhibition."""
     np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13.])
     n_cl = 10
@@ -228,6 +239,7 @@ def model_10sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
 
 
 def model_10sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
+    """Generate ten-cluster, two-medium synthetic data with exponential temperature effects."""
     np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13.])
     n_cl = 10
@@ -258,6 +270,7 @@ def model_10sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., 
 
 
 def model_13sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
+    """Generate thirteen-cluster, two-medium synthetic data with optional inhibition."""
     np.random.seed(4698517)
     t = np.array([0., 1., 3., 6., 10., 13.])
     n_cl = 13
@@ -295,6 +308,7 @@ t = np.linspace(0., 17., 18)
 #np.random.seed(4698517)
 
 def get_res_from_zl2030dict(n_cl, model='linear', dir=''):
+    """Extract and reshape calibration parameters from ZL2030 project for a requested number of clusters."""
     n_cl_zl2030 = 12
     n_exps_zl2030 = 15 
     res_zl2030 = read_from_json('Result_calibration_zl2030_copy.json', dir=dir)
@@ -320,6 +334,7 @@ def get_res_from_zl2030dict(n_cl, model='linear', dir=''):
 
 # 10 species models (linear model)
 def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
+    """Generate two-medium linear-model data using parameters fitted to ZL2030 data."""
     s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='linear', dir='out/zl2030/linear_model/calibration/')
     s_x = s_x_zl2030
     if not inhib:
@@ -339,6 +354,7 @@ def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, pa
 
 
 def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
+    """Generate synthetic observations using the exponential temperature-dependent model."""
     np.random.seed(46987)
     if param_ode is None:
         _, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
@@ -359,6 +375,7 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path=
 ############################ For experiments with different number of species ############################
 # Exponential models:
 def model_2media_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
+    """Generate two-medium exponential-model data using ZL2030 calibration parameters."""
     np.random.seed(46987)
     s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
     s_x = s_x_zl2030
@@ -366,36 +383,42 @@ def model_2media_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path=
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name='')
 
 def model_2media_expgensel(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data for general medium 1 and selective medium 1."""
     s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_general"][0][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['sel1', 'gen1']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_2media_expgen2sel2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data for general medium 2 and selective medium 2."""
     s_x = np.array(S_matrix_setup["s_selective"][1][:n_cl]+S_matrix_setup["s_general"][1][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['sel2', 'gen2']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_2media_expgen3sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data for general medium 3 and selective medium 3."""
     s_x = np.array(S_matrix_setup["s_selective"][2][:n_cl]+S_matrix_setup["s_general"][2][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['sel3', 'gen3']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_2media_expsel2sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data for selective media 2 and 3."""
     s_x = np.array(S_matrix_setup["s_selective"][1][:n_cl]+S_matrix_setup["s_selective"][2][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['sel2', 'sel3']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_2media_expsel1sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data for selective media 1 and 3."""
     s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_selective"][2][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['sel1', 'sel3']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_2media_expsel1sel2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data for selective media 1 and 2."""
     s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_selective"][1][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['sel1', 'sel2']
@@ -404,36 +427,42 @@ def model_2media_expsel1sel2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
 
 ################### Experiments with different media (6 species) #######################
 def model_1media_exp_sel1(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data using selective medium 1."""
     s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['sel1']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_1media_exp_sel2(n_cl, temps, ntr, S_matrix_setup,  **kwargs):
+    """Generate exponential-model data using selective medium 2."""
     s_x = np.array(S_matrix_setup["s_selective"][1][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['sel2']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_1media_exp_sel3(n_cl, temps, ntr, S_matrix_setup,  **kwargs):
+    """Generate exponential-model data using selective medium 3."""
     s_x = np.array(S_matrix_setup["s_selective"][2][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['sel3']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_1media_exp_gen1(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data using general medium 1."""
     s_x = np.array(S_matrix_setup["s_general"][0][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['gen1']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_1media_exp_gen2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data using general medium 2."""
     s_x = np.array(S_matrix_setup["s_general"][1][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['gen2']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 def model_1media_exp_gen3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data using general medium 3."""
     s_x = np.array(S_matrix_setup["s_general"][2][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['gen3']

@@ -8,6 +8,7 @@ from pydantic.json import custom_pydantic_encoder
 
 # The function from (FisInMa, thanks to Jonas)
 def _get_encoder(calibr_result):
+    """Create a JSON encoder that converts supported NumPy values to serializable forms."""
     encoders = {
         np.ndarray: lambda x: x.tolist(),
         np.int32: lambda x: str(x),
@@ -19,6 +20,7 @@ def _get_encoder(calibr_result):
 
 # Save the modell calibr_result to the json file
 def json_dump(calibr_result, filename, dir='', **kwargs):
+    """Serialize a calibration result to a JSON file."""
     # Special encoders for any object we might come across
     if "default" not in kwargs.keys():
         kwargs["default"] = _get_encoder(calibr_result)
@@ -31,12 +33,14 @@ def json_dump(calibr_result, filename, dir='', **kwargs):
 # TODO convert read solution to the format it was before saving
 
 def read_from_json(filename, dir=''):
+    """Load and return a JSON result from the specified directory."""
     f = open(dir + filename,)
     sol = json.load(f)
     return sol
 
 
 def save_values_each_experiment(vals_opt, exps, n_cl, dir='', filename=''):
+    """Save each experiment's contiguous block of optimized values in a JSON object."""
     vals_dict = {}
     for i, exp in enumerate(exps):
         vals_dict[exp] = vals_opt[n_cl*i:n_cl*(i+1)]

@@ -102,9 +102,11 @@ class GaussianNeg2LogLik:
     """
 
     def __init__(self, n_data):
+        """Store the finite-data-point count for each residual type."""
         self.n_data = [int(n) for n in n_data]
 
     def __call__(self, J_vect):
+        """Evaluate the profiled Gaussian negative twice-log-likelihood."""
         total = 0.
         for J, n in zip(J_vect, self.n_data):
             if n == 0:
@@ -143,11 +145,13 @@ class GeometricMeanNeg2LogLik(GaussianNeg2LogLik):
     """
 
     def __init__(self, n_data):
+        """Initialize the equal-weight likelihood with counts for each data type."""
         super().__init__(n_data)
         used = [n for n in self.n_data if n > 0]
         self.n_bar = float(sum(used)) / max(len(used), 1)
 
     def __call__(self, J_vect):
+        """Evaluate the equal-weight Gaussian negative twice-log-likelihood."""
         total = 0.
         for J, n in zip(J_vect, self.n_data):
             if n == 0:
@@ -175,6 +179,7 @@ class _SolveTimeout(Exception):
 class _BetterOptimumFound(Exception):
     """Raised when a profile point has a clearly lower cost than the reference optimum."""
     def __init__(self, x, cost, delta):
+        """Store the lower-cost parameter vector and its improvement over the reference."""
         super().__init__(f"profile point lower than the optimum by Delta = {delta:.4g}")
         self.x, self.cost, self.delta = np.asarray(x, dtype=float), float(cost), float(delta)
 
@@ -190,6 +195,7 @@ def time_limit(seconds):
         return
 
     def _handler(signum, frame):
+        """Raise the timeout exception when the alarm expires."""
         raise _SolveTimeout(f"solve exceeded {seconds}s")
 
     old = signal.signal(signal.SIGALRM, _handler)
@@ -202,6 +208,7 @@ def time_limit(seconds):
 
 
 def _safe_cost(cost_func, x_full, calibr_setup, jac_spasity, solve_timeout):
+    """Evaluate the objective with a timeout and return a penalty on failure."""
     try:
         with time_limit(solve_timeout):
             c = float(cost_func(x_full, calibr_setup, jac_spasity))
@@ -213,9 +220,11 @@ def _safe_cost(cost_func, x_full, calibr_setup, jac_spasity, solve_timeout):
 class _TimedCost:
     """cost_func with the solve timeout / failure handling of _safe_cost (picklable)."""
     def __init__(self, cost_func, solve_timeout):
+        """Wrap a cost function with a per-evaluation timeout."""
         self.cost_func, self.solve_timeout = cost_func, solve_timeout
 
     def __call__(self, x, calibr_setup, jac_spasity):
+        """Evaluate the wrapped objective with timeout and failure handling."""
         return _safe_cost(self.cost_func, x, calibr_setup, jac_spasity, self.solve_timeout)
 
 
@@ -245,6 +254,7 @@ def _build_grid(param_opt, param_index, param_bnds, span, n_points):
 # ----------------------------------------------------------------------
 
 def _fmt_time(seconds):
+    """Format a duration as hours, minutes, and seconds."""
     seconds = int(round(max(0., seconds)))
     return f"{seconds // 3600}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}"
 
@@ -252,11 +262,13 @@ def _fmt_time(seconds):
 class _Progress:
     """Counter of finished profile points shared by all worker processes (elapsed time, ETA)."""
     def __init__(self, total):
+        """Initialize a process-shared progress counter for the expected work."""
         self.total = int(total)
         self.count = mp.Value("i", 0)
         self.t0 = time.time()
 
     def add(self, n=1):
+        """Increment completed work and return a progress summary with elapsed time and ETA."""
         with self.count.get_lock():
             self.count.value += n
             done = self.count.value
@@ -292,6 +304,7 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
     rng = rng if rng is not None else np.random.default_rng()
 
     def f(z):
+        """Expand the optimized subset into a full vector and evaluate its cost."""
         x = x_start.copy()
         x[opt_idx] = z
         return _safe_cost(cost_func, x, calibr_setup, jac_spasity, solve_timeout)
@@ -314,12 +327,14 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
         fg = None if evaluator is None else fd_fun_and_grad(evaluator, x_start, opt_idx, lo, hi)
         t0 = time.time()
         def _make_callback(r):
+            """Create an iteration callback that labels progress for one restart."""
             # scipy passes the OptimizeResult only to callbacks whose single argument is
             # named `intermediate_result`, hence the factory instead of default arguments
             it = [0]
             start_txt = f" start {r + 1}/{len(starts)}" if len(starts) > 1 else ""
 
             def callback(intermediate_result):
+                """Print periodic progress for the current local minimization."""
                 it[0] += 1
                 if print_every and it[0] % print_every == 0:
                     print(f"    {label or 'fit'}{start_txt}: iteration {it[0]}, cost = {intermediate_result.fun:.8g}, "
@@ -444,6 +459,7 @@ _G = {}
 
 
 def _pool_init(cost_func, param_opt, cost_opt, grids, calibr_setup, jac_spasity, cfg):
+    """Initialize worker-global state and a process-specific random generator."""
     die_with_parent()
     _G.update(cost_func=cost_func, param_opt=param_opt, cost_opt=cost_opt, grids=grids,
               calibr_setup=calibr_setup, jac_spasity=jac_spasity, cfg=cfg,
@@ -451,6 +467,7 @@ def _pool_init(cost_func, param_opt, cost_opt, grids, calibr_setup, jac_spasity,
 
 
 def _pool_task(task):
+    """Run one parameter-profile walk in a worker process."""
     idx, direction = task
     rows = _profile_walk(_G["cost_func"], _G["param_opt"], _G["cost_opt"], idx, direction, _G["grids"][idx],
                          _G["calibr_setup"], _G["jac_spasity"], _G["cfg"], _G["rng"])
@@ -489,6 +506,7 @@ def _run_walks(cost_func, param_opt, cost_opt, grids, tasks, calibr_setup, jac_s
 def _make_cfg(param_bnds, fixed_indices, method, confidence_level, scale, per_point_workers, n_restarts,
               jitter_frac, stop_factor, anchor_start, minimize_options, solve_timeout, verbose,
               param_names=None, progress=None):
+    """Collect shared optimization, profiling, and reporting settings."""
     return dict(free_idx=free_param_indices(param_bnds, fixed_indices), method=method,
                 confidence_level=confidence_level, scale=float(scale), per_point_workers=per_point_workers,
                 n_restarts=n_restarts, jitter_frac=jitter_frac, stop_factor=stop_factor,
@@ -497,6 +515,7 @@ def _make_cfg(param_bnds, fixed_indices, method, confidence_level, scale, per_po
 
 
 def _n_points_side(grid, p_hat, direction):
+    """Count grid points on the requested side of the estimated parameter."""
     return int(np.sum(grid > p_hat)) if direction > 0 else int(np.sum(grid < p_hat))
 
 
@@ -542,6 +561,7 @@ def profile_likelihood_for_param(
     results = {float(param_opt[param_index]): (cost_opt, param_opt.copy())}
 
     def on_done(idx, direction, rows):
+        """Store completed walk results keyed by parameter value."""
         for r in rows:
             results[r["param_value"]] = (r["cost"], r["x"])
 
@@ -628,6 +648,7 @@ def count_data_points(cost_func, param, calibr_setup, jac_spasity=None):
     counts = {}
 
     def _counting_aggregation(J_vect):
+        """Count finite residual entries by data type while providing a finite cost."""
         n_k = [int(np.count_nonzero(np.isfinite(np.asarray(J, dtype=float)))) for J in J_vect]
         counts["n_data"], counts["n_types"] = int(sum(n_k)), int(sum(1 for n in n_k if n > 0))
         return np.nanmean([np.nanmean(J) for J in J_vect])
@@ -814,6 +835,7 @@ def run_profile_likelihood_all(
               f"skipped points count as done in the progress)", flush=True)
 
     def _records(rows):
+        """Convert completed profile-walk results into rows for the output dataframe."""
         recs = []
         for r in rows:
             rec = {"param_index": r["param_index"], "direction": r["direction"], "param_value": r["param_value"],
@@ -828,6 +850,7 @@ def run_profile_likelihood_all(
     state = {"done": 0}
 
     def on_done(idx, direction, rows):
+        """Record a completed walk and persist its results for resumable profiling."""
         recs = _records(rows)
         if recs:
             pd.DataFrame(recs).to_csv(partial_csv, mode="a", index=False, header=not os.path.exists(partial_csv))
@@ -933,10 +956,12 @@ def run_profile_likelihood_all(
 # ----------------------------------------------------------------------
 
 def _pct():
+    """Return a percent marker compatible with the active Matplotlib text renderer."""
     return r"\%" if plt.rcParams["text.usetex"] else "%"
 
 
 def _draw_profile(ax, x, y, p_hat, threshold_y, ci, true_val=None, confidence_level=0.95):
+    """Draw a profile curve, estimate, threshold, confidence interval, and optional truth."""
     ax.plot(x, y, "o-", color="#4E89B1", lw=1.5, ms=4)
     ax.axvline(p_hat, color="#D06062", ls="--", lw=1.2, label="estimate")
     if true_val is not None:
@@ -1146,6 +1171,7 @@ def plot_profile_likelihood_individual(
     threshold = chi2.ppf(confidence_level, 1)
 
     def _sanitize(name):
+        """Convert a parameter label into a safe filename component."""
         s = re.sub(r"[\$\\{}\^]", "", name)
         return re.sub(r"[^A-Za-z0-9]+", "_", s).strip("_")
 

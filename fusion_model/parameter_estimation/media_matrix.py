@@ -8,6 +8,7 @@ output_file = 'out/optimization_history_Smatrix.csv'
 
 
 def calc_Smatrix(dfs, T_x, s_x_predefined=None, path='', workers=1, add_name=''):
+    """Estimate and save media filtering weights from the supplied observations."""
     (df_mibi, df_maldi, df_ngs) = dfs
     bact_all = df_maldi.T.columns
     data_arr = extract_observables_from_df(dfs)
@@ -50,6 +51,7 @@ def calc_Smatrix(dfs, T_x, s_x_predefined=None, path='', workers=1, add_name='')
 
 # Parameter estimation using minimizstion of the negative log-likelihood function (func)
 def optimization_func_Smatrix(func, bnds, args=(), workers=1):
+    """Minimize a media-matrix objective with differential evolution."""
     return differential_evolution(func, args=args, tol=1e-8, atol=1e-8, maxiter=1000, mutation=(0.3, 1.9), recombination=0.7, popsize=40,
                                   bounds=bnds, init='latinhypercube', disp=True, polish=False, updating='deferred', workers=workers,
                                   callback=callback_Smatrix, strategy='randtobest1bin') #init='sobol'
@@ -66,18 +68,21 @@ def callback_Smatrix(intermediate_result):
 
 
 def calc_S_yngs_array(obs_ngs, s_x):
+    """Apply medium-by-cluster weights to NGS observations with broadcast dimensions."""
     obs_ngs = obs_ngs.reshape((1,)+np.shape(obs_ngs))
     s_x = s_x.reshape((np.shape(s_x)[0], np.shape(s_x)[-1], 1))
     return obs_ngs*s_x
 
 
 def calc_T_ymaldi_array(obs_maldi, T_x):
+    """Apply cluster transfer weights to MALDI observations with broadcast dimensions."""
     T_x = T_x.reshape((1, np.shape(obs_maldi)[-2], 1))
     return obs_maldi*T_x
 
 
 # Cost function term for S matrix using relation between NGS and MALDI data
 def Scost_ngsterm(days, obs_maldi, obs_ngs, s_x, T_x):
+    """Construct the weighted NGS-versus-MALDI arrays used in the matrix objective."""
     obs_Tmaldi = calc_T_ymaldi_array(np.array(obs_maldi), np.array(T_x))
     Tmaldi_norm = np.sum(obs_Tmaldi, axis=1) # norm over all bacteria
     obs_Sngs = calc_S_yngs_array(obs_ngs, s_x)
@@ -89,6 +94,7 @@ def Scost_ngsterm(days, obs_maldi, obs_ngs, s_x, T_x):
 
 # Cost function term for scaling between S for diff media s0
 def Scost_s0term(days, obs_mibi, obs_maldi, s_x, s0):
+    """Construct the log-scaled MiBi/MALDI arrays used to compare media weights."""
     # Leave only data that present in both maldi and ngs
     s1 = s_x[0].reshape((len(s_x[0]), 1))
     s2 = s_x[1].reshape((len(s_x[1]), 1))
@@ -102,6 +108,7 @@ def Scost_s0term(days, obs_mibi, obs_maldi, s_x, s0):
 
 # Cost function for S matrix estimation with missing ngs data and scaling between S for different media
 def S_squared_difference(params, dfs, data_array, T_x):
+    """Compute normalized squared residuals for NGS/MALDI agreement and media scaling."""
     (df_mibi, df_maldi, df_ngs) = dfs
     days_total, [obs_mibi_meas, obs_maldi_meas, obs_ngs_meas] = data_array
     mibi_max = np.nanmax(obs_mibi_meas, axis=(0, 1))
@@ -120,11 +127,13 @@ def S_squared_difference(params, dfs, data_array, T_x):
 
 
 def S_cost_func(*args, **kwargs):
+    """Return the mean squared-residual objective for estimating the media matrix."""
     sq_diff1, sq_diff2 = S_squared_difference(*args, **kwargs)
     return np.nansum([np.nansum(sq_diff1), np.nansum(sq_diff2)])/(np.size(sq_diff1)+np.size(sq_diff2))
 
 
 def S_cost_func2(*args, **kwargs):
+    """Return a log-sum-exp aggregate of the media-matrix squared residuals."""
     a = 0.1
     sq_diff1, sq_diff2 = S_squared_difference(*args, **kwargs)
     num_meas = np.size(sq_diff1[~np.isnan(sq_diff1)]) + np.size(sq_diff2[~np.isnan(sq_diff2)])

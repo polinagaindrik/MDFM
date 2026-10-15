@@ -11,10 +11,12 @@ from .plotting_results import define_bacteria_colors, plot_opt_res_ngs, plot_opt
 
 
 def lin_func(x, k, b):
+    """Evaluate a line with slope k and intercept b."""
     return b + k * x
 
 
 def plot_p_slopes(exps, path=''):
+    """Plot the fitted slopes for the experiment-specific projection data."""
     Pmatrix_separate = read_from_json('Pmatrix_temp_separate.json', dir=path)['P_matrix']
     Pmatrix_together = read_from_json('Pmatrix_temp_together.json', dir=path)['P_matrix']
     x_plot = np.linspace(0, 1000, 50)
@@ -51,6 +53,7 @@ def plot_p_slopes(exps, path=''):
 
 ##### P matrix results ##########
 def plot_proj_matrix_result(df_ngs, df_ngs2, df_maldi, df_maldi2, path='', add_name='', media=['PC', 'MRS']):
+    """Compare original and projected NGS/MALDI observations by medium."""
     exps = sorted(list(set([s.split('_')[0] for s in df_ngs.columns])))
     clrs = define_bacteria_colors(df_ngs, df_maldi)
     #clrs = read_from_json('out/colors_diversity.json')
@@ -63,6 +66,7 @@ def plot_proj_matrix_result(df_ngs, df_ngs2, df_maldi, df_maldi2, path='', add_n
 
 
 def plot_optimization_result_withP(data, param_x0, calibr_setup, s_x, t_model, path=''):
+    """Plot optimized observation fits using the shared projection matrix."""
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     Pmatrix = calibr_setup['P_matrix']
     Pinv = np.linalg.pinv(Pmatrix)[0]
@@ -85,6 +89,7 @@ def plot_optimization_result_withP(data, param_x0, calibr_setup, s_x, t_model, p
 
 
 def plot_optimization_result_withP_diffT(data, param_x0, calibr_setup, s_x, t_model, path=''):
+    """Plot optimized observation fits using temperature-specific projection matrices."""
     Pmatrices = calibr_setup['P_matrix']
     Pinv = [np.linalg.pinv(p) for p in Pmatrices]
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
@@ -113,6 +118,7 @@ def plot_optimization_result_withP_diffT(data, param_x0, calibr_setup, s_x, t_mo
 
 
 def plot_reduced_model(data, param_x0, calibr_setup, s_x, t_model, path=''):
+    """Plot prediction results for data transformed by a projection matrix."""
     Pmatrices = calibr_setup['P_matrix']
     Pinv = [np.linalg.pinv(p) for p in Pmatrices]
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
@@ -145,6 +151,7 @@ def plot_reduced_model(data, param_x0, calibr_setup, s_x, t_model, path=''):
 
 
 def plot_reduced_model_temptogether(data, param_x0, calibr_setup, s_x, t_model, path=''):
+    """Plot reduced-model predictions with one projection shared across temperatures."""
     Pmatrix = calibr_setup['P_matrix']
     Pinv = np.linalg.pinv(Pmatrix)
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
@@ -171,6 +178,7 @@ def plot_reduced_model_temptogether(data, param_x0, calibr_setup, s_x, t_model, 
 
 
 def plot_reduced_model_direct(data, param_x0, calibr_setup, s_x, t_model, path=''):
+    """Plot reduced-model predictions in the direct cluster representation."""
     n_cl = np.shape(s_x)[1]
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     param_opt = param_x0[n_cl*len(exps):]
@@ -195,6 +203,7 @@ def plot_reduced_model_direct(data, param_x0, calibr_setup, s_x, t_model, path='
 
 
 def plot_clusters(df, kmeans, y):
+    """Visualize bacterial profiles and their assigned k-means clusters."""
     exps = sorted(list(set([s.split('_')[0] for s in df.columns])))
     t_counter = 0
     titles = [f'Bacteria_{i:02d}' for i in range (kmeans.n_clusters)]

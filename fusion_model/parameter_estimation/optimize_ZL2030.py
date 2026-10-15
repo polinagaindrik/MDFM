@@ -2,6 +2,7 @@ import numpy as np
 from .. import model as mdl
 
 def param_bnds_ZL2030_tempexponent(n_cl, inhib=True):
+    """Build ODE parameter bounds for the temperature-exponent ZL2030 model."""
     if inhib == True:  # noqa: E712
         inhib_bnds = [(0.02, 3.) if i!=j else (0., 0.)
                   for i in range (n_cl)
@@ -19,6 +20,7 @@ def param_bnds_ZL2030_tempexponent(n_cl, inhib=True):
 
 
 def param_bnds_ZL2030_templinear(n_cl, inhib=True):
+    """Build ODE parameter bounds for the linear-temperature ZL2030 model."""
     if inhib == True:  # noqa: E712
         inhib_bnds = [(0.02, 3.) if i!=j else (0., 0.)
                   for i in range (n_cl)
@@ -34,6 +36,7 @@ def param_bnds_ZL2030_templinear(n_cl, inhib=True):
 
 
 def define_calibr_setup_ZL2030(calibr_presetup, inhib=True, s_x_predefined=None, s_x=None):
+    """Add model-specific parameter bounds and optional media weights to a ZL2030 setup."""
     x0_bnds_all = tuple([(1., 4.5) for _ in range (calibr_presetup['n_cl']) for _ in range (len(calibr_presetup['exps']))])
     calibr_setup = calibr_presetup
     if calibr_presetup['model'] == mdl.fusion_model2:

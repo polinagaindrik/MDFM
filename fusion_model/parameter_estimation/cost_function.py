@@ -6,6 +6,7 @@ from fusion_model.parameter_estimation.media_matrix import S_squared_difference
 
 
 def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, mibi_max):
+    """Simulate one experiment and return squared residuals for NGS, MALDI, and MiBi."""
     #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
     model = calibr_setup['model']
     days, [obs_mibi_meas, obs_maldi_meas, obs_ngs_meas] = calibr_setup['data_array']
@@ -30,6 +31,7 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, mibi_max):
 
 
 def squared_differences(param_ode, x0_vals, s_x, calibr_setup, jac_spasity=None):
+    """Collect the nonzero observation residuals across all calibration experiments."""
     (df_mibi, df_maldi, df_ngs, ) = calibr_setup['dfs']
     days, [obs_mibi_meas, obs_maldi_meas, obs_ngs_meas] = calibr_setup['data_array']
     n_cl = np.shape(obs_maldi_meas)[2] #np.shape(df_maldi)[0]
@@ -42,6 +44,7 @@ def squared_differences(param_ode, x0_vals, s_x, calibr_setup, jac_spasity=None)
 
 
 def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
+    """Evaluate the calibration cost with experiment-specific alpha parameters and fitted media weights."""
     n_cl = calibr_setup['n_cl']
     n_media = calibr_setup['n_media']
     exps = calibr_setup['exps']
@@ -67,9 +70,12 @@ def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
 
 
 def cost_withS(param, calibr_setup, jac_spasity):
+    """Evaluate the calibration cost with ODE parameters and media weights fitted together."""
     n_cl = calibr_setup['n_cl']
     n_media = calibr_setup['n_media']
     exps = calibr_setup['exps']
+    # The optimization vector is [initial values per experiment, ODE parameters,
+    # flattened media-by-cluster filtering weights].
     param_ode = param[n_cl*len(exps):-n_cl*n_media]
     s_x = np.array(param)[-n_cl*n_media:].reshape((n_media, n_cl))
     x0_vals = param[:n_cl*len(exps)]
@@ -79,6 +85,7 @@ def cost_withS(param, calibr_setup, jac_spasity):
 
 
 def cost_direct(param, calibr_setup, jac_spasity):
+    """Evaluate the calibration cost using media weights fixed in the setup."""
     s_x = calibr_setup['s_x']
     n_cl = calibr_setup['n_cl']
     exps = calibr_setup['exps']
@@ -89,6 +96,7 @@ def cost_direct(param, calibr_setup, jac_spasity):
 
 
 def cost_initvals(param, calibr_setup, jac_spasity):
+    """Evaluate the calibration cost while fitting experiment-specific initial values only."""
     n_cl = calibr_setup['n_cl']
     exps = calibr_setup['exps']
     param_ode = calibr_setup['param_ode']
@@ -99,6 +107,7 @@ def cost_initvals(param, calibr_setup, jac_spasity):
 
 
 def cost_initvals_lambda(param, calibr_setup, jac_spasity):
+    """Evaluate the calibration cost while fitting initial values and lambda parameters."""
     n_cl = calibr_setup['n_cl']
     exps = calibr_setup['exps']
     param_ode = calibr_setup['param_ode']
@@ -110,19 +119,23 @@ def cost_initvals_lambda(param, calibr_setup, jac_spasity):
 
 
 def cost_logsumexp(J_vect):#ll_ngs, ll_maldi, ll_mibi):
+    """Combine residual arrays with a smooth log-sum-exp aggregate, ignoring NaNs."""
     a = .1
     num_meas = np.sum([np.size(Ji[~np.isnan(Ji)]) for Ji in J_vect])
     return np.log(np.nansum([np.nansum(np.exp(a*Ji)) for Ji in J_vect])/num_meas)/a
 
 
 def cost_geometric_mean(J_vect):#ll_ngs, ll_maldi, ll_mibi):
+    """Compute the geometric mean across the supplied residual values, ignoring NaNs."""
     num_meas = np.sum([np.size(Ji[~np.isnan(Ji)]) for Ji in J_vect])
     return np.nanprod([Ji**(1/num_meas) for Ji in J_vect])
 
 
 def cost_arithmetic_mean(J_vect):#ll_ngs, ll_maldi, ll_mibi):
+    """Return the mean of each residual array's mean, ignoring NaNs."""
     return np.nanmean([np.nanmean(Ji) for Ji in J_vect])
 
 
 def cost_sum_and_geometric_mean(J_vect):#ll_ngs, ll_maldi, ll_mibi):
+    """Return the geometric mean of the non-NaN residual sum from each array."""
     return gmean([np.nansum(Ji) for Ji in J_vect], nan_policy='omit', axis=None)

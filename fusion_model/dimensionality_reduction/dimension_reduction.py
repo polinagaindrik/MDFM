@@ -8,6 +8,7 @@ from ..parameter_estimation.optimization import optimization_func
 
 
 def calc_Pmatrix(data, transform_func, n_cl, n_cl_red, s_x, temps=[], workers=1, path='', add_name=''):
+    """Estimate projection matrices and transform MALDI/NGS data into reduced clusters."""
     (df_mibi, df_maldi, df_ngs) = data
     p_bnds = [(0., 1.) if j>=i else (0., 0.) for i in range (n_cl_red) for j in range (n_cl)] #+ [(0., 1.) for _ in range (3*n_cl)]
     #p_bnds = [(0., 1.) for i in range (n_cl_red*n_cl)]
@@ -35,6 +36,7 @@ def calc_Pmatrix(data, transform_func, n_cl, n_cl_red, s_x, temps=[], workers=1,
 
 
 def clustering_kmeans(df, num_clusters):
+    """Cluster bacterial profiles with k-means and return labels with profile metadata."""
     exps = sorted(list(set([s.split('_')[0] for s in df.columns])))
     obs_all = []
     for exp in exps:
@@ -53,6 +55,7 @@ def clustering_kmeans(df, num_clusters):
 
 
 def get_new_clusters(df, kmeans):
+    """Map each original dataframe row to its assigned k-means cluster."""
     clusters_new = [[] for _ in range(np.max(kmeans.labels_)+1)]
     for lab, cl_old in zip(kmeans.labels_, df.T.columns):
         clusters_new[lab].append(cl_old)
@@ -60,6 +63,7 @@ def get_new_clusters(df, kmeans):
 
 
 def clustering_ngs(df_ngs, df_maldi, num_clusters, plot=None):
+    """Cluster NGS bacteria and aggregate both NGS and MALDI data into those groups."""
     kmeans, y = clustering_kmeans(df_ngs, num_clusters)
     clusters_new = get_new_clusters(df_ngs, kmeans)
     df_ngs_new = dtf.get_cluster_dataframe(df_ngs, clusters_new).apply(dtf.calc_proportion)
@@ -71,34 +75,40 @@ def clustering_ngs(df_ngs, df_maldi, num_clusters, plot=None):
 
 # Projection matrix estimation, x is a column
 def projection_check(x, f, p, pinv):
+    """Project a vector into the reduced space and back to the original coordinates."""
     prod = np.array(pinv).dot(np.array(p).dot(x))
     return prod#/np.sum(prod)
     #return prod / np.sum(prod)
 
 
 def substract_initial(x, f, df_ngs0):
+    """Subtract the matching experiment's initial NGS values from a sample vector."""
     f_new = f[:10]
     return x.values - df_ngs0.filter(like=f_new).T.values[0]
 
 
 def add_initial(x, f, df_ngs0):
+    """Restore the matching experiment's initial NGS values to a sample vector."""
     f_new = f[:10]
     return x.values + df_ngs0.filter(like=f_new).T.values[0]
 
 
 def affine_transform(df, Pmatrix, Pinv, *args):
+    """Apply a projection to data relative to and then restored around initial values."""
     df_new = dtf.update_df(df, substract_initial, df.filter(like='_01_'))
     df_new = dtf.update_df(df_new, projection_check, Pmatrix, Pinv)
     return dtf.update_df(df_new, add_initial, df.filter(like='_01_'))
 
 
 def affine_transform2(df, Pmatrix, Pinv, x0, *args):
+    """Project data after adding an explicit offset, then restore that offset."""
     df_new = dtf.update_df(df, lambda x, f, x0: x.values+x0, x0)
     df_new = dtf.update_df(df_new, projection_check, Pmatrix, Pinv)
     return dtf.update_df(df_new, lambda x, f, x0: x.values+x0, x0)
 
 
 def transform_maldi(transform_func, df, Pmatrix, Pinv, x0, s_x):
+    """Transform MALDI samples separately by medium using media-adjusted projections."""
     media = sorted(list(set([samp.split('_')[-1].split('-')[0] for samp in df.columns])))
     df_maldi_new = []
     for x00, s, med in zip(x0, s_x, media):
@@ -109,10 +119,12 @@ def transform_maldi(transform_func, df, Pmatrix, Pinv, x0, s_x):
 
 
 def regular_transform(df, Pmatrix, Pinv, *args):
+    """Apply the projection and reconstruction to every dataframe column."""
     return dtf.update_df(df, projection_check, Pmatrix, Pinv)
 
 
 def P_cost_func(param, transform_func, df_ngs, df_maldi, s_x, n_cl):
+    """Score a projection matrix using transformed data fit and matrix-structure penalties."""
     Pmatrix = np.array(param[:n_cl*np.shape(df_ngs)[0]]).reshape(n_cl, -1)
     Pinv = np.linalg.pinv(Pmatrix)
     x0 = param[n_cl*np.shape(df_ngs)[0]:]
@@ -129,6 +141,7 @@ def P_cost_func(param, transform_func, df_ngs, df_maldi, s_x, n_cl):
 
 
 def find_projection_matrix(df_ngs, df_maldi, transform_func, s_x, n_cl, calibr_setup):
+    """Optimize a projection matrix and return it with transformed NGS and MALDI data."""
     param_bnds = calibr_setup['param_bnds']
     optim_output = optimization_func(P_cost_func, param_bnds, args=(transform_func, df_ngs, df_maldi, s_x, n_cl),
                                      workers=calibr_setup['workers'])
@@ -145,12 +158,14 @@ def find_projection_matrix(df_ngs, df_maldi, transform_func, s_x, n_cl, calibr_s
 ################### Functions With dimension reduction (P matrix)  #######################################333
 ## With projection matrix P
 def calculate_model_prob_withP(ll_func, dfs, calibr_setup):
+    """Estimate model parameters using the projection matrix in the calibration setup."""
     optim_output = optimization_func(ll_func, calibr_setup['param_bnds'],
                                      args=(dfs, calibr_setup['model'], calibr_setup['P_matrix'], calibr_setup['s_x']),
                                      workers=calibr_setup['workers'])
     return optim_output.x
 
 def log_likelihood_withP(param_x0, dfs, model, Pmatrix, s_x):
+    """Evaluate model fit to MiBi, MALDI, and NGS data with one projection matrix."""
     (df_mibi, df_maldi, df_ngs, ) = dfs
     Pinv = np.linalg.pinv(Pmatrix)
     n_cl = np.shape(Pmatrix)[0]
@@ -179,6 +194,7 @@ def log_likelihood_withP(param_x0, dfs, model, Pmatrix, s_x):
 
 
 def log_likelihood_withP_diffT(param_x0, dfs, model, Pmatrices, s_x):
+    """Evaluate model fit using temperature-specific projection matrices."""
     (df_mibi, df_maldi, df_ngs, ) = dfs
     Pinv = [np.linalg.pinv(p) for p in Pmatrices]
     n_cl = np.shape(Pmatrices[0])[0]
@@ -213,6 +229,7 @@ def log_likelihood_withP_diffT(param_x0, dfs, model, Pmatrices, s_x):
 
 def model_one_experiment_withP(df_mibi0, df_maldi0, df_ngs0, model, t, param, C0, const, Pinv, s_x, t_obs2,
                                t_obs3, n_states=2):
+    """Simulate one experiment, reconstruct original clusters, and create observation tables."""
     C = mdl.model_ODE_solution(model, t, param, C0, const)
     n_C = mdl.get_bacterial_count(C, np.shape(Pinv)[1], n_states)
     n_C0 = mdl.get_bacterial_count(np.array(C0).reshape(len(C0), 1), np.shape(Pinv)[1], n_states)
@@ -233,14 +250,17 @@ def model_one_experiment_withP(df_mibi0, df_maldi0, df_ngs0, model, t, param, C0
     return df_mibi_model, df_maldi_model, df_ngs_model
 
 def calc_log_mibi(x):
+    """Return a MiBi measurement's log mean and relative standard deviation."""
     mean = np.max([x['Average'], 1.])
     return [np.log(mean), np.abs(np.array(x['Standard deviation'])*0.43 / x['Average'])]
 
 def diversity_data_ll(df_model, df_meas, std=0.01):
+    """Compute a variance-scaled squared-error score for diversity measurements."""
     df_ll = df_meas.sub(df_model)**2 / std**2
     return df_ll.sum().sum()
 
 
 def xdata_ll(df_model, df_meas, std=0.1):
+    """Compute a variance-scaled squared log-error score for count measurements."""
     df_ll = np.log(df_meas).sub(np.log(df_model))**2 / std**2
     return df_ll.sum().sum()

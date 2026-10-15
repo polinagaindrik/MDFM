@@ -3,17 +3,20 @@ import numpy as np
 
 
 def intersection(lst1, lst2):
+    """Return the values from the first list that also occur in the second."""
     lst3 = [value for value in lst1 if value in lst2]
     return lst3
     
 
 def rest(lst1, lst2):
+    """Return the values from the first list that do not occur in the second."""
     lst3 = [value for value in lst1 if value not in lst2]
     return lst3
 
 
 # Create dataframes for lnown days and observables
 def create_df_mibi(days, obs, name_part, bact_name, media=['MRS', 'PC'], stds=None):
+    """Build a MiBi dataframe with means, standard deviations, and replicate values."""
     if stds is None:
         stds = np.zeros(np.shape(obs))
     data = {'Properties': ['Average', 'Standard deviation', 'Replicas']}
@@ -24,6 +27,7 @@ def create_df_mibi(days, obs, name_part, bact_name, media=['MRS', 'PC'], stds=No
 
 
 def create_df_sumx(days, obs, name_part, bact_name, stds=None):
+    """Build a dataframe of total bacterial counts indexed by sample and time."""
     data = {'Properties': ['Average']}
     for d, o in zip(days, obs):   
         data["_".join(name_part + [f'{int(d):02d}', '-sumx'])] = [o]
@@ -31,6 +35,7 @@ def create_df_sumx(days, obs, name_part, bact_name, stds=None):
 
 
 def create_df_maldi(days, obs, name_part, bact_name, media=['MRS', 'PC'], stds=0):
+    """Build a genus-by-sample MALDI dataframe and normalize each sample to proportions."""
     data = {"Genus": bact_name}
     for d, o in zip(days, obs.T):
         for med, o_med in zip(media, o.T):
@@ -41,6 +46,7 @@ def create_df_maldi(days, obs, name_part, bact_name, media=['MRS', 'PC'], stds=0
 
 
 def create_df_ngs(days, obs, name_part, bact_name, **kwargs):
+    """Build a genus-by-sample NGS dataframe and normalize each sample to proportions."""
     data = {"Genus": bact_name}
     for d, o in zip(days, obs.T):
         data["_".join(name_part + [f'{int(d):02d}', 'ngs'])] = o
@@ -50,6 +56,7 @@ def create_df_ngs(days, obs, name_part, bact_name, **kwargs):
 
 
 def create_df_x(days, obs, name_part, bact_name, **kwargs):
+    """Build a genus-by-sample dataframe of modeled bacterial counts."""
     data = {"Genus": bact_name}
     for d, o in zip(days, obs.T):
         data["_".join(name_part + [f'{int(d):02d}', 'realx'])] = o
@@ -59,6 +66,7 @@ def create_df_x(days, obs, name_part, bact_name, **kwargs):
 
 # Save full ODE solutions (States included)
 def create_df_fullx(days, obs, name_part, bact_name, stds=0):
+    """Build a dataframe containing each cluster's separate ODE state values."""
     n_cl = len(bact_name)
     n_states = len(obs) // len(bact_name)
     data = {"Genus": [bact_name[i]+f'_State_{j:02d}' for i in range (n_cl) for j in range (n_states)]}#bact_name}
@@ -69,6 +77,7 @@ def create_df_fullx(days, obs, name_part, bact_name, stds=0):
 
 # Useful functions to work with dataframes
 def preprocess_dataframe(df, cutoff=0.0, cutoff_prop=0., calc_prop=True):
+    """Remove absent and low-abundance bacteria, optionally normalizing each sample."""
     df = df[-np.all(df==0, axis=1)] # leave only columnes where bacteria is present
 
     # Drop bacteria that appear less then cutoff % in each measurement
@@ -85,14 +94,17 @@ def preprocess_dataframe(df, cutoff=0.0, cutoff_prop=0., calc_prop=True):
 
 
 def drop_column(df, regs):
+    """Return a dataframe with columns matching any supplied regular expression removed."""
     return df[df.columns.drop(list(sum([df.filter(regex=reg)for reg in regs])))]
 
 
 def calc_proportion(x):
+    """Normalize values by their sum to produce proportions."""
     return x.astype(float)/ x.sum()#.astype(float)
 
 
 def get_cluster_dataframe(df, clusters):
+    """Aggregate rows of a dataframe into the specified clusters."""
     d = {"Clusters": [f'Bacteria_{i:02d}' for i in range(len(clusters))]}
     for f in df.columns:
         d[f] = [df.T[cl].T.sum()[f] for cl in clusters]
@@ -100,21 +112,26 @@ def get_cluster_dataframe(df, clusters):
 
 
 def merge_dfs(dfs, sort=True):
+    """Concatenate dataframes and sum rows that share an index."""
     return pd.concat(dfs).groupby(level=0, sort=sort).sum(min_count=1)
 
 
 def get_meas_days(df, exp):
+    """Extract sorted measurement days for an experiment from dataframe columns."""
     a = sorted(list(set([(f.split('_')[3]) for f in df.filter(like=exp).columns])))
     return np.asarray(a, dtype=float)
 
 
 def filter_dataframe(exp, dfs):
+    """Select columns containing an experiment identifier from each dataframe."""
     return [df.filter(like=exp) for df in dfs]
 
 def filter_dataframe_regex(regex, dfs):
+    """Select columns matching a regular expression from each dataframe."""
     return [df.filter(regex=regex) for df in dfs]
 
 def update_df(df, func, *args):
+    """Transform each dataframe column with a callback and regroup the results."""
     data = {}
     for f in df.columns:
         data[f] = func(df[f], f, *args)
@@ -124,6 +141,7 @@ def update_df(df, func, *args):
 
 
 def restore_missing_rows(df, clmns):
+    """Add zero-valued rows for missing labels and sort rows by genus."""
     df_new = df.T
     for i, b in enumerate(clmns):
         if not np.any(df_new.columns == b):
@@ -133,6 +151,7 @@ def restore_missing_rows(df, clmns):
 
 
 def make_df_maldi_ngs_compatible(df_maldi, df_ngs, cutoff=0., media=['MRS', 'PC']):
+    """Align MALDI and NGS genus rows and create their transfer and filter weights."""
     df_ngs_red, bact_ngs = preprocess_dataframe(df_ngs, cutoff=cutoff)
     df_maldi_red, bact_maldi = preprocess_dataframe(df_maldi, cutoff=cutoff)
 
@@ -156,6 +175,7 @@ def make_df_maldi_ngs_compatible(df_maldi, df_ngs, cutoff=0., media=['MRS', 'PC'
 
 
 def extract_observables_from_df_maldi(df_maldi, days, exps, media):
+    """Extract MALDI measurements into experiment-by-medium-by-genus-by-day arrays."""
     obs_maldi = np.zeros((len(exps), len(media), np.shape(df_maldi)[0], len(days)))
     for i, exp in enumerate(exps):
         for j, med in enumerate(media):
@@ -169,6 +189,7 @@ def extract_observables_from_df_maldi(df_maldi, days, exps, media):
     
 
 def extract_observables_from_df_ngs(df_ngs, days, exps):
+    """Extract NGS measurements into experiment-by-genus-by-day arrays."""
     obs_ngs = np.zeros((len(exps), np.shape(df_ngs)[0], len(days)))
     for i, exp in enumerate(exps):
         for k, d in enumerate(days):
@@ -181,6 +202,7 @@ def extract_observables_from_df_ngs(df_ngs, days, exps):
     
 
 def extract_observables_from_df_mibi(df_mibi, days, exps, media):
+    """Extract MiBi means and standard deviations into experiment-by-medium arrays."""
     obs_mibi = np.zeros((len(exps), len(media), len(days)))
     std_mibi = np.zeros((len(exps), len(media), len(days)))
     for i, exp in enumerate(exps):
@@ -197,6 +219,7 @@ def extract_observables_from_df_mibi(df_mibi, days, exps, media):
 
 
 def extract_observables_from_df_x(df_x, days, exps, media=None):
+    """Extract modeled bacterial counts into experiment-by-genus-by-day arrays."""
     obs_x = np.zeros((len(exps), np.shape(df_x)[0], len(days)))
     for i, exp in enumerate(exps):
         for k, d in enumerate(days):
@@ -209,6 +232,7 @@ def extract_observables_from_df_x(df_x, days, exps, media=None):
 
 
 def extract_observables_from_df(dfs):
+    """Extract all observation types and return their shared day grid and data arrays."""
     (df_mibi, df_maldi, df_ngs, ) = dfs
     exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns]))) # ['MRS', 'PC']
@@ -224,11 +248,13 @@ def extract_observables_from_df(dfs):
     return days_total , [mibi[0], maldi, ngs]
 
 def add_rest_bacteria(df, bact_all):
+    """Add an Others row for abundance not represented by the listed bacteria."""
     df0 = df.T
     df0['Others'] = 1-df.sum()
     return  df0.T, bact_all+['Others']
 
 def get_values_from_dataframe(df, cutoff=0.):
+    """Return sample days, observation values, and row labels from a dataframe."""
     sample_names = df.columns
     days = [float(f.split('_')[3]) for f in sample_names]
     bacteria = df.T.columns
@@ -238,6 +264,7 @@ def get_values_from_dataframe(df, cutoff=0.):
 
 
 def get_values_from_dataframe_biochem(df, meas):
+    """Return sorted measurement days and values for one biochemical measurement."""
     sample_names = df.columns
     days = [float(f.split('_')[3]) for f in sample_names]
     measurement = df.T.columns

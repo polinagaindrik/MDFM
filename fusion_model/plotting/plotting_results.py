@@ -29,6 +29,7 @@ rcParams['figure.dpi'] = 500
 
 
 def define_bacteria_colors(df_ngs, df_maldi):
+    """Assign consistent colors to bacteria present in the NGS and MALDI data."""
     df_ngs, bact_ngs = dtf.preprocess_dataframe(df_ngs, cutoff=0.)
     df_maldi, bact_maldi = dtf.preprocess_dataframe(df_maldi, cutoff=0.)
     bact_all = sorted(set(list(bact_ngs.values) + list(bact_maldi.values)))
@@ -39,6 +40,7 @@ def define_bacteria_colors(df_ngs, df_maldi):
 
 
 def plot_filteringS2(dfs, opt_param, T_x, exps, path='', clrs=None):
+    """Plot the fitted media-filtering weights for each bacterium and experiment."""
     (df_mibi, df_maldi, df_ngs) = dfs
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
     days_total, [obs_mibi, obs_maldi, obs_ngs] = dtf.extract_observables_from_df(dfs)
@@ -69,6 +71,7 @@ def plot_filteringS2(dfs, opt_param, T_x, exps, path='', clrs=None):
     
 
 def plot_optimization_result(param_x0, calibr_setup, t_model, **kwargs):
+    """Plot model predictions against observations for a calibration result."""
     data = calibr_setup['dfs']
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     n_cl = np.shape(data[1])[0]
@@ -78,6 +81,7 @@ def plot_optimization_result(param_x0, calibr_setup, t_model, **kwargs):
 
 
 def plot_prediction_result(param, x0_dict, prediction_setup, t_model, **kwargs):
+    """Plot model predictions using estimated initial values for each experiment."""
     exps = prediction_setup['exps']
     param_opt = param
     L0_arr = [10**np.array(x0_dict[exp]) for exp in exps]
@@ -86,6 +90,7 @@ def plot_prediction_result(param, x0_dict, prediction_setup, t_model, **kwargs):
 
 
 def plot_prediction_result_x0lambda(param, lambda_dict, x0_dict, prediction_setup, t_model, **kwargs):
+    """Plot predictions using experiment-specific initial values and lambda estimates."""
     exps = prediction_setup['exps']
     L0_arr = [10**np.array(x0_dict[exp]) for exp in exps]
     for i, exp in enumerate(exps):
@@ -94,6 +99,7 @@ def plot_prediction_result_x0lambda(param, lambda_dict, x0_dict, prediction_setu
 
 
 def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=[''], clrs=None, path='', add_name=''):
+    """Plot one experiment's predicted bacterial counts and observation types."""
     data = prediction_setup['dfs']
     n_cl = np.shape(data[1])[0]
 
@@ -128,6 +134,7 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
 
 
 def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None):
+    """Plot modeled NGS proportions against measurements for one experiment."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     days_meas = [float(f.split('_')[3]) for f in df_ngs0.columns]
@@ -159,6 +166,7 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
 
 
 def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=[' '], path='', add_name='', clrs=None):
+    """Plot modeled MALDI proportions against measurements for one experiment."""
     for j, med in enumerate(media):
         fig, ax = plt.subplots()
         fig.subplots_adjust()
@@ -197,6 +205,7 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
     
 
 def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=[''], path='', add_name='', clrs=None):
+    """Plot modeled MiBi counts against measurements for one experiment."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     lines = []
@@ -226,6 +235,7 @@ def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=['']
 
 
 def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None, plot_meas=True):
+    """Plot modeled bacterial trajectories against measured count data."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     bact_all = df0.T.columns

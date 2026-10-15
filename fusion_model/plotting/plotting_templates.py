@@ -67,6 +67,7 @@ exp_lsts = {'CCD01': 'dashed', 'CCD02': 'dashed', '': "solid", 'STOR01':'dotted'
             'SLH01':"solid", 'SLH02':"solid", 'SLH03a1':"solid", 'SLH03b':"solid"}
 
 def template_plot_measurements0(ax0, temp, data, c='b'):
+    """Draw measurement values and uncertainty bars for one temperature."""
     n_plot = 0
     for d in data: 
         if d['const'] == temp:
@@ -79,6 +80,7 @@ def template_plot_measurements0(ax0, temp, data, c='b'):
 # Plotting of model prediction and/or measurement data:
 def plot_all_crittime(temp_plot, labels, templ_meas=template_plot_measurements0, df=[], mtimes=[], mestim=[], mlow=[], mupp=[], tcr=[], n_cutoff=None, time_lim=[], 
              dir='', add_name='', lab_model=False):
+    """Plot measurements, model estimates, uncertainty bounds, and critical times."""
     ncols = [2, 1, 1,]
     if len(temp_plot) == 1 or len(np.shape(temp_plot)) == 2:
         fig, ax = template_fig_1_temp(temp_plot, *labels, tcr, time_lim=time_lim)
@@ -105,6 +107,7 @@ def plot_all_crittime(temp_plot, labels, templ_meas=template_plot_measurements0,
 
 # Plotting of model prediction and/or measurement data:
 def plot_all(temp_plot, labels, templ_meas=template_plot_measurements0, clrs=None, df=[], temps=[], mtimes=[], mestim=[], time_lim=[], tcr=[], dir='', add_name=''):
+    """Plot model predictions and measurements across the requested temperatures."""
     ncols = [1, 1, 1,]
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df.columns])))[0]
     exps = sorted(list(set([s.split('_')[0] for s in df.columns])))
@@ -127,6 +130,7 @@ def plot_all(temp_plot, labels, templ_meas=template_plot_measurements0, clrs=Non
 
 
 def template_fig_for_many_temps(temp_plot, xlabel, ylabel, time_lim=[]):
+    """Create a row of shared-axis subplots for multiple temperatures."""
     fig, ax = plt.subplots(1, len(temp_plot), figsize=(6.*len(temp_plot), 6), sharey=True)
     fig.subplots_adjust(hspace=0.2, wspace=0.12)
     for i, ax0 in enumerate(ax): 
@@ -139,6 +143,7 @@ def template_fig_for_many_temps(temp_plot, xlabel, ylabel, time_lim=[]):
 
 
 def template_fig_1_temp(temp_plot, xlabel, ylabel, tcr, time_lim=[]):
+    """Create a labeled plot template for a single temperature."""
     fig, ax = plt.subplots(figsize=(6, 5))
     if len(time_lim) != 0:
         ax.set_xlim(-0.2, time_lim[0])
@@ -156,6 +161,7 @@ def template_fig_1_temp(temp_plot, xlabel, ylabel, tcr, time_lim=[]):
 
 
 def set_labels(fig, ax, xlabel, y_label):
+    """Set axis labels and tick styling on a figure axis."""
     ax.set_xlabel(xlabel, fontsize=15)
     ax.tick_params(labelsize=13)
     ax.set_ylabel(y_label, fontsize=15)
@@ -163,6 +169,7 @@ def set_labels(fig, ax, xlabel, y_label):
 
 
 def template_plot_model(ax0, time, estim, low, upp, c='b', lab='', labub=''):
+    """Draw model estimates and their upper and lower bounds."""
     for tr_est, tr_u, tr_b in zip(estim, upp, low):
         ax0.plot(time, np.log10(tr_est), linestyle='solid', color=c, label=lab)
         ax0.plot(time, np.log10(tr_u), linestyle='dashed', color=gray2, label=labub)
@@ -170,6 +177,7 @@ def template_plot_model(ax0, time, estim, low, upp, c='b', lab='', labub=''):
 
 
 def template_plot_crit_time(ax0, tcr, n_cutoff, mlow):
+    """Mark a critical time and its threshold on an axis."""
     npoints = 100
     ax0.plot(tcr*np.ones((npoints)), np.linspace(np.min(mlow)*0.9, n_cutoff, npoints), linestyle='dotted', color=colors[-1],
              label="Kritische Zeit")
@@ -177,6 +185,7 @@ def template_plot_crit_time(ax0, tcr, n_cutoff, mlow):
 
 
 def make_barplot(ax, times, obs_data, species, clrs, cutoff=0.):
+    """Draw stacked species-proportion bars, omitting species below the cutoff."""
     bottom = 0.
     for bact, obs in zip(species, obs_data):
         #p = ax.bar(times, obs, 1., label=f'{obs[0]:.2f} {bact}', bottom=bottom, color=clrs[bact])
@@ -190,6 +199,7 @@ def make_barplot(ax, times, obs_data, species, clrs, cutoff=0.):
     return ax
 
 def fmt_func(x):
+    """Format bar labels, suppressing small values for readability."""
     if x >= 0.1:
         return f'{x:.2}'
     if x > 0.04 and x <= 0.1:
@@ -200,6 +210,7 @@ def fmt_func(x):
         return ''
     
 def make_barplot2(ax, times, obs_data, species):
+    """Draw normalized stacked species-proportion bars."""
     bottom = 0.
     obs_data = np.array([o/np.sum(o) for o in obs_data.T]).T
     for bact, obs in zip(species, obs_data):
@@ -211,6 +222,7 @@ def make_barplot2(ax, times, obs_data, species):
 
 
 def plot_measurement(ax0, df0, exp, c, lst, scatter_marker):
+    """Plot one experiment's MiBi measurements with error bars."""
     days_meas = [float(f.split('_')[3]) for f in df0.columns]
     obs_meas = [df0[f]['Average'] for f in df0.columns]
     std_meas = [df0[f]['Standard deviation'] for f in df0.columns]
@@ -222,6 +234,7 @@ def plot_measurement(ax0, df0, exp, c, lst, scatter_marker):
 
     
 def plot_model_1temp(ax0, t_model, obs_model, exps, lst, clrs=None):
+    """Draw model trajectories for the selected experiments at one temperature."""
     if clrs is not None:
         exp_clrs = clrs
     for i, exp in enumerate(exps):
@@ -234,6 +247,7 @@ def plot_model_1temp(ax0, t_model, obs_model, exps, lst, clrs=None):
         '''
                        
 def plot_model_manytemps(ax0, temp, t_model, obs_model, exps, temps, lst, clrs=None):
+    """Draw model trajectories for experiments matching one temperature."""
     if clrs is not None:
         exp_clrs = clrs
     for i, (exp, T) in enumerate(zip(exps, temps)):

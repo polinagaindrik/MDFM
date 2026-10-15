@@ -77,6 +77,7 @@ from scipy.optimize import minimize, differential_evolution
 from scipy.stats import chi2
 
 from .optimization import CostEvaluator, fd_fun_and_grad, die_with_parent
+from .cost_function import cost_sum_and_geometric_mean
 
 PENALTY = 1e10  # returned when the ODE solve fails / times out / gives NaN
 
@@ -127,6 +128,40 @@ def make_gaussian_neg2loglik(data_array):
               np.count_nonzero(np.isfinite(obs_maldi)),
               np.count_nonzero(np.isfinite(obs_mibi))]
     return GaussianNeg2LogLik(n_data)
+
+
+class GeometricMeanNeg2LogLik(GaussianNeg2LogLik):
+    """
+    -2 log L version of the calibration cost cost_sum_and_geometric_mean.
+
+    Minimizing the geometric mean (SSR_1 * ... * SSR_K)^(1/K) is the same as minimizing
+    sum_k log SSR_k, i.e. a Gaussian -2 log L in which every data type has the SAME weight.
+    Returned: n_bar * sum_k log(SSR_k / n_k) with n_bar = (total data points) / K, so that
+    the total weight equals the number of data points. Same optimum as the calibration
+    with cost_sum_and_geometric_mean, Delta in -2 log L units (scale = 1). Compared with
+    GaussianNeg2LogLik (weights n_k), data types with few points weigh more.
+    """
+
+    def __init__(self, n_data):
+        super().__init__(n_data)
+        used = [n for n in self.n_data if n > 0]
+        self.n_bar = float(sum(used)) / max(len(used), 1)
+
+    def __call__(self, J_vect):
+        total = 0.
+        for J, n in zip(J_vect, self.n_data):
+            if n == 0:
+                continue
+            J = np.asarray(J, dtype=float)
+            if np.any(np.isinf(J)):
+                return PENALTY
+            total += self.n_bar * np.log(max(np.nansum(J), 1e-300) / n)
+        return total
+
+
+def make_geomean_neg2loglik(data_array):
+    """GeometricMeanNeg2LogLik from calibr_setup['data_array'] (see make_gaussian_neg2loglik)."""
+    return GeometricMeanNeg2LogLik(make_gaussian_neg2loglik(data_array).n_data)
 
 
 # ----------------------------------------------------------------------
@@ -593,24 +628,36 @@ def count_data_points(cost_func, param, calibr_setup, jac_spasity=None):
     counts = {}
 
     def _counting_aggregation(J_vect):
-        counts["n_data"] = int(sum(np.count_nonzero(np.isfinite(np.asarray(J, dtype=float))) for J in J_vect))
+        n_k = [int(np.count_nonzero(np.isfinite(np.asarray(J, dtype=float)))) for J in J_vect]
+        counts["n_data"], counts["n_types"] = int(sum(n_k)), int(sum(1 for n in n_k if n > 0))
         return np.nanmean([np.nanmean(J) for J in J_vect])
 
     counting_setup["aggregation_func"] = _counting_aggregation
     cost_func(np.asarray(param, dtype=float), counting_setup, jac_spasity)
+    count_data_points.last_n_types = counts["n_types"]
     return counts["n_data"]
 
 
 def estimate_profile_scale(cost_func, param_opt, calibr_setup, cost_opt, n_free_params, jac_spasity=None):
     """
     Scale converting cost differences into Delta(-2 log L). Returns (scale, n_data, sigma_hat2).
-    * aggregation_func is GaussianNeg2LogLik: the cost already is -2 log L -> scale = 1.
+    * aggregation_func is GaussianNeg2LogLik / GeometricMeanNeg2LogLik: the cost already is
+      -2 log L -> scale = 1.
+    * cost_sum_and_geometric_mean (G, the calibration cost): linearization of the equal-weight
+      -2 log L n_bar * sum_k log SSR_k = N * log G: Delta(-2 log L) ~ N * Delta G / G_opt,
+      i.e. scale = G_opt / N (N = total number of data points). sigma_hat2 is returned as None.
+      Exact alternative without linearization: GeometricMeanNeg2LogLik.
     * otherwise pool_paper's estimate for a mean squared residual under i.i.d. Gaussian noise:
       sigma_hat2 = cost_opt, scale = sigma_hat2 / n_data.
     """
     n_data = count_data_points(cost_func, param_opt, calibr_setup, jac_spasity)
-    if isinstance(calibr_setup.get("aggregation_func"), GaussianNeg2LogLik):
+    agg = calibr_setup.get("aggregation_func")
+    if isinstance(agg, GaussianNeg2LogLik):
         return 1.0, n_data, None
+    if agg is cost_sum_and_geometric_mean:
+        if n_data <= 0:
+            raise ValueError("n_data <= 0: no data points found in cost_func().")
+        return float(cost_opt) / n_data, n_data, None
     if n_data <= 0:
         raise ValueError("n_data <= 0: no data points found in cost_func().")
     sigma_hat2 = cost_opt

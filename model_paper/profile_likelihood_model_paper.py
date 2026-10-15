@@ -115,8 +115,12 @@ def make_param_names(exps, bact, media):
 
 def build_calibr_setup(path, add_name, n_cl, n_media, objective="neg2logL"):
     """calibr_setup (incl. param_bnds and data_array) for a saved calibration.
-    objective: 'neg2logL' (GaussianNeg2LogLik, scale=1) or 'calibration'
-    (cost_sum_and_geometric_mean, as used for calibration)."""
+    objective: 'neg2logL'    GaussianNeg2LogLik: -2 log L, data types weighted by their number of points
+               'geomean'     GeometricMeanNeg2LogLik: -2 log L version of the calibration cost
+                             (same optimum as cost_sum_and_geometric_mean, equal weight per data type)
+               'calibration' cost_sum_and_geometric_mean itself (scale='auto': linearized G_opt / N)"""
+    if objective not in ("neg2logL", "geomean", "calibration"):
+        raise ValueError(f"unknown objective {objective!r}")
     dfs, result, true_params = load_calibration(path, add_name)
     df_mibi, df_maldi, df_ngs = dfs
     exps = sorted(list(set([s.split("_")[0] for s in df_mibi.columns])))
@@ -141,6 +145,8 @@ def build_calibr_setup(path, add_name, n_cl, n_media, objective="neg2logL"):
     calibr_setup["data_array"] = fm.dtf.extract_observables_from_df(dfs)
     if objective == "neg2logL":
         calibr_setup["aggregation_func"] = pl.make_gaussian_neg2loglik(calibr_setup["data_array"])
+    elif objective == "geomean":
+        calibr_setup["aggregation_func"] = pl.make_geomean_neg2loglik(calibr_setup["data_array"])
     param_opt = np.array(result["param_ode"], dtype=float)
     param_names = make_param_names(exps, bact, media)
     assert len(param_opt) == len(calibr_setup["param_bnds"]) == len(param_names)
@@ -160,7 +166,10 @@ if __name__ == "__main__":
 
     PROFILE = "ode+S"       # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
     FIX_X0 = False          # True: x0 held at the estimate (faster, profiles conditional on x0)
-    OBJECTIVE = "neg2logL"  # 'neg2logL' (scale = 1) or 'calibration' (scale='auto' as in pool_paper)
+    # Objective: 'neg2logL' (-2 log L, data types weighted by number of points),
+    # 'geomean' (-2 log L form of the calibration cost: same optimum as the calibration, equal
+    # weight per data type) or 'calibration' (cost_sum_and_geometric_mean itself, linearized scale)
+    OBJECTIVE = "neg2logL"
     # ODE solver: numba-compiled fusion_model2 is used automatically if numba is installed (~6x faster,
     # identical results). 'odeint' is ~2x faster again, results differ only at solver tolerance (~1e-5).
     fm.mdl.solving.ODE_BACKEND = "solve_ivp"

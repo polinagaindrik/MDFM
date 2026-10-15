@@ -9,7 +9,7 @@ small problem, to check parameter estimation and identifiability end to end:
      2 media (sel1, gen1), 3 experiments at 2, 6 and 10 degC, 10% relative noise
   2) global optimization (differential evolution)       -> Result_calibration<add_name>_global.json
   3) local refinement (L-BFGS-B multistart)              -> Result_calibration<add_name>.json
-  4) profile likelihood (-2 log L objective, local fits) -> profile_likelihood/...
+  4) profile likelihood (local fits; objective see OBJECTIVE) -> profile_likelihood/...
 
 Each stage can be switched off (RUN_*) and is then read from its saved result,
 e.g. to re-run only the profiles. Run from the repository root:
@@ -82,6 +82,11 @@ if __name__ == "__main__":
     # profile likelihood settings
     PROFILE = 'ode+S'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
     FIX_X0 = False                 # True: x0 held at the estimate (faster, profiles conditional on x0)
+    # 'neg2logL'   : -2 log L, data types weighted by their number of points
+    # 'geomean'    : -2 log L form of the calibration cost cost_sum_and_geometric_mean
+    #                (same optimum as the calibration, equal weight per data type)
+    # 'calibration': cost_sum_and_geometric_mean itself (scale linearized: G_opt / N)
+    OBJECTIVE = 'geomean'
     # ================================================================
 
     os.makedirs(path, exist_ok=True)
@@ -158,8 +163,11 @@ if __name__ == "__main__":
         out_path = path + 'profile_likelihood/'
         os.makedirs(out_path, exist_ok=True)
         pl_setup = dict(calibr_setup)
-        pl_setup['aggregation_func'] = pl.make_gaussian_neg2loglik(pl_setup['data_array'])  # -2 log L, scale = 1
-        print(f'-2 log L at the truth: {fm.pest.cost_withS(param_true, pl_setup, None):.6g}, '
+        pl_setup['aggregation_func'] = {
+            'neg2logL': pl.make_gaussian_neg2loglik(pl_setup['data_array']),
+            'geomean': pl.make_geomean_neg2loglik(pl_setup['data_array']),
+            'calibration': fm.pest.cost_sum_and_geometric_mean}[OBJECTIVE]
+        print(f'Profile objective ({OBJECTIVE}) at the truth: {fm.pest.cost_withS(param_true, pl_setup, None):.6g}, '
               f'at the estimate: {fm.pest.cost_withS(param_opt, pl_setup, None):.6g}')
 
         n_x0 = n_cl * len(exps)
@@ -170,7 +178,7 @@ if __name__ == "__main__":
         profile_indices = {'x0': idx_x0, 'ode': idx_ode, 'ode+S': idx_ode + idx_S, 'all': None}[PROFILE]
         if FIX_X0 and PROFILE in ('x0', 'all'):
             raise ValueError('PROFILE=' + repr(PROFILE) + ' profiles x0, so FIX_X0 must be False')
-        tag = f"{add_name}_{PROFILE.replace('+', '')}" + ('_fixx0' if FIX_X0 else '')
+        tag = f"{add_name}_{PROFILE.replace('+', '')}_{OBJECTIVE}" + ('_fixx0' if FIX_X0 else '')
         out_csv = out_path + f'profile_likelihood_results{tag}.csv'
 
         df, cis = pl.run_profile_likelihood_all(
@@ -183,7 +191,7 @@ if __name__ == "__main__":
             n_restarts=1, jitter_frac=0.05,
             profile_indices=profile_indices,
             fixed_indices=idx_x0 if FIX_X0 else (),
-            refine=True,                     # minimum of the -2 log L objective
+            refine=True,                     # minimum of the profile objective (quick for 'geomean'/'calibration')
             stop_factor=1.5,                 # stop each side once Delta > 1.5 x threshold
             minimize_options={'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8},
             true_params=param_true,

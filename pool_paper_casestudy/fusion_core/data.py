@@ -13,7 +13,7 @@ Excel sheets, and re-loading a saved calibration run) was moved from
 import numpy as np
 import pandas as pd
 
-from .output import json_dump, read_from_json  # noqa: F401  (re-exported, same as fusion_model.data)
+from .output import json_dump
 from . import mdl
 from . import dtf
 

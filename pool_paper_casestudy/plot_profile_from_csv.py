@@ -73,12 +73,17 @@ MODEL_PARAM_ORDER = [
     "kappa_LA_lm", "kappa_LA_lm_2",
 ]
 
-# Desired panel-letter order: growth rates -> N_t values -> omega/K -> kappa_T -> kappa_LA
-PARAM_ORDER = [
+# Desired panel-letter order, split into two independently-lettered groups:
+# Group 1 (letters restart at A): growth rates -> N_t values
+PARAM_ORDER_GROWTH = [
     # Growth rates
     "mu_ls23K", "mu_lsCTC494", "mu_lm",
     # N_t values
     "N_t_ls23K", "N_t_lsCTC494", "N_t_lm",
+]
+
+# Group 2 (letters restart at A again): omega/K -> kappa_T -> kappa_LA
+PARAM_ORDER_TOXIN = [
     # Toxin effect: omega and K
     "omega3", "K3",
     # kappa_T
@@ -89,22 +94,30 @@ PARAM_ORDER = [
     "kappa_LA_lm_2",
 ]
 
-def get_panel_letter(param_index, model_param_order=MODEL_PARAM_ORDER, param_order=PARAM_ORDER):
+def get_panel_letter(param_index, model_param_order=MODEL_PARAM_ORDER,
+                      param_order_groups=(PARAM_ORDER_GROWTH, PARAM_ORDER_TOXIN)):
     """Return the panel letter (A, B, C, ...) for a given parameter,
     identified by its position (param_index, as found in the CSV) in the
     original param array -- NOT by matching the CSV's LaTeX display name,
     which varies in formatting and can't be reliably matched by string
-    equality against PARAM_ORDER.
+    equality against the param_order groups.
+
+    param_order_groups: a sequence of separate ordering lists. Each group's
+    letters restart at A independently -- e.g. growth-rate/N_t parameters
+    are lettered A-F, then the toxin/kappa parameters are lettered A-H
+    again, rather than continuing the alphabet across both figures.
     """
     try:
         key = model_param_order[param_index]
     except IndexError:
         raise ValueError(f"param_index {param_index} out of range for model_param_order.")
-    try:
-        letter_idx = param_order.index(key)
-    except ValueError:
-        raise ValueError(f"Key '{key}' (param_index={param_index}) not found in param_order list.")
-    return string.ascii_uppercase[letter_idx]
+
+    for group in param_order_groups:
+        if key in group:
+            letter_idx = group.index(key)
+            return string.ascii_uppercase[letter_idx]
+
+    raise ValueError(f"Key '{key}' (param_index={param_index}) not found in any param_order group.")
 
 
 def _add_Nt_axis(ax, name):
@@ -241,7 +254,7 @@ def plot_profile_likelihood_individual(
     file_ext="png",
     figsize=(5.5, 4.0),
     coord_text=(0.12, 0.88),
-    param_order=PARAM_ORDER,
+    param_order_groups=(PARAM_ORDER_GROWTH, PARAM_ORDER_TOXIN),
     model_param_order=MODEL_PARAM_ORDER,
 ):
     """
@@ -319,7 +332,7 @@ def plot_profile_likelihood_individual(
         ax.set_xlabel(name, fontsize=16)
         #ax.set_xlabel("parameter value", fontsize=9)
         ax.set_ylabel(r"$\Delta(-2\log L)$")
-        letter = get_panel_letter(idx, model_param_order, param_order)
+        letter = get_panel_letter(idx, model_param_order, param_order_groups)
         
         ax.text(*coord_text, rf'\textbf{{{letter}}}', transform=ax.transAxes)
         
@@ -343,6 +356,7 @@ if __name__ == "__main__":
     # ================================================================
     # EDIT THESE, THEN JUST RUN THIS FILE (no command-line args needed)
     # ================================================================
+    #CSV_PATH = "pool_paper_casestudy/out/wo_pH/finalresult/5exps/profile_likelihood_results_MM.csv"
     CSV_PATH = "pool_paper_casestudy/out/wo_pH/finalresult/5exps/profile_likelihood_results_MM.csv"
 
     # The value printed as "Auto-estimated scale: ... scale=X" during

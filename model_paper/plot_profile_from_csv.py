@@ -2,7 +2,8 @@
 Plot profile likelihood results from a saved CSV (model_paper)
 ==============================================================
 
-Counterpart of ``pool_paper_casestudy/plot_profile_from_csv.py``: reads a CSV
+Counterpart of ``pool_paper_casestudy/plot_profile_from_csv.py`` (in the
+separate pool-paper-casestudy repo, https://github.com/polinagaindrik/pool-paper-casestudy): reads a CSV
 produced by run_profile_likelihood_all() (columns: param_index, param_value,
 cost, <one column per parameter>) and regenerates the plots without
 recomputing anything. The scale is read from <csv>_summary.json (scale='auto'),

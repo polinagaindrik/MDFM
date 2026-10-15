@@ -10,6 +10,7 @@ from .output import read_from_json
 
 
 def get_bacteria_for_model(exps_maldi, exps_ngs, path_data, cutoff=0., cutoff_prop=0.,):
+    """Load MALDI and NGS experiments and return their shared filtered bacterial set."""
     df_ngs = get_all_experiments_dataframe(read_ngs, exps_ngs, path_data+'NGS/')
     df_ngs = dtf.drop_column(df_ngs, ['M2'])
     df_ngs, bact_ngs = dtf.preprocess_dataframe(df_ngs, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
@@ -22,6 +23,7 @@ def get_bacteria_for_model(exps_maldi, exps_ngs, path_data, cutoff=0., cutoff_pr
 
 
 def read_all_data_in_df(exps_mibi, exps_maldi, exps_ngs, path_data, path_out, bact_all=None, cutoff=0., cutoff_prop=0., add_name=''):
+    """Load, align, and save calibration dataframes for the selected experiments."""
     df_mibi = get_all_experiments_dataframe(read_mibi, exps_mibi, path_data+'microbiology/')
     df_mibi =dtf.drop_column(df_mibi, ['M2', 'VRBD'])
     if bact_all is None:
@@ -61,6 +63,7 @@ def read_all_data_in_df(exps_mibi, exps_maldi, exps_ngs, path_data, path_out, ba
 
 
 def prepare_ZL2030_data(exps_mibi, exps_maldi, exps_ngs, cutoff=0., cutoff_prop=0., path='', add_name=''):
+    """Prepare the ZL2030 calibration data and return observations and filtering defaults."""
     bact_all, df_maldi_all, df_ngs_all = get_bacteria_for_model(exps_maldi, exps_ngs, 'experiments/', cutoff=cutoff, cutoff_prop=cutoff_prop)
     dfs_calibr, T_x, s_x_predefined = read_all_data_in_df(exps_mibi, exps_maldi, exps_ngs, 'experiments/', path, bact_all=bact_all,
                                                           cutoff=cutoff, cutoff_prop=cutoff_prop, add_name=add_name)
@@ -68,6 +71,7 @@ def prepare_ZL2030_data(exps_mibi, exps_maldi, exps_ngs, cutoff=0., cutoff_prop=
 
 
 def prepare_ZL2030_data_for_prediction(exps, bact_all, path_data, path_out='', add_name=''):
+    """Load prediction experiments and align their bacteria to the calibration set."""
     df_mibi = get_all_experiments_dataframe(read_mibi, exps, path_data+'microbiology/')
     df_mibi = dtf.drop_column(df_mibi, ['M2', 'VRBD'])
     df_maldi = get_all_experiments_dataframe(read_maldi, exps, path_data+'MALDI/')
@@ -94,6 +98,7 @@ def prepare_ZL2030_data_for_prediction(exps, bact_all, path_data, path_out='', a
 
 
 def _get_exp_filename(exp_name):
+    """Convert a short experiment identifier to its source-file naming convention."""
     # Redefine experiment names to read data
     if exp_name[0] == 'V':
         exp_filename = 'Experiment_' + exp_name[1:]
@@ -103,6 +108,7 @@ def _get_exp_filename(exp_name):
 
 
 def _correct_df_for_tempinterruption(df):
+    """Add temperature-interruption variants and remove duplicate baseline columns."""
     names_init = set([col.split('_')[0] for col in df.columns])
     for Tshift in ['CCD01', 'CCD02', 'RP']:
         if np.size((df.filter(regex=Tshift))) != 0:
@@ -117,6 +123,7 @@ def _correct_df_for_tempinterruption(df):
 
 
 def read_mibi(exp_name, dir_data=''):
+    """Read and normalize colony-count measurements for one experiment."""
     exp_temps = read_from_json(''+'exp_temps.json', dir='inputs_fusionmodel/')
     exp_filename = _get_exp_filename(exp_name)
     # Read the file:
@@ -164,6 +171,7 @@ def read_mibi(exp_name, dir_data=''):
 
 
 def read_maldi(exp_name, dir_data=''):
+    """Read MALDI isolate-identification data and return genus proportions by sample."""
     filename =  f'Data on bacteria identified by MALDI-Biotyper - {_get_exp_filename(exp_name)}'
     media_filenames = ['_MRS_Aerob_wachsende_Milchsäurebakterien', '_PC_Aerobe_Keimzahl (Gesamtkeimzahl)', '_VRBD_Enterobacterales']
     if int(exp_name[1:3]) < 15:
@@ -185,6 +193,7 @@ def read_maldi(exp_name, dir_data=''):
         
 
 def _df_maldi_transform(df, exp_name, dir_data=''):
+    """Transform a raw MALDI spreadsheet into genus-by-sample measurements."""
     df=df.rename(columns={"Unnamed: 0": "Species", "Taxa": "Species"})
     df=df.sort_values(by = "Species").reset_index(drop=True)
     df = df[df['Species'].isna()==False]  # noqa: E712
@@ -213,6 +222,7 @@ def _df_maldi_transform(df, exp_name, dir_data=''):
 
 
 def _rename_maldi_samples(f):
+    """Convert a raw MALDI sample label into the standardized column format."""
     fspl = f.split('_')
     if fspl[-1] == 'IDENExp01':
         fspl = fspl[:-1]
@@ -228,6 +238,7 @@ def _rename_maldi_samples(f):
 
 
 def read_ngs(exp_name, **kwargs):
+    """Read NGS data using the file format appropriate for the experiment number."""
     if int(exp_name[1:]) <= 7:
         return read_ngs1(exp_name, **kwargs)
     else:
@@ -235,6 +246,7 @@ def read_ngs(exp_name, **kwargs):
 
 
 def read_ngs1(exp_name, dir_data=''):
+    """Read the earlier NGS table format and aggregate counts into genus proportions."""
     exp_temps = read_from_json(''+'exp_temps.json', dir='inputs_fusionmodel/')
     temp = exp_temps[exp_name[:3]]
     filename = f'ZOTU_Table_{exp_name}.tsv'
@@ -250,6 +262,7 @@ def read_ngs1(exp_name, dir_data=''):
 
 
 def read_ngs2(exp_name, dir_data=''):
+    """Read the later NGS table format and aggregate counts into genus proportions."""
     filename = f'ZOTU_Table_{exp_name.split("-")[0]}.tsv'
     if int(exp_name[1:])<12 and int(exp_name[1:])>=8:
         df = pd.read_csv(dir_data + filename, sep='\t', header=[0, 1, 2, 3, 4], skiprows=[5, 6],  keep_default_na=True, encoding="ISO-8859-1")
@@ -282,6 +295,7 @@ def read_ngs2(exp_name, dir_data=''):
 
 
 def read_biochem(folder_path, username, password=None):
+    """Download and organize biochemical measurements from OpenBIS."""
     o = login_openbis(username, password)
     d = {'Measurement': ['O2', 'CO2']}
     for s in o.get_samples(space='ZL2030', project='WORKPACKAGE_1.2', experiment='*GAS*'):
@@ -310,10 +324,12 @@ def read_biochem(folder_path, username, password=None):
 
 
 def read_pkl(name, folder_path):
+    """Load a pickled dataframe from the specified folder."""
     return pd.read_pickle(folder_path+name)
 
 
 def _rename_df_biochem(df):
+    """Standardize biochemical sample names and average duplicate columns."""
     for f in df.columns:
         fspl = f.split('_')
         if len(fspl) == 6:
@@ -326,6 +342,7 @@ def _rename_df_biochem(df):
 
 
 def read_color(exp_name, dir_data=''):
+    """Read color measurements and return values grouped by property and sample."""
     exp_temps = read_from_json(''+'exp_temps.json', dir='inputs_fusionmodel/')
     filename = f'Data of color measurement main trial {int(exp_name[1:])} KI.xlsx'
     df0 = pd.read_excel(dir_data + filename, keep_default_na=True, header=[0])
@@ -357,10 +374,12 @@ def read_color(exp_name, dir_data=''):
 
 
 def get_all_experiments_dataframe(read_func, exp_names, dir_data):
+    """Read multiple experiments and merge their dataframes by row index."""
     return merge_dfs([read_func(exp, dir_data=dir_data) for exp in exp_names])
 
 
 def login_openbis(username, password=None):
+    """Log in to OpenBIS, prompting for a password when one is not supplied."""
     o = Openbis('https://openbis.zl2030.de/openbis/webapp/eln-lims/')
     if password is None:
         password = getpass.getpass()
@@ -369,10 +388,12 @@ def login_openbis(username, password=None):
 
 
 def download_from_openbis(o, folder_path, workpackage, experiment_name, type_data=None):
+    """Download matching OpenBIS datasets into the destination folder."""
     for dataset in o.get_datasets(space='ZL2030', project=workpackage, experiment=experiment_name, type=type_data):
         dataset.download(destination=folder_path, create_default_folders=False)
 
 def get_MALDI_metadata(o, folder_path, workpackage, experiment_name):
+    """Save the unidentified-isolate counts for matching MALDI samples."""
     d = {'Genus': 'unidentified'}
     for s in  o.get_samples(space='ZL2030', project=workpackage, experiment=experiment_name):#,
                             #where={'experimental_subsample_name':'*V0*'}): ## For now just exp till 9
@@ -387,22 +408,26 @@ def get_MALDI_metadata(o, folder_path, workpackage, experiment_name):
 
 # Download excels with microbiological data from Openbis
 def download_microbiology_from_openbis(folder_path, username, password=None):
+    """Download colony-count datasets from OpenBIS and close the session."""
     o = login_openbis(username, password)
     download_from_openbis(o, folder_path, 'WORKPACKAGE_1.2', '*COLONY_COUNT*')
     o.logout()
 
 def download_MALDI_from_openbis(folder_path, username, password=None):
+    """Download MALDI datasets and sample metadata from OpenBIS."""
     o = login_openbis(username, password)
     download_from_openbis(o, folder_path, 'WORKPACKAGE_1.2', '*MALDI_BIOTYPER*')
     get_MALDI_metadata(o, folder_path, 'WORKPACKAGE_1.2', '*MALDI_BIOTYPER*')
     o.logout()
     
 def download_NGS_from_openbis(folder_path, username, password=None):
+    """Download NGS datasets from OpenBIS and close the session."""
     o = login_openbis(username, password)
     download_from_openbis(o, folder_path, 'WORKPACKAGE_1.5', '*AMPLICON_SEQ*', 'PROCESSED_DATA')
     o.logout()
 
 def download_colordata_from_openbis(folder_path, username, password=None):
+    """Download color-measurement datasets from OpenBIS and close the session."""
     o = login_openbis(username, password)
     download_from_openbis(o, folder_path, 'WORKPACKAGE_1.2', '*COLOR*')
     o.logout()

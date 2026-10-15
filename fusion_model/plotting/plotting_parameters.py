@@ -4,12 +4,15 @@ from . import plotting_templates as plt_templ
 
 
 def lin_func(x, a0, a1):
+    """Evaluate a linear function with intercept a0 and slope a1."""
     return a0 + a1*x
 
 def exp_func(x, a0, a1):
+    """Evaluate an exponential parameter curve from its coefficients."""
     return a0*x**a1
 
 def plot_alpha(alph, bact_all, clrs1, alph_real=None, path=''):
+    """Plot estimated alpha growth parameters against temperature for each bacterium."""
     temp = np.linspace(1.95, 14.05, 100)
     (alph_1, alph_exp) = alph
     fig, ax = plt.subplots()
@@ -58,9 +61,11 @@ def plot_alpha(alph, bact_all, clrs1, alph_real=None, path=''):
 
 
 def exp_func2(x, a0, a1):
+    """Evaluate the exponential temperature-response function used for lambda."""
     return 10**a0 * x**a1
 
 def plot_lambda(lambd, bact_all, clrs1, lambd_real=None, path=''):
+    """Plot estimated lambda growth rates against temperature for each bacterium."""
     n_cl = len(bact_all)
     (lambd_1, lambd_exp) = lambd
     fig, ax = plt.subplots()
@@ -112,6 +117,7 @@ def plot_lambda(lambd, bact_all, clrs1, lambd_real=None, path=''):
 
 
 def plot_kij(kij_matrix, bact_all, path=''):
+    """Visualize the pairwise bacterial interaction matrix."""
     n_cl = len(bact_all)
     fig, ax = plt.subplots()
     im = ax.imshow(kij_matrix, vmin=0.02*(5e-8), vmax=3.*(5e-8))
@@ -128,6 +134,7 @@ def plot_kij(kij_matrix, bact_all, path=''):
 
 
 def plot_x0(x0_vals, bact_all, exps, path=''):
+    """Plot estimated initial bacterial values by experiment and bacterium."""
     n_cl = len(bact_all)
     fig, ax = plt.subplots()
     ax.set_title('Ausgangskeimzahl ', fontsize=14)
@@ -146,6 +153,7 @@ def plot_x0(x0_vals, bact_all, exps, path=''):
 
 
 def plot_parameters(param_ode, bact_all, exps, clrs1, param_real=[], path=''):
+    """Plot the fitted ODE parameters and, when supplied, reference values."""
     n_cl = len(bact_all)
     bact_all = [b if b!='Others' else 'Rest' for b in bact_all]
     #bact_all[-1] = 'Rest'
@@ -185,6 +193,7 @@ def plot_parameters(param_ode, bact_all, exps, clrs1, param_real=[], path=''):
     
 
 def plot_cost_function(df_optim, path='', add_name=''):
+    """Plot the optimization cost over recorded iterations."""
     fig, ax = plt.subplots()
     ax.plot(df_optim['iteration'], df_optim['cost'])
     ax.set_xlabel('optimization step', fontsize=12)

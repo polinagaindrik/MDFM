@@ -4,6 +4,7 @@ import fusion_model.model as mdl
 import fusion_model.tools.dataframe_functions as dtf
 
 def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, jac_func=None, media=['media1', 'media2'], exp_start_offset=0, **kwargs):
+    """Generate and combine synthetic observation tables for several temperatures."""
     df_mibi, df_maldi, df_ngs, df_real, df_fullx = [], [], [], [], []
     for j, temp in enumerate(temps):
         exp_start = exp_start_offset + 1 + j #1+n_traj*j
@@ -26,6 +27,7 @@ def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, jac_func=None,
 
 
 def generate_insilico_df(model, t, param, x0, const,  n_traj=1, exp_start_num=1, n_states=2, jac=None, **kwargs):
+    """Simulate trajectories and return their MiBi, MALDI, NGS, state, and count tables."""
     n_cl = const[1]
     x0 = np.asarray(x0, dtype=float)
     if model  == mdl.fusion_model_linear:
@@ -50,6 +52,7 @@ def generate_insilico_df(model, t, param, x0, const,  n_traj=1, exp_start_num=1,
 
 def insilico_traj_dataframe(t, n, param, x0, const, create_df_func, bact_name, name_part=[''], obs_func=None,
                             noise=.0, rel_noise=.0): 
+    """Generate one synthetic observation table, optionally applying an observation model and noise."""
     if obs_func is None:
         observables = n + np.random.normal(0., rel_noise*n+noise, size=np.shape(n))
     else:
@@ -70,6 +73,7 @@ def insilico_traj_dataframe(t, n, param, x0, const, create_df_func, bact_name, n
 
 # The list of possible combinations of parameter combinations, 1D array of probabilities
 def sample_parameter_from_distribution(param_flatten, prob_flatten, size=1):
+    """Sample and return a parameter combination using its normalized probability weights."""
     if len(param_flatten) != 0:
         index_sampled = np.random.choice(np.linspace(0, len(prob_flatten)-1, len(prob_flatten), dtype=int), size=size, 
                                          p=prob_flatten/np.sum(prob_flatten))[0]
@@ -80,6 +84,7 @@ def sample_parameter_from_distribution(param_flatten, prob_flatten, size=1):
 
 # Generate measurement time points fro each trajectory (curve)
 def generate_discrete_timepoints(time_bnds, n_times):
+    """Choose and sort distinct integer-spaced measurement times within the bounds."""
     time = np.random.choice(np.linspace(time_bnds[0], time_bnds[1], int(time_bnds[1]-time_bnds[0]+1)),
                             size=(n_times), replace=False)
     return np.sort(time, axis=0)

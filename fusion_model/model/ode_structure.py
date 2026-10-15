@@ -4,6 +4,7 @@ import scipy.sparse
 
 
 def fusion_model2(t, x, param, x0, const):
+    """Compute the temperature-dependent fusion-model derivatives for all states."""
     (temp_cond, n_cl, media) = const
     if np.size(temp_cond) == 1:
         (temp, ) = temp_cond
@@ -25,6 +26,7 @@ def fusion_model2(t, x, param, x0, const):
 
 
 def fusion_model_linear(t, x, param, x0, const):
+    """Compute fusion-model derivatives with linear temperature dependence."""
     (temp_cond, n_cl, media) = const
     if np.size(temp_cond) == 1:
         (temp, ) = temp_cond
@@ -48,6 +50,7 @@ def fusion_model_linear(t, x, param, x0, const):
 
 
 def fusion_model_woR(t, x, param, x0, const):
+    """Compute fusion-model derivatives with shared resource limitation in each growth term."""
     (temp_cond, n_cl, media) = const
     #if len(temp_cond) == 1:
     #    (temp, ) = temp_cond
@@ -64,6 +67,7 @@ def fusion_model_woR(t, x, param, x0, const):
 
 
 def fusion_model_distr(t, x, param, x0, ode_args): # t, x, param, x0, const
+    """Compute derivatives for the distribution-parameterized fusion model."""
     #(temp_cond, n_cl, x0, media, s_x) = ode_args
     (temp_cond, n_cl, media) = ode_args
     lambd = param[:n_cl]
@@ -80,6 +84,7 @@ def fusion_model_distr(t, x, param, x0, ode_args): # t, x, param, x0, const
 
 # For polynomial T-dependence of the parameters
 def jacobian_fusion_model(t, x, param, x0, const):
+    """Calculate the state Jacobian matrix for the fusion model."""
     (temp_cond, n_cl, media) = const
     (temp, ) = temp_cond
     #lambd = 1e-3*param[:n_cl] * temp
@@ -97,6 +102,7 @@ def jacobian_fusion_model(t, x, param, x0, const):
 
 # For polynomial T-dependence of the parameters
 def jacobian_sparsity(n_cl):
+    """Return the sparse structural pattern of the fusion-model state Jacobian."""
     dLdx = np.concatenate((np.eye(n_cl), np.zeros((n_cl, n_cl)), np.ones((1, n_cl)))).T
     dGdx = np.concatenate((np.eye(n_cl), np.eye(n_cl), np.ones((1, n_cl)))).T
     dRdx = np.concatenate((np.zeros((n_cl, 1)), np.ones((n_cl+1, 1)))).T
@@ -106,6 +112,7 @@ def jacobian_sparsity(n_cl):
 
 
 def fusion_model_woT(t, x, param, x0, const):
+    """Compute fusion-model derivatives with temperature effects omitted."""
     (temp_cond, n_cl, media) = const
     n_max = 10**param[2*n_cl]*2
     lambd = [5e-3*param[i] for i in range (n_cl)]
@@ -123,7 +130,9 @@ def fusion_model_woT(t, x, param, x0, const):
 
 # The function that calculates the temperature at each moment of time t with given temperature profile Temp(time)
 def temp_func(t, temp_series):
+    """Return the supplied temperature associated with the time nearest to t."""
     # temp_series = [[T1, t1], [T2, t2], [T3, t3], ...] (n_times x 2)
+    # Use the nearest supplied time point; temperatures are not interpolated.
     temp_arr, time_arr = np.array(temp_series).T
     diff = time_arr - t
     return temp_arr[np.argmin(np.abs(diff))]

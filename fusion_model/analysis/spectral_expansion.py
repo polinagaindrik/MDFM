@@ -4,6 +4,7 @@ from scipy.linalg import eigh
 
 # Spectral Expansion methods:
 def spectral_expansion(N_order, orth_func, Pvals_func, xbnds=(-1., 1.)):
+    """Approximate a function over the requested bounds using a spectral expansion."""
     x_array = np.linspace(-1, 1, 100)
     #  for given N and oth_func calc eigenvalues and eigen vectors
     res1 = preprocess_se(N_order, orth_func, Bmatrix_legendre, x_array)
@@ -19,6 +20,7 @@ def spectral_expansion(N_order, orth_func, Pvals_func, xbnds=(-1., 1.)):
 
 
 def preprocess_se(N_order, orth_func, Bmatrix_func, x_array):
+    """Build the eigenbasis and normalized orthogonal functions for an expansion."""
     B_matrix = Bmatrix_func(N_order)
     eigval, eigvect = eigh(B_matrix)
     eigvect = eigvect.T
@@ -34,6 +36,7 @@ def preprocess_se(N_order, orth_func, Bmatrix_func, x_array):
 
 
 def Bmatrix_legendre(N_order):
+    """Construct the spectral matrix for an expansion in Legendre polynomials."""
     B_matrix = np.zeros((N_order, N_order))
     for n in range (N_order):
         sq_n = np.sqrt(2*n + 1)
@@ -44,11 +47,13 @@ def Bmatrix_legendre(N_order):
 
 
 def calc_model_se(eigval, eigvect, orth_arr, psi, Pvals):
+    """Evaluate the spectral approximation from its basis and sampled function values."""
     eigvect0 = eigvect[:, 0]
     term1 = Pvals*eigvect0.reshape((1,)+np.shape(eigvect0))
     return np.sum(term1.reshape(np.shape(term1)+(1,)) * psi.reshape((1,)+np.shape(psi)), axis=-2)
 
 
 def rescale_axis(x, xbnds):
+    """Map points from the reference interval [-1, 1] to the supplied bounds."""
     (xmin, xmax) = xbnds
     return np.array([(v+1)*0.5*(xmax-xmin)+xmin for v in x])

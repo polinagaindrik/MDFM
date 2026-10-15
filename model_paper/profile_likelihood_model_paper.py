@@ -2,7 +2,8 @@
 Profile likelihood for model_paper (MDFM repo)
 ==============================================
 
-Counterpart of ``pool_paper_casestudy/profile_likelihood.py``. The engine
+Counterpart of ``pool_paper_casestudy/profile_likelihood.py`` in the separate
+pool-paper-casestudy repo (https://github.com/polinagaindrik/pool-paper-casestudy). The engine
 (fusion_model/parameter_estimation/profile_likelihood.py) has the same API as
 ``pool_paper_casestudy/fusion_core/likelihood.py``; this file only supplies the
 case-specific plumbing: it injects ``cost`` (= fm.pest.cost_withS) and

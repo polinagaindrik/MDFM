@@ -13,10 +13,12 @@ lsts = {'CCD01': 'solid', 'CCD02': 'solid', '': "dashed"}
 
 # Plotting of model prediction and/or measurement data:
 def plot_all_ZL2030(temp_plot, **kwargs):
+    """Plot the available ZL2030 measurement types across selected temperatures."""
     plt_templ.plot_all(temp_plot, ('Tag', 'log Keimzahl'), templ_meas=template_plot_measurements_ZL2030, **kwargs)
 
 
 def template_plot_measurements_ZL2030(ax0, temp, data, c='b', lab=''):
+    """Draw ZL2030 measurement data for one temperature on an existing axis."""
     scatter_marker = ['^', 'o', 'D', "s", "X", ".", "1", "2", "3", "4", "*", "P", "d", "+", "x"]
     n_plot = 0
     for d in data: 
@@ -29,6 +31,7 @@ def template_plot_measurements_ZL2030(ax0, temp, data, c='b', lab=''):
     #ax0.set_title(f'Temperatur {round(temp)} Grad', fontsize=13)
 
 def plot_biochem_measurement(df, meas, exp_temps):
+    """Plot one biochemical measurement against time for each experiment."""
     if meas != 'TBARS' or meas != 'POZ':
         exps = [f'V{i:02d}' for i in range(1, 15)] + ['V16', 'V17']
     if meas == 'TBARS' or meas == 'POZ':
@@ -97,6 +100,7 @@ def plot_biochem_measurement(df, meas, exp_temps):
 
 
 def plot_measurements_ZL2030_Tunterbrech(df, exp_plots, mtimes=[], mestim=[], dir='', add_name=''):
+    """Plot ZL2030 measurements for experiments with temperature interruptions."""
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df.columns])))[0]
     fig, ax = plt.subplots(figsize=(6, 6.))
     labels = ('Tag',  r'log CFU mL$^{-1}$')
@@ -120,6 +124,7 @@ def plot_measurements_ZL2030_Tunterbrech(df, exp_plots, mtimes=[], mestim=[], di
 
 
 def plot_measurements_ZL2030_consttemp(ax0, temp, df, c=['b'], lab='',  media=''):
+    """Draw constant-temperature ZL2030 observations for a selected medium."""
     scatter_marker = ['^', 'o', 'D', "s", "X", ".", "*", "P", "d", "x", '^', 'o', 'D', "s",]
     (df0, ) = filter_dataframe(f'{int(temp):02d}C', [df])
     exps = sorted(list(set([s.split('_')[0] for s in df0.columns])))
@@ -143,6 +148,7 @@ def plot_measurements_ZL2030_consttemp(ax0, temp, df, c=['b'], lab='',  media=''
         ax0.text(7.7, y0_loc, f'c) {round(temp)}°C', fontsize=20)
 
 def plot_measurements_industry(df, exp_plots, dir='', add_name=''):
+    """Plot industry-study measurements for the selected experiments."""
     clrs_ind = {'V15-SLH01': plt_templ.blue_colors[10],
                 'V15-SLH02': plt_templ.blue_colors[11],
                 'V21-SLH03a':plt_templ.blue_colors[1],
@@ -180,6 +186,7 @@ def plot_measurements_industry(df, exp_plots, dir='', add_name=''):
 
 
 def plot_measurements_stored_meat(df, exp_plots, dir='',  add_name=''):
+    """Plot stored-meat measurements for the selected experiments."""
     fig, ax = plt.subplots(figsize=(6, 4.))
     fig, ax = plt_templ.set_labels(fig, ax, 'Tag', 'log Keimzahl')
     lst_stor = {'STOR01': 'dashed', '': 'solid'}

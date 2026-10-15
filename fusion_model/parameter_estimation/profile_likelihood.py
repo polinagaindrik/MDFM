@@ -137,6 +137,13 @@ class _SolveTimeout(Exception):
     pass
 
 
+class _BetterOptimumFound(Exception):
+    """Raised when a profile point has a clearly lower cost than the reference optimum."""
+    def __init__(self, x, cost, delta):
+        super().__init__(f"profile point lower than the optimum by Delta = {delta:.4g}")
+        self.x, self.cost, self.delta = np.asarray(x, dtype=float), float(cost), float(delta)
+
+
 @contextmanager
 def time_limit(seconds):
     """Raises _SolveTimeout if the wrapped block runs longer than `seconds`
@@ -645,6 +652,9 @@ def run_profile_likelihood_all(
     resume=True,
     true_params=None,
     verbose=True,
+    restart_on_better=True,
+    restart_tol=0.5,
+    max_restarts=3,
 ):
     """
     Profile every free parameter (same arguments and return value as pool_paper):
@@ -678,10 +688,14 @@ def run_profile_likelihood_all(
     verbose           : 0/False: only summaries; 1/True: one line per profile point (value, cost,
                         Delta, iterations, time, overall progress with ETA) and the refit's cost every
                         10 iterations; 2: additionally every 10 L-BFGS-B iterations inside each point
+    restart_on_better : if a finished walk contains a point with Delta < -restart_tol (the optimum
+                        was not a minimum), stop, re-fit from that point (refine) and restart the
+                        profiles from the new optimum; at most max_restarts times
 
     Returns (df, ci_results) with ci_results = {param_index: (lo, hi)} as in pool_paper.
     Also writes <out_csv>_summary.json (cost_opt, scale, CIs, identifiability status).
     """
+    call_args = dict(locals())  # for a restart from a better optimum
     param_opt = np.asarray(param_opt, dtype=float)
     bnds = calibr_setup["param_bnds"]
     if len(bnds) != len(param_opt):
@@ -778,8 +792,33 @@ def run_profile_likelihood_all(
               f"({'+' if direction > 0 else '-'}), {len(rows)} points, max Delta = {d_max:.4g} "
               f"({'threshold crossed' if crossed else 'threshold NOT crossed'}), "
               f"elapsed {_fmt_time(time.time() - t_start)}", flush=True)
+        if restart_on_better and rows:
+            best = min(rows, key=lambda r: r["cost"])
+            d_min = (best["cost"] - cost_opt) / scale
+            if d_min < -restart_tol:
+                raise _BetterOptimumFound(best["x"], best["cost"], d_min)
 
-    _run_walks(cost_func, param_opt, cost_opt, grids, tasks, calibr_setup, jac_spasity, cfg, n_jobs, on_done)
+    try:
+        if restart_on_better and done_rows:  # resumed walks may already contain a better point
+            dfr = pd.DataFrame(done_rows)
+            i_b = dfr["cost"].idxmin()
+            d_b = (dfr.loc[i_b, "cost"] - cost_opt) / scale
+            if d_b < -restart_tol:
+                raise _BetterOptimumFound(dfr.loc[i_b, names].to_numpy(dtype=float), dfr.loc[i_b, "cost"], d_b)
+        _run_walks(cost_func, param_opt, cost_opt, grids, tasks, calibr_setup, jac_spasity, cfg, n_jobs, on_done)
+    except _BetterOptimumFound as better:
+        print(f"\n[{time.strftime('%H:%M:%S')}] A profile point is lower than the optimum by Delta = {better.delta:.4g}: "
+              f"the optimum was not a minimum.", flush=True)
+        if max_restarts <= 0:
+            print("No restarts left (max_restarts): stopping. Re-fit from the best point in "
+                  f"{partial_csv} (full parameter vector in each row) and run again.", flush=True)
+            raise
+        print(f"Restarting the profile likelihood from the better point (re-fit first, "
+              f"{max_restarts - 1} restarts left). Finished walks are discarded.", flush=True)
+        if os.path.exists(partial_csv):
+            os.rename(partial_csv, os.path.splitext(out_csv)[0] + "_partial_discarded.csv")
+        call_args.update(param_opt=better.x, refine=True, max_restarts=max_restarts - 1, resume=False)
+        return run_profile_likelihood_all(**call_args)
 
     # --- assemble (pool_paper CSV format) -----------------------------
     opt_records = _records([{"param_index": i, "direction": 0, "param_value": float(param_opt[i]),
@@ -979,6 +1018,32 @@ def _read_csv_and_summary(csv_path, scale, param_opt=None):
     return df, names, float(scale), cost_opt, np.asarray(param_opt, dtype=float)
 
 
+def rereference_to_best(df, names, cost_opt, param_opt, scale=1.0, confidence_level=0.95, verbose=True):
+    """
+    If profile points have a lower cost than the optimum the run started from (the refit
+    did not reach the minimum), use the best point found as the reference instead:
+    cost_ref = lowest cost of all profile points, param_ref = its full parameter vector.
+    The rows of the old optimum (one per profile, cost == cost_opt) are dropped, since
+    that point is not a minimum of the profile. Profile points themselves are unchanged:
+    each is the best fit with that parameter fixed, independent of the reference.
+    Returns (df, cost_ref, param_ref, shift); shift = (cost_ref - cost_opt) / scale <= 0.
+    """
+    i_best = df["cost"].idxmin()
+    c_best = float(df.loc[i_best, "cost"])
+    tol = 1e-3 * chi2.ppf(confidence_level, 1) * scale
+    if c_best >= cost_opt - tol:
+        return df, cost_opt, np.asarray(param_opt, dtype=float), 0.0
+    best = df.loc[i_best]
+    param_ref = best[names].to_numpy(dtype=float) if all(n in df.columns for n in names) else np.asarray(param_opt)
+    df_new = df[~np.isclose(df["cost"], cost_opt, rtol=0, atol=1e-9 * max(1., abs(cost_opt)))].reset_index(drop=True)
+    shift = (c_best - cost_opt) / scale
+    if verbose:
+        print(f"NOTE: the best profile point is lower than the optimum by Delta = {shift:.4g} "
+              f"(param[{int(best['param_index'])}] = {best['param_value']:.6g}). Using it as the reference "
+              f"(reference='best'); the old optimum points are dropped.")
+    return df_new, c_best, param_ref, shift
+
+
 def plot_profile_likelihood_from_csv(
     csv_path,
     confidence_level=0.95,
@@ -987,6 +1052,7 @@ def plot_profile_likelihood_from_csv(
     ncols=4,
     true_params=None,
     param_opt=None,
+    reference="optimum",
 ):
     """
     Regenerate the grid plot from a CSV written by run_profile_likelihood_all
@@ -994,8 +1060,13 @@ def plot_profile_likelihood_from_csv(
     reads the scale from <csv>_summary.json. If the run has not finished, the finished
     walks in <csv>_partial.csv are plotted. param_opt: estimate, used only if the run
     files don't contain it.
+    reference: 'optimum' (Delta relative to the optimum of the run) or 'best' (relative
+               to the lowest cost found, if a profile point beat the optimum; see
+               rereference_to_best).
     """
     df, names, scale, cost_opt, param_opt = _read_csv_and_summary(csv_path, scale, param_opt)
+    if reference == "best":
+        df, cost_opt, param_opt, _ = rereference_to_best(df, names, cost_opt, param_opt, scale, confidence_level)
     ci = {idx: confidence_interval_from_profile(sub["param_value"].to_numpy(), sub["cost"].to_numpy(), cost_opt,
                                                 confidence_level, scale=scale)
           for idx, sub in df.sort_values("param_value").groupby("param_index")}
@@ -1014,6 +1085,7 @@ def plot_profile_likelihood_individual(
     figsize=(5.5, 4.0),
     true_params=None,
     param_opt=None,
+    reference="optimum",
 ):
     """
     One figure per parameter (as pool_paper's plot_profile_likelihood_individual,
@@ -1022,6 +1094,8 @@ def plot_profile_likelihood_individual(
     import re
     os.makedirs(out_dir, exist_ok=True)
     df, names, scale, cost_opt, param_opt = _read_csv_and_summary(csv_path, scale, param_opt)
+    if reference == "best":
+        df, cost_opt, param_opt, _ = rereference_to_best(df, names, cost_opt, param_opt, scale, confidence_level)
     threshold = chi2.ppf(confidence_level, 1)
 
     def _sanitize(name):

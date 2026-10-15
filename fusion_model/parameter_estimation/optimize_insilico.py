@@ -36,6 +36,7 @@ def param_bnds_insilico_templinear(n_cl, inhib=True):
 
 
 def define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=None, s_x=None):
+    """Add model-specific parameter bounds and optional media weights to an in-silico setup."""
     x0_bnds_all = tuple([(0.1, 5.) for _ in range (calibr_presetup['n_cl']) for _ in range (len(calibr_presetup['exps']))])
     calibr_setup = calibr_presetup
     if calibr_presetup['model'] == mdl.fusion_model2:

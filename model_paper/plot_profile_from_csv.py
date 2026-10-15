@@ -25,10 +25,11 @@ if __name__ == "__main__":
     # ================================================================
     # EDIT THESE, THEN JUST RUN THIS FILE (no command-line args needed)
     # ================================================================
-    n_cl, n_media, relnoise = 4, 2, 0.1
-    add_name = f"_{int(n_cl)}dim_{int(n_media)}media"
-    path2 = f"model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/"
-    tag = f"{add_name}_odeS_neg2logL"
+    n_cl, n_media, relnoise = 2, 2, 0.1
+    add_name = f"_{int(n_cl)}dim_{int(n_media)}media_test"
+    #path2 = f"model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/"
+    path2 = f"model_paper/out/test_2sp/"
+    tag = f"{add_name}_all"
     CSV_PATH = path2 + f"profile_likelihood/profile_likelihood_results{tag}.csv"
 
     SCALE = "auto"  # read from <csv>_summary.json; or a float as in pool_paper

@@ -32,6 +32,9 @@ if __name__ == "__main__":
     CSV_PATH = path2 + f"profile_likelihood/profile_likelihood_results{tag}.csv"
 
     SCALE = "auto"  # read from <csv>_summary.json; or a float as in pool_paper
+    # 'optimum': Delta relative to the optimum of the run; 'best': relative to the lowest cost
+    # found, if profile points are below the optimum (negative Delta, refit did not converge)
+    REFERENCE = "optimum"
 
     MAKE_GRID_PLOT = True
     GRID_OUT_PATH = path2 + f"profile_likelihood/profile_likelihood_grid{tag}.png"
@@ -48,8 +51,8 @@ if __name__ == "__main__":
     if MAKE_GRID_PLOT:
         plot_profile_likelihood_from_csv(CSV_PATH, confidence_level=0.95, scale=SCALE,
                                          save_path=GRID_OUT_PATH, ncols=4, true_params=true_params,
-                                         param_opt=param_opt)
+                                         param_opt=param_opt, reference=REFERENCE)
     if MAKE_INDIVIDUAL_PLOTS:
         plot_profile_likelihood_individual(CSV_PATH, confidence_level=0.95, scale=SCALE,
                                            out_dir=INDIVIDUAL_OUT_DIR, file_ext=INDIVIDUAL_FILE_EXT,
-                                           true_params=true_params, param_opt=param_opt)
+                                           true_params=true_params, param_opt=param_opt, reference=REFERENCE)

@@ -87,6 +87,7 @@ if __name__ == "__main__":
     #                (same optimum as the calibration, equal weight per data type)
     # 'calibration': cost_sum_and_geometric_mean itself (scale linearized: G_opt / N)
     OBJECTIVE = 'geomean'
+    SHOW_TRUE_VALUE = True         # False: profile plots without the green "true value" line
     # ================================================================
 
     os.makedirs(path, exist_ok=True)
@@ -194,11 +195,11 @@ if __name__ == "__main__":
             refine=False,                     # minimum of the profile objective (quick for 'geomean'/'calibration')
             stop_factor=3,                 # stop each side once Delta > 1.5 x threshold
             minimize_options={'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8},
-            true_params=param_true,
+            true_params=param_true if SHOW_TRUE_VALUE else None,
             verbose=1,
             restart_on_better=False,
             resume=True,
         )
         pl.plot_profile_likelihood_individual(out_csv, out_dir=out_path + 'individual', file_ext='pdf',
-                                              true_params=param_true)
+                                              true_params=param_true if SHOW_TRUE_VALUE else None)
         print(f'{(time.time() - start) / 60.:.1f} min in total')

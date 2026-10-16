@@ -167,6 +167,9 @@ if __name__ == "__main__":
 
     PROFILE = "ode+S"       # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
     FIX_X0 = False          # True: x0 held at the estimate (faster, profiles conditional on x0)
+    # S (media matrix): False = re-fitted at every profile point (default)
+    #                   'estimate' = held at the estimated values, 'true' = held at the true values (in-silico)
+    FIX_S = False
     # Objective: 'neg2logL' (-2 log L, data types weighted by number of points),
     # 'geomean' (-2 log L form of the calibration cost: same optimum as the calibration, equal
     # weight per data type) or 'calibration' (cost_sum_and_geometric_mean itself, linearized scale)
@@ -189,7 +192,21 @@ if __name__ == "__main__":
     profile_indices = {"x0": idx_x0, "ode": idx_ode, "ode+S": idx_ode + idx_S, "all": None}[PROFILE]
     if FIX_X0 and PROFILE in ("x0", "all"):
         raise ValueError("PROFILE=" + repr(PROFILE) + " profiles x0, so FIX_X0 must be False")
-    tag = f"{add_name}_{PROFILE.replace('+', '')}_{OBJECTIVE}" + ("_fixx0" if FIX_X0 else "")
+    if FIX_S not in (False, "estimate", "true"):
+        raise ValueError("FIX_S must be False, 'estimate' or 'true'")
+    fixed_indices = (idx_x0 if FIX_X0 else []) + (idx_S if FIX_S else [])
+    if FIX_S == "true":  # S at the true values, the other parameters are re-fitted (refine=True)
+        if true_params is None:
+            raise ValueError("FIX_S='true' needs the true parameters (Result_temp_together_real.json)")
+        param_opt = np.array(param_opt, dtype=float)
+        param_opt[idx_S] = true_params[idx_S]
+    if FIX_S:
+        print(f"S held fixed at the {FIX_S} values: {np.round(np.asarray(param_opt)[idx_S], 4)}")
+    if profile_indices is None:
+        profile_indices = list(range(len(param_opt)))
+    profile_indices = [i for i in profile_indices if i not in fixed_indices]  # fixed ones can't be profiled
+    tag = (f"{add_name}_{PROFILE.replace('+', '')}_{OBJECTIVE}" + ("_fixx0" if FIX_X0 else "")
+           + {False: "", "estimate": "_fixS", "true": "_fixStrue"}[FIX_S])
 
     df, cis = run_profile_likelihood_all(
         param_opt, calibr_setup,
@@ -202,8 +219,8 @@ if __name__ == "__main__":
         n_restarts=1, jitter_frac=0.05,
         # optional extras (model_paper):
         profile_indices=profile_indices,
-        fixed_indices=idx_x0 if FIX_X0 else (),
-        refine=True,            # polish the optimum with the profiling objective first
+        fixed_indices=fixed_indices,
+        refine=True,            # re-fit the optimum with the profiling objective first (needed for FIX_S="true")
         stop_factor=1.5,        # stop a walk once Delta > 1.5 * threshold (None: whole grid)
         true_params=true_params if SHOW_TRUE_VALUE else None,
         verbose=1,              # 1: one line per profile point with overall progress/ETA; 2: + inner iterations

@@ -82,6 +82,9 @@ if __name__ == "__main__":
     # profile likelihood settings
     PROFILE = 'all'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
     FIX_X0 = False                 # True: x0 held at the estimate (faster, profiles conditional on x0)
+    # S (media matrix): False = re-fitted at every profile point (default)
+    #                   'estimate' = held at the estimated values, 'true' = held at the true values (in-silico)
+    FIX_S = False
     # 'neg2logL'   : -2 log L, data types weighted by their number of points
     # 'geomean'    : -2 log L form of the calibration cost cost_sum_and_geometric_mean
     #                (same optimum as the calibration, equal weight per data type)
@@ -179,7 +182,19 @@ if __name__ == "__main__":
         profile_indices = {'x0': idx_x0, 'ode': idx_ode, 'ode+S': idx_ode + idx_S, 'all': None}[PROFILE]
         if FIX_X0 and PROFILE in ('x0', 'all'):
             raise ValueError('PROFILE=' + repr(PROFILE) + ' profiles x0, so FIX_X0 must be False')
-        tag = f"{add_name}_{PROFILE.replace('+', '')}_{OBJECTIVE}" + ('_fixx0' if FIX_X0 else '')
+        if FIX_S not in (False, 'estimate', 'true'):
+            raise ValueError("FIX_S must be False, 'estimate' or 'true'")
+        fixed_indices = (idx_x0 if FIX_X0 else []) + (idx_S if FIX_S else [])
+        if FIX_S == 'true':  # S at the true values, the other parameters are re-fitted (refine=True)
+            param_opt = np.array(param_opt, dtype=float)
+            param_opt[idx_S] = param_true[idx_S]
+        if FIX_S:
+            print(f'S held fixed at the {FIX_S} values: {np.round(np.asarray(param_opt)[idx_S], 4)}')
+        if profile_indices is None:
+            profile_indices = list(range(len(param_opt)))
+        profile_indices = [i for i in profile_indices if i not in fixed_indices]  # fixed ones can't be profiled
+        tag = (f"{add_name}_{PROFILE.replace('+', '')}_{OBJECTIVE}" + ('_fixx0' if FIX_X0 else '')
+               + {False: '', 'estimate': '_fixS', 'true': '_fixStrue'}[FIX_S])
         out_csv = out_path + f'profile_likelihood_results{tag}.csv'
 
         df, cis = pl.run_profile_likelihood_all(
@@ -191,8 +206,8 @@ if __name__ == "__main__":
             param_names=names,
             n_restarts=1, jitter_frac=0.05,
             profile_indices=profile_indices,
-            fixed_indices=idx_x0 if FIX_X0 else (),
-            refine=False,                     # minimum of the profile objective (quick for 'geomean'/'calibration')
+            fixed_indices=fixed_indices,
+            refine=False or FIX_S == 'true',  # re-fit first (always when FIX_S='true', which moves the optimum)
             stop_factor=3,                 # stop each side once Delta > 1.5 x threshold
             minimize_options={'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8},
             true_params=param_true if SHOW_TRUE_VALUE else None,

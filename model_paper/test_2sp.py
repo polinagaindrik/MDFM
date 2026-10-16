@@ -71,16 +71,16 @@ if __name__ == "__main__":
     temps = [2., 6., 10.]          # 3 experiments, 3 temperatures
     ntr = 1
     add_name = f'_{n_cl}dim_{n_media}media_test'
-    workers = -1                   # differential evolution: -1 = all cores
-    n_jobs = os.cpu_count() or 1   # local multistart / profile likelihood processes
+    workers = 20#-1                   # differential evolution: -1 = all cores
+    n_jobs = 20#os.cpu_count()-2 or 1   # local multistart / profile likelihood processes
 
-    RUN_DATA = True                # generate the in-silico data
-    RUN_GLOBAL = True              # 2) differential evolution
-    RUN_LOCAL = True               # 3) local refinement
+    RUN_DATA = False               # generate the in-silico data
+    RUN_GLOBAL = False             # 2) differential evolution
+    RUN_LOCAL = False              # 3) local refinement
     RUN_PROFILE = True             # 4) profile likelihood
 
     # profile likelihood settings
-    PROFILE = 'ode+S'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
+    PROFILE = 'all'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
     FIX_X0 = False                 # True: x0 held at the estimate (faster, profiles conditional on x0)
     # 'neg2logL'   : -2 log L, data types weighted by their number of points
     # 'geomean'    : -2 log L form of the calibration cost cost_sum_and_geometric_mean
@@ -148,7 +148,7 @@ if __name__ == "__main__":
     # 3) local refinement ------------------------------------------------
     if RUN_LOCAL:
         param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
-                                                         maxiter=1000, n_restarts=4, jitter_frac=0.01, n_jobs=n_jobs,
+                                                         maxiter=1000, n_restarts=3, jitter_frac=0.01, n_jobs=n_jobs,
                                                          history_file=path + 'optimization_history_local.csv')
         print(f'{(time.time() - start) / 60.:.1f} min (global + local), cost = {cost_opt:.6g}')
         s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
@@ -183,7 +183,7 @@ if __name__ == "__main__":
 
         df, cis = pl.run_profile_likelihood_all(
             fm.pest.cost_withS, param_opt, pl_setup,
-            span=0.5, n_points=30, method='local',
+            span=3, n_points=12, method='local',
             n_jobs=n_jobs,
             out_csv=out_csv,
             plot_path=out_path + f'profile_likelihood{tag}.png',
@@ -191,11 +191,13 @@ if __name__ == "__main__":
             n_restarts=1, jitter_frac=0.05,
             profile_indices=profile_indices,
             fixed_indices=idx_x0 if FIX_X0 else (),
-            refine=True,                     # minimum of the profile objective (quick for 'geomean'/'calibration')
-            stop_factor=1.5,                 # stop each side once Delta > 1.5 x threshold
+            refine=False,                     # minimum of the profile objective (quick for 'geomean'/'calibration')
+            stop_factor=3,                 # stop each side once Delta > 1.5 x threshold
             minimize_options={'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8},
             true_params=param_true,
             verbose=1,
+            restart_on_better=False,
+            resume=True,
         )
         pl.plot_profile_likelihood_individual(out_csv, out_dir=out_path + 'individual', file_ext='pdf',
                                               true_params=param_true)

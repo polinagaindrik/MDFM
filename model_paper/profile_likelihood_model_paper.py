@@ -171,6 +171,7 @@ if __name__ == "__main__":
     # 'geomean' (-2 log L form of the calibration cost: same optimum as the calibration, equal
     # weight per data type) or 'calibration' (cost_sum_and_geometric_mean itself, linearized scale)
     OBJECTIVE = "neg2logL"
+    SHOW_TRUE_VALUE = True  # False: profile plots without the green "true value" line
     # ODE solver: numba-compiled fusion_model2 is used automatically if numba is installed (~6x faster,
     # identical results). 'odeint' is ~2x faster again, results differ only at solver tolerance (~1e-5).
     fm.mdl.solving.ODE_BACKEND = "solve_ivp"
@@ -204,7 +205,7 @@ if __name__ == "__main__":
         fixed_indices=idx_x0 if FIX_X0 else (),
         refine=True,            # polish the optimum with the profiling objective first
         stop_factor=1.5,        # stop a walk once Delta > 1.5 * threshold (None: whole grid)
-        true_params=true_params,
+        true_params=true_params if SHOW_TRUE_VALUE else None,
         verbose=1,              # 1: one line per profile point with overall progress/ETA; 2: + inner iterations
     )
 

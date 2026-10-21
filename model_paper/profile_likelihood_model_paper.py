@@ -62,6 +62,11 @@ def run_profile_likelihood_all(param_opt, calibr_setup, *args, **kwargs):
     return pl.run_profile_likelihood_all(cost, param_opt, calibr_setup, *args, **kwargs)
 
 
+def extend_profile_likelihood(calibr_setup, out_csv, extend, *args, **kwargs):
+    """See `profile_likelihood.extend_profile_likelihood` (this case study's `cost` is used)."""
+    return pl.extend_profile_likelihood(cost, calibr_setup, out_csv, extend, *args, **kwargs)
+
+
 # ----------------------------------------------------------------------
 # Loading the model_paper calibration
 # ----------------------------------------------------------------------
@@ -175,6 +180,16 @@ if __name__ == "__main__":
     # weight per data type) or 'calibration' (cost_sum_and_geometric_mean itself, linearized scale)
     OBJECTIVE = "neg2logL"
     SHOW_TRUE_VALUE = True  # False: profile plots without the green "true value" line
+    # Add points to the existing profiles (same PROFILE / FIX_* / OBJECTIVE -> same CSV) instead of a new run:
+    #   None   : normal profile run
+    #   'auto' : every profile side that does not reach the threshold (and does not end at the bound)
+    #            gets EXTEND_N_POINTS new points up to the bound; a side stops once Delta > 1.5 x threshold
+    #   dict   : {index: spec} with spec = {'upper': value, 'lower': value, 'n_points': n} (new points from
+    #            the current end of the profile to value) or a list of values (anywhere, also to fill gaps);
+    #            add 'auto': True to also extend all other parameters automatically.
+    #            Indices are printed as "Parameter indices" when EXTEND is set.
+    EXTEND = None
+    EXTEND_N_POINTS = 6
     # ODE solver: numba-compiled fusion_model2 is used automatically if numba is installed (~6x faster,
     # identical results). 'odeint' is ~2x faster again, results differ only at solver tolerance (~1e-5).
     fm.mdl.solving.ODE_BACKEND = "solve_ivp"
@@ -207,6 +222,24 @@ if __name__ == "__main__":
     profile_indices = [i for i in profile_indices if i not in fixed_indices]  # fixed ones can't be profiled
     tag = (f"{add_name}_{PROFILE.replace('+', '')}_{OBJECTIVE}" + ("_fixx0" if FIX_X0 else "")
            + {False: "", "estimate": "_fixS", "true": "_fixStrue"}[FIX_S])
+
+    out_csv = out_path + f"profile_likelihood_results{tag}.csv"
+    if EXTEND is not None:
+        print("Parameter indices:")
+        for i in profile_indices:
+            print(f"  {i:3d}  {ode_param_names[i]:<28} estimate = {param_opt[i]:.6g}, "
+                  f"bounds {calibr_setup['param_bnds'][i]}")
+        extend_profile_likelihood(
+            calibr_setup, out_csv, EXTEND,
+            n_jobs=20, n_restarts=1, jitter_frac=0.05,
+            fixed_indices=fixed_indices,
+            stop_factor=1.5,
+            plot_path=out_path + f"profile_likelihood{tag}.png",
+            true_params=true_params if SHOW_TRUE_VALUE else None,
+            auto_n_points=EXTEND_N_POINTS,
+            verbose=1,
+        )
+        sys.exit(0)
 
     df, cis = run_profile_likelihood_all(
         param_opt, calibr_setup,

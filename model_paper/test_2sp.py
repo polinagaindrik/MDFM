@@ -93,6 +93,17 @@ if __name__ == "__main__":
     # 'calibration': cost_sum_and_geometric_mean itself (scale linearized: G_opt / N)
     OBJECTIVE = 'geomean'
     SHOW_TRUE_VALUE = True         # False: profile plots without the green "true value" line
+    # Add points to the existing profiles (same PROFILE / FIX_* / OBJECTIVE -> same CSV) instead of a new run:
+    #   None   : normal profile run
+    #   'auto' : every profile side that does not reach the threshold (and does not end at the bound)
+    #            gets EXTEND_N_POINTS new points up to the bound; a side stops once Delta > 3 x threshold
+    #   dict   : {index: spec} with spec = {'upper': value, 'lower': value, 'n_points': n} (new points from
+    #            the current end of the profile to value) or a list of values (anywhere, also to fill gaps);
+    #            add 'auto': True to also extend all other parameters automatically.
+    #            Indices are printed as "Parameter indices" when EXTEND is set.
+    #   e.g. EXTEND = {2: {'upper': 5.0, 'n_points': 6}, 12: [0.01, 0.03, 0.1, 0.3, 0.6], 'auto': True}
+    EXTEND = None
+    EXTEND_N_POINTS = 6
     # ================================================================
 
     os.makedirs(path, exist_ok=True)
@@ -199,24 +210,40 @@ if __name__ == "__main__":
                + {False: '', 'estimate': '_fixS', 'true': '_fixStrue'}[FIX_S])
         out_csv = out_path + f'profile_likelihood_results{tag}.csv'
 
-        df, cis = pl.run_profile_likelihood_all(
-            fm.pest.cost_withS, param_opt, pl_setup,
-            span=3, n_points=12, method='local',
-            n_jobs=n_jobs,
-            out_csv=out_csv,
-            plot_path=out_path + f'profile_likelihood{tag}.png',
-            param_names=names,
-            n_restarts=1, jitter_frac=0.05,
-            profile_indices=profile_indices,
-            fixed_indices=fixed_indices,
-            refine=False or FIX_S == 'true',  # re-fit first (always when FIX_S='true', which moves the optimum)
-            stop_factor=3,                 # stop each side once Delta > 1.5 x threshold
-            minimize_options={'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8},
-            true_params=param_true if SHOW_TRUE_VALUE else None,
-            verbose=1,
-            restart_on_better=False,
-            resume=True,
-        )
+        if EXTEND is not None:
+            print('Parameter indices:')
+            for i in profile_indices:
+                print(f'  {i:3d}  {names[i]:<28} estimate = {param_opt[i]:.6g}, bounds {calibr_setup["param_bnds"][i]}')
+            pl.extend_profile_likelihood(
+                fm.pest.cost_withS, pl_setup, out_csv, EXTEND,
+                n_jobs=n_jobs, n_restarts=1, jitter_frac=0.05,
+                fixed_indices=fixed_indices,
+                stop_factor=3,
+                minimize_options={'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8},
+                plot_path=out_path + f'profile_likelihood{tag}.png',
+                true_params=param_true if SHOW_TRUE_VALUE else None,
+                auto_n_points=EXTEND_N_POINTS,
+                verbose=1,
+            )
+        else:
+            df, cis = pl.run_profile_likelihood_all(
+                fm.pest.cost_withS, param_opt, pl_setup,
+                span=3, n_points=12, method='local',
+                n_jobs=n_jobs,
+                out_csv=out_csv,
+                plot_path=out_path + f'profile_likelihood{tag}.png',
+                param_names=names,
+                n_restarts=1, jitter_frac=0.05,
+                profile_indices=profile_indices,
+                fixed_indices=fixed_indices,
+                refine=False or FIX_S == 'true',  # re-fit first (always when FIX_S='true', which moves the optimum)
+                stop_factor=3,                 # stop each side once Delta > 1.5 x threshold
+                minimize_options={'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8},
+                true_params=param_true if SHOW_TRUE_VALUE else None,
+                verbose=1,
+                restart_on_better=False,
+                resume=True,
+            )
         pl.plot_profile_likelihood_individual(out_csv, out_dir=out_path + 'individual', file_ext='pdf',
                                               true_params=param_true if SHOW_TRUE_VALUE else None)
         print(f'{(time.time() - start) / 60.:.1f} min in total')

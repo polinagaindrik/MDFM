@@ -828,8 +828,10 @@ def run_profile_likelihood_all(
             done_tasks = set(zip(dfp["param_index"].astype(int), dfp["direction"].astype(int)))
             print(f"Resuming: {len(done_tasks)} walks already in {partial_csv}")
         else:
-            print(f"{partial_csv} belongs to a different optimum -- starting fresh.")
-            os.remove(partial_csv)
+            old = os.path.splitext(out_csv)[0] + f"_partial_old_{time.strftime('%Y%m%d_%H%M%S')}.csv"
+            os.rename(partial_csv, old)
+            print(f"{partial_csv} belongs to a different optimum (cost_opt {dfp['cost_opt'].iloc[0]:.10g} vs. "
+                  f"{cost_opt:.10g}) -- starting fresh. Old points kept in {old}.")
 
     tasks = [(i, d) for i in profile_indices for d in (-1, +1) if (i, d) not in done_tasks]
     n_eval = sum(len(grids[i]) - 1 for i in profile_indices)

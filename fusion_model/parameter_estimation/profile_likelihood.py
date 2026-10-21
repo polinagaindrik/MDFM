@@ -1198,12 +1198,13 @@ def extend_profile_likelihood(
             rec.update({names[j]: pv for j, pv in enumerate(r["x"])})
             recs.append(rec)
         new_df = pd.DataFrame(recs)
+        # always also in <csv>_partial.csv: a later run_profile_likelihood_all(resume=True) rebuilds
+        # the final CSV from it, so the new points are kept
+        new_df.to_csv(partial_csv, mode="a", index=False, header=not os.path.exists(partial_csv))
         if final_exists:
             old = pd.read_csv(out_csv)
             merged = pd.concat([old, new_df[["param_index", "param_value", "cost"] + names]], ignore_index=True)
             merged.sort_values(["param_index", "param_value"]).reset_index(drop=True).to_csv(out_csv, index=False)
-        else:
-            new_df.to_csv(partial_csv, mode="a", index=False, header=not os.path.exists(partial_csv))
         state["done"] += 1
         d = [(r["cost"] - cost_opt) / scale for r in rows]
         print(f"[{time.strftime('%H:%M:%S')}] walk {state['done']}/{len(tasks)} finished: param[{idx}] {names[idx]}, "

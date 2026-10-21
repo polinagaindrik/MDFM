@@ -721,7 +721,7 @@ def run_profile_likelihood_all(
     resume=True,
     true_params=None,
     verbose=True,
-    restart_on_better=True,
+    restart_on_better=False,
     restart_tol=0.5,
     max_restarts=3,
 ):

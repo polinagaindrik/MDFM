@@ -84,7 +84,9 @@ if __name__ == "__main__":
     FIX_X0 = False                 # True: x0 held at the estimate (faster, profiles conditional on x0)
     # S (media matrix): False = re-fitted at every profile point (default)
     #                   'estimate' = held at the estimated values, 'true' = held at the true values (in-silico)
-    FIX_S = False
+    FIX_S = False        # S re-fitted at every profile point (as before)
+    #FIX_S = 'estimate'   # S held at the estimated values
+    #FIX_S = 'true'       # S held at the true values (in-silico data only)  
     # 'neg2logL'   : -2 log L, data types weighted by their number of points
     # 'geomean'    : -2 log L form of the calibration cost cost_sum_and_geometric_mean
     #                (same optimum as the calibration, equal weight per data type)

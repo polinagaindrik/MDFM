@@ -25,6 +25,10 @@ projects:
     plot_profile_likelihood_individual(csv_path, confidence_level, scale, out_dir, file_prefix,
                                        file_ext, figsize)
 
+Extra (model_paper only): extend_profile_likelihood(cost_func, calibr_setup, out_csv, extend, ...)
+adds points to the profiles of an existing run (explicit values, up to a new end
+value, or extend='auto' for every side that does not reach the threshold).
+
 Grid (as in pool_paper): ``n_points`` values in [p - span*|p|, p + span*|p|],
 clipped to the bounds, plus the optimum itself (full bound range if p == 0).
 For positive parameters this is exactly pool_paper's p*(1 -/+ span); writing it
@@ -400,31 +404,36 @@ def refine_optimum(cost_func, param_opt, calibr_setup, jac_spasity=None, fixed_i
 # One outward walk (one parameter, one direction) on the grid
 # ----------------------------------------------------------------------
 
-def _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grid, calibr_setup, jac_spasity, cfg, rng):
+def _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grid, calibr_setup, jac_spasity, cfg, rng,
+                  side=None, x_init=None):
     """
     Re-optimize all other free parameters at the grid points on one side of the
     optimum, in order of increasing distance, warm-starting each point from the
     previous one. Returns a list of dicts.
+    side, x_init (extend_profile_likelihood): walk over these values instead, starting
+    from the full parameter vector x_init (an existing profile point) instead of param_opt.
     """
     p_hat = float(param_opt[idx])
-    side = grid[grid > p_hat] if direction > 0 else grid[grid < p_hat][::-1]
+    if side is None:
+        side = grid[grid > p_hat] if direction > 0 else grid[grid < p_hat][::-1]
+    side = np.asarray(side, dtype=float)
     opt_idx = [j for j in cfg["free_idx"] if j != idx]
     threshold = chi2.ppf(cfg["confidence_level"], 1) * cfg["scale"]
     stop_delta = None if cfg["stop_factor"] is None else cfg["stop_factor"] * threshold
 
     name = cfg["param_names"][idx] if cfg.get("param_names") else f"param[{idx}]"
-    tag = f"param[{idx}] {name} ({'+' if direction > 0 else '-'})"
+    tag = f"param[{idx}] {name} ({'+' if direction > 0 else '-'}{', extension' if x_init is not None else ''})"
     verbose = int(cfg["verbose"]) if cfg["verbose"] else 0
     progress = cfg.get("progress")
 
-    x_prev = np.array(param_opt, dtype=float)
+    x_prev = np.array(param_opt if x_init is None else x_init, dtype=float)
     rows = []
     for k, val in enumerate(side):
         t_point = time.time()
         x_start = x_prev.copy()
         x_start[idx] = val
         extra = []
-        if cfg["anchor_start"] and k > 0:
+        if cfg["anchor_start"] and (k > 0 or x_init is not None):
             x_anchor = np.array(param_opt, dtype=float)
             x_anchor[idx] = val
             extra.append(x_anchor)
@@ -469,9 +478,10 @@ def _pool_init(cost_func, param_opt, cost_opt, grids, calibr_setup, jac_spasity,
 
 def _pool_task(task):
     """Run one parameter-profile walk in a worker process."""
-    idx, direction = task
-    rows = _profile_walk(_G["cost_func"], _G["param_opt"], _G["cost_opt"], idx, direction, _G["grids"][idx],
-                         _G["calibr_setup"], _G["jac_spasity"], _G["cfg"], _G["rng"])
+    idx, direction = task[:2]
+    side, x_init = task[2:] if len(task) > 2 else (None, None)
+    rows = _profile_walk(_G["cost_func"], _G["param_opt"], _G["cost_opt"], idx, direction, _G["grids"].get(idx),
+                         _G["calibr_setup"], _G["jac_spasity"], _G["cfg"], _G["rng"], side=side, x_init=x_init)
     return idx, direction, rows
 
 
@@ -498,9 +508,11 @@ def _run_walks(cost_func, param_opt, cost_opt, grids, tasks, calibr_setup, jac_s
     with CostEvaluator(_TimedCost(cost_func, cfg["solve_timeout"]), calibr_setup, jac_spasity,
                        n_jobs=n_jobs if use_grad_pool else 1) as ev:
         cfg_serial = dict(cfg, evaluator=ev if use_grad_pool else None)
-        for idx, direction in tasks:
-            rows = _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grids[idx],
-                                 calibr_setup, jac_spasity, cfg_serial, rng)
+        for task in tasks:
+            idx, direction = task[:2]
+            side, x_init = task[2:] if len(task) > 2 else (None, None)
+            rows = _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grids.get(idx),
+                                 calibr_setup, jac_spasity, cfg_serial, rng, side=side, x_init=x_init)
             on_done(idx, direction, rows)
 
 
@@ -827,7 +839,8 @@ def run_profile_likelihood_all(
     with open(os.path.splitext(out_csv)[0] + "_run.json", "w") as f:
         json.dump({"cost_opt": cost_opt, "scale": scale, "confidence_level": confidence_level,
                    "param_opt": param_opt.tolist(), "param_names": names,
-                   "profile_indices": profile_indices}, f, indent=2)
+                   "profile_indices": profile_indices,
+                   "fixed_indices": [int(i) for i in (fixed_indices or ())]}, f, indent=2)
     print(f"Profiling {len(profile_indices)} free parameters, {n_eval} total (parameter, value) evaluations "
           f"({len(tasks)} walks / {n_todo} points to compute, cost_opt={cost_opt:.8g}, "
           f"threshold={threshold:.6g}).", flush=True)
@@ -908,9 +921,24 @@ def run_profile_likelihood_all(
               f"param[{int(best['param_index'])}]={best['param_value']:.6g}); the estimate is not a minimum. "
               f"Consider refine=True or restarting from that point (full vector in the CSV).")
 
+    ci_results = _ci_summary(df, profile_indices, names, param_opt, cost_opt, scale, confidence_level, bnds,
+                             os.path.splitext(out_csv)[0] + "_summary.json", true_params=true_params,
+                             fixed_indices=fixed_indices)
+    print(f"Profile likelihood finished in {_fmt_time(time.time() - t_start)}", flush=True)
+
+    if plot:
+        plot_profile_likelihood(df, param_opt, cost_opt, ci_results=ci_results, confidence_level=confidence_level,
+                                scale=scale, param_names=names, save_path=plot_path, ncols=ncols,
+                                true_params=true_params)
+    return df, ci_results
+
+
+def _ci_summary(df, profile_indices, names, param_opt, cost_opt, scale, confidence_level, bnds, summary_path,
+                true_params=None, fixed_indices=(), verbose=True):
+    """CIs and identifiability status of every profile, printed and written to summary_path."""
     ci_results, ci_interp, status = {}, {}, {}
     for idx in profile_indices:
-        sub = df[df["param_index"] == idx]
+        sub = df[df["param_index"] == idx].sort_values("param_value")
         g, pc = sub["param_value"].to_numpy(), sub["cost"].to_numpy()
         ci_results[idx] = confidence_interval_from_profile(g, pc, cost_opt, confidence_level=confidence_level,
                                                            scale=scale)
@@ -920,20 +948,21 @@ def run_profile_likelihood_all(
         ci_interp[idx] = confidence_interval_from_profile(g, pc, cost_opt, confidence_level=confidence_level,
                                                           scale=scale, interpolate=True)
 
-    print("\nApprox. confidence intervals (interpolated threshold crossings; "
-          "* = threshold not exceeded on that side within the grid):")
-    for idx in profile_indices:
-        lo_ci, hi_ci = ci_interp[idx]
-        st, lc, uc = status[idx]
-        tv = "" if true_params is None else f"  true={true_params[idx]:.6g}"
-        fmt = lambda v: "None" if v is None else f"{v:.6g}"  # noqa: E731
-        print(f"  param[{idx}] {names[idx]} = {param_opt[idx]:.6g}  CI ~= ({fmt(lo_ci)}{'' if lc else '*'}, "
-              f"{fmt(hi_ci)}{'' if uc else '*'})  {st}{tv}")
+    if verbose:
+        print("\nApprox. confidence intervals (interpolated threshold crossings; "
+              "* = threshold not exceeded on that side within the grid):")
+        for idx in profile_indices:
+            lo_ci, hi_ci = ci_interp[idx]
+            st, lc, uc = status[idx]
+            tv = "" if true_params is None else f"  true={true_params[idx]:.6g}"
+            fmt = lambda v: "None" if v is None else f"{v:.6g}"  # noqa: E731
+            print(f"  param[{idx}] {names[idx]} = {param_opt[idx]:.6g}  CI ~= ({fmt(lo_ci)}{'' if lc else '*'}, "
+                  f"{fmt(hi_ci)}{'' if uc else '*'})  {st}{tv}")
 
-    summary_path = os.path.splitext(out_csv)[0] + "_summary.json"
     with open(summary_path, "w") as f:
         json.dump({"cost_opt": cost_opt, "scale": scale, "confidence_level": confidence_level,
-                   "param_opt": param_opt.tolist(), "param_names": names,
+                   "param_opt": np.asarray(param_opt, dtype=float).tolist(), "param_names": names,
+                   "fixed_indices": [int(i) for i in (fixed_indices or ())],
                    "ci": {str(i): {"name": names[i], "estimate": float(param_opt[i]),
                                    "lower": None if ci_results[i][0] is None else float(ci_results[i][0]),
                                    "upper": None if ci_results[i][1] is None else float(ci_results[i][1]),
@@ -943,13 +972,266 @@ def run_profile_likelihood_all(
                                    "upper_closed": status[i][2]} for i in profile_indices}},
                   f, indent=2)
     print(f"Saved summary (cost_opt, scale, CIs, identifiability) to {summary_path}")
-    print(f"Profile likelihood finished in {_fmt_time(time.time() - t_start)}", flush=True)
+    return ci_results
 
+
+# ----------------------------------------------------------------------
+# Add points to an existing profile run
+# ----------------------------------------------------------------------
+
+# direction codes of extension points in <csv>_partial.csv (the main run uses -1/+1, so
+# resume=True of run_profile_likelihood_all does not mistake them for finished walks)
+_EXT_DIRECTION = {-1: -2, +1: 2, 0: 3}
+
+
+def _resolve_param_index(key, names):
+    """Parameter index from an int index or a name (with or without LaTeX $, \\, {})."""
+    import re
+    if isinstance(key, (int, np.integer)):
+        return int(key)
+    norm = lambda n: re.sub(r"[\$\\{}\s]", "", str(n))  # noqa: E731
+    hits = [i for i, n in enumerate(names) if n == key or norm(n) == norm(key)]
+    if len(hits) != 1:
+        raise KeyError(f"parameter {key!r} not found (or not unique) in the CSV columns; use the index. "
+                       f"Names: {dict(enumerate(names))}")
+    return hits[0]
+
+
+def _extension_values(spec, existing, lo_b, hi_b):
+    """New values for one parameter from an EXTEND spec (see extend_profile_likelihood)."""
+    cur_lo, cur_hi = float(np.min(existing)), float(np.max(existing))
+    if isinstance(spec, dict):
+        unknown = set(spec) - {"lower", "upper", "n_points", "values"}
+        if unknown:
+            raise ValueError(f"unknown keys {unknown} (allowed: lower, upper, n_points, values)")
+        n = int(spec.get("n_points", 5))
+        vals = list(np.ravel(spec.get("values", [])))
+        if spec.get("upper") is not None:
+            vals += list(np.linspace(cur_hi, min(float(spec["upper"]), hi_b), n + 1)[1:])
+        if spec.get("lower") is not None:
+            vals += list(np.linspace(cur_lo, max(float(spec["lower"]), lo_b), n + 1)[1:])
+    else:
+        vals = list(np.ravel(spec))
+    vals = np.unique(np.clip(np.asarray(vals, dtype=float), lo_b, hi_b))
+    tol = 1e-9 * max(hi_b - lo_b, 1e-12)
+    return np.array([v for v in vals if not np.any(np.abs(np.asarray(existing) - v) <= tol)])
+
+
+def _auto_extend_specs(df, names, param_opt, cost_opt, scale, confidence_level, bnds, indices, n_points):
+    """{idx: spec} for every profile side that stays below the threshold and does not end at the bound."""
+    threshold = chi2.ppf(confidence_level, 1)
+    specs = {}
+    for idx in indices:
+        sub = df[df["param_index"] == idx]
+        lo_b, hi_b = bnds[idx]
+        p_hat = float(param_opt[idx])
+        tol = 1e-6 * max(hi_b - lo_b, 1e-12)
+        spec = {}
+        for side, bound, key in ((sub[sub["param_value"] > p_hat + tol], hi_b, "upper"),
+                                 (sub[sub["param_value"] < p_hat - tol], lo_b, "lower")):
+            vals = side["param_value"].to_numpy()
+            edge = (vals.max() if key == "upper" else vals.min()) if len(vals) else p_hat
+            d_max = ((side["cost"].to_numpy() - cost_opt) / scale).max() if len(vals) else -np.inf
+            if d_max < threshold and abs(edge - bound) > tol:
+                spec[key] = bound
+        if spec:
+            spec["n_points"] = n_points
+            specs[idx] = spec
+    return specs
+
+
+def extend_profile_likelihood(
+    cost_func,
+    calibr_setup,
+    out_csv,
+    extend,
+    jac_spasity=None,
+    n_jobs=1,
+    n_restarts=1,
+    jitter_frac=0.05,
+    fixed_indices=None,
+    anchor_start=True,
+    stop_factor=None,
+    minimize_options=None,
+    solve_timeout=30,
+    verbose=True,
+    plot=True,
+    plot_path=None,
+    ncols=4,
+    true_params=None,
+    auto_n_points=6,
+):
+    """
+    Add points to the profiles of an existing run of run_profile_likelihood_all, e.g. to
+    continue a profile that has not crossed the threshold yet, or to fill gaps.
+    Nothing that is already computed is recomputed.
+
+    cost_func, calibr_setup : the same as in the original run (same objective/aggregation_func,
+                              data and bounds); checked by re-evaluating the cost at the optimum
+    out_csv                 : out_csv of the original run. If it exists (run finished), the new
+                              points are merged into it (backup: <csv>_before_extend.csv) and the
+                              summary/CIs are updated. Otherwise they are appended to
+                              <csv>_partial.csv and become part of the final CSV once the main
+                              run (resume=True) finishes.
+    extend                  : {parameter: spec}; parameter = index (int) or name as in the CSV
+                              columns. spec is one of
+                                {'upper': value, 'n_points': n}  n new points from the current
+                                                                 largest value up to `value`
+                                {'lower': value, 'n_points': n}  ... down to `value`
+                                (both keys may be given; n_points per side, default 5)
+                                {'values': [...]} or a plain list: arbitrary new values
+                              Values are clipped to the bounds; values already present are skipped.
+                              extend='auto': every profile side that does not reach the threshold
+                              and does not end at the bound gets auto_n_points new points up to the
+                              bound (use stop_factor to stop once the threshold is crossed).
+                              In a dict, the key 'auto' (value: anything, e.g. True) does the same
+                              for all parameters not listed explicitly.
+    fixed_indices           : as in the original run (None: read from the run files, else ())
+    stop_factor             : stop a walk once Delta > stop_factor * threshold (None: all points)
+    other arguments         : as in run_profile_likelihood_all
+
+    How: values beyond the current range are walked outward from the outermost existing
+    point (warm start from its full parameter vector, then from the previous new point);
+    values inside the range start from the nearest existing point. With anchor_start, each
+    point is also started from the optimum. Returns the updated profile DataFrame.
+    """
+    base = os.path.splitext(out_csv)[0]
+    partial_csv = base + "_partial.csv"
+    final_exists = os.path.exists(out_csv)
+    df, names, scale, cost_opt, param_opt = _read_csv_and_summary(out_csv, "auto")
+    info = {}
+    for p in (base + "_summary.json", base + "_run.json"):
+        if os.path.exists(p):
+            with open(p) as f:
+                info = json.load(f)
+            break
+    if "param_opt" not in info:
+        raise FileNotFoundError(f"No {base}_summary.json or {base}_run.json with the optimum found; "
+                                f"they are written by run_profile_likelihood_all.")
+    confidence_level = float(info.get("confidence_level", 0.95))
+    if fixed_indices is None:
+        fixed_indices = info.get("fixed_indices", ())
+    bnds = calibr_setup["param_bnds"]
+    if len(bnds) != len(names):
+        raise ValueError(f"calibr_setup has {len(bnds)} parameters, the CSV {len(names)}: different model setup.")
+
+    # the objective must be the one of the original run
+    c_check = _safe_cost(cost_func, param_opt, calibr_setup, jac_spasity, solve_timeout)
+    if not np.isclose(c_check, cost_opt, rtol=1e-6, atol=1e-9):
+        raise ValueError(f"Cost at the stored optimum = {c_check:.10g}, but the run has cost_opt = {cost_opt:.10g}. "
+                         f"cost_func/calibr_setup differ from the original run (objective, data, bounds?).")
+
+    free_idx = free_param_indices(bnds, fixed_indices)
+    cfg = _make_cfg(bnds, fixed_indices, "local", confidence_level, scale, 1, n_restarts, jitter_frac,
+                    stop_factor, anchor_start, minimize_options, solve_timeout, verbose, param_names=names)
+
+    if isinstance(extend, str):
+        if extend != "auto":
+            raise ValueError("extend must be a dict or 'auto'")
+        extend = {"auto": True}
+    extend = dict(extend)
+    if extend.pop("auto", None):
+        explicit = {_resolve_param_index(k, names) for k in extend}
+        indices = [int(i) for i in sorted(df["param_index"].unique()) if i in free_idx and i not in explicit]
+        auto = _auto_extend_specs(df, names, param_opt, cost_opt, scale, confidence_level, bnds, indices,
+                                  auto_n_points)
+        print(f"auto: {len(auto)} profiles do not reach the threshold on at least one side: "
+              + ", ".join(f"param[{i}] {names[i]} ({'/'.join(k for k in ('lower', 'upper') if k in sp)})"
+                          for i, sp in auto.items()))
+        extend.update(auto)
+
+    tasks = []
+    for key, spec in extend.items():
+        idx = _resolve_param_index(key, names)
+        if idx not in free_idx:
+            print(f"Skipping param[{idx}] {names[idx]}: fixed in this run (fixed_indices or bounds).")
+            continue
+        sub = df[df["param_index"] == idx]
+        # existing points incl. the optimum, each with its full parameter vector
+        pts = [(float(param_opt[idx]), np.asarray(param_opt, dtype=float))]
+        pts += [(float(r["param_value"]), r[names].to_numpy(dtype=float)) for _, r in sub.iterrows()]
+        existing = np.array([v for v, _ in pts])
+        lo_b, hi_b = bnds[idx]
+        new = _extension_values(spec, existing, lo_b, hi_b)
+        if len(new) == 0:
+            print(f"param[{idx}] {names[idx]}: no new values (already computed or outside the bounds "
+                  f"[{lo_b:g}, {hi_b:g}]).")
+            continue
+        cur_lo, cur_hi = existing.min(), existing.max()
+        x_at = lambda v: pts[int(np.argmin(np.abs(existing - v)))][1]  # noqa: E731
+        above, below = new[new > cur_hi], new[new < cur_lo][::-1]
+        inside = new[(new > cur_lo) & (new < cur_hi)]
+        if len(above):
+            tasks.append((idx, _EXT_DIRECTION[+1], above, x_at(cur_hi)))
+        if len(below):
+            tasks.append((idx, _EXT_DIRECTION[-1], below, x_at(cur_lo)))
+        for v in inside:
+            tasks.append((idx, _EXT_DIRECTION[0], np.array([v]), x_at(v)))
+        print(f"param[{idx}] {names[idx]}: current range [{cur_lo:.6g}, {cur_hi:.6g}], "
+              f"{len(new)} new points: {np.round(new, 6).tolist()}")
+    if not tasks:
+        print("Nothing to compute.")
+        return df
+
+    n_todo = sum(len(t[2]) for t in tasks)
+    cfg["progress"] = _Progress(n_todo)
+    threshold = chi2.ppf(confidence_level, 1) * scale
+    print(f"Extending {len(set(t[0] for t in tasks))} profiles: {len(tasks)} walks / {n_todo} points "
+          f"(cost_opt={cost_opt:.8g}, threshold={threshold:.6g}).", flush=True)
+    if final_exists and not os.path.exists(base + "_before_extend.csv"):
+        import shutil
+        shutil.copy(out_csv, base + "_before_extend.csv")
+        print(f"Backup of the original results: {base}_before_extend.csv")
+
+    t_start = time.time()
+    state = {"done": 0}
+
+    def on_done(idx, direction, rows):
+        """Save the points of a finished walk right away (safe against interruptions)."""
+        if not rows:
+            return
+        recs = []
+        for r in rows:
+            rec = {"param_index": r["param_index"], "direction": direction, "param_value": r["param_value"],
+                   "cost": r["cost"], "success": r["success"], "nit": r.get("nit"), "time_s": r.get("time_s"),
+                   "cost_opt": cost_opt}
+            rec.update({names[j]: pv for j, pv in enumerate(r["x"])})
+            recs.append(rec)
+        new_df = pd.DataFrame(recs)
+        if final_exists:
+            old = pd.read_csv(out_csv)
+            merged = pd.concat([old, new_df[["param_index", "param_value", "cost"] + names]], ignore_index=True)
+            merged.sort_values(["param_index", "param_value"]).reset_index(drop=True).to_csv(out_csv, index=False)
+        else:
+            new_df.to_csv(partial_csv, mode="a", index=False, header=not os.path.exists(partial_csv))
+        state["done"] += 1
+        d = [(r["cost"] - cost_opt) / scale for r in rows]
+        print(f"[{time.strftime('%H:%M:%S')}] walk {state['done']}/{len(tasks)} finished: param[{idx}] {names[idx]}, "
+              f"{len(rows)} points, Delta {min(d):.4g} ... {max(d):.4g}, elapsed {_fmt_time(time.time() - t_start)}",
+              flush=True)
+        if min(d) < -1e-3 * chi2.ppf(confidence_level, 1):
+            print(f"  WARNING: a new point is below the optimum (Delta = {min(d):.4g}); the optimum is not a minimum.",
+                  flush=True)
+
+    _run_walks(cost_func, param_opt, cost_opt, {}, tasks, calibr_setup, jac_spasity, cfg, n_jobs, on_done)
+    print(f"Extension finished in {_fmt_time(time.time() - t_start)}", flush=True)
+
+    if final_exists:
+        df = pd.read_csv(out_csv)
+        print(f"Merged the new points into {out_csv}")
+        profile_indices = sorted(int(i) for i in df["param_index"].unique())
+        _ci_summary(df, profile_indices, names, param_opt, cost_opt, scale, confidence_level, bnds,
+                    base + "_summary.json", true_params=true_params, fixed_indices=fixed_indices)
+    else:
+        print(f"The main run has not finished: new points appended to {partial_csv}; they are included in "
+              f"{out_csv} when the run finishes (resume=True).")
     if plot:
-        plot_profile_likelihood(df, param_opt, cost_opt, ci_results=ci_results, confidence_level=confidence_level,
-                                scale=scale, param_names=names, save_path=plot_path, ncols=ncols,
-                                true_params=true_params)
-    return df, ci_results
+        df_plot = plot_profile_likelihood_from_csv(out_csv, confidence_level=confidence_level, scale=scale,
+                                                   save_path=plot_path or base + "_plot.png", ncols=ncols,
+                                                   true_params=true_params)
+        plt.close(df_plot)
+    df, *_ = _read_csv_and_summary(out_csv, scale)
+    return df
 
 
 # ----------------------------------------------------------------------

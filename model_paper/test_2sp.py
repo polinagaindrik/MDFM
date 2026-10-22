@@ -79,6 +79,16 @@ if __name__ == "__main__":
     RUN_LOCAL = False              # 3) local refinement
     RUN_PROFILE = True             # 4) profile likelihood
 
+    # optimizer settings
+    # global step: 'de'            differential evolution (as before)
+    #              'multistart'    N_STARTS local fits from Latin hypercube points (recommended for many species)
+    #              'de+multistart' differential evolution, then the multistart incl. the DE result
+    GLOBAL_METHOD = 'de'
+    N_STARTS = 20
+    # local step and profile fits: 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on
+    # the residuals, parameters scaled, much faster convergence for ill-conditioned problems)
+    LOCAL_METHOD = 'L-BFGS-B'
+
     # profile likelihood settings
     PROFILE = 'all'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
     FIX_X0 = False                 # True: x0 held at the estimate (faster, profiles conditional on x0)
@@ -153,7 +163,18 @@ if __name__ == "__main__":
     # 2) global optimization ---------------------------------------------
     fm.pest.optimization.output_file = path + 'optimization_history1.csv'  # DE history into the test folder
     if RUN_GLOBAL:
-        param_glob, cost_glob = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_setup)
+        de_starts = []
+        if GLOBAL_METHOD in ('de', 'de+multistart'):
+            param_glob, cost_glob = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_setup)
+            print(f'{(time.time() - start) / 60.:.1f} min (differential evolution), cost = {cost_glob:.6g}')
+            de_starts = [param_glob]
+        if GLOBAL_METHOD in ('multistart', 'de+multistart'):
+            param_glob, cost_glob = fm.pest.multistart_optimization(
+                fm.pest.cost_withS, calibr_setup, n_starts=N_STARTS, extra_starts=de_starts, method=LOCAL_METHOD,
+                maxiter=200 if LOCAL_METHOD == 'least_squares' else 1000, n_jobs=n_jobs,
+                history_file=path + 'optimization_history_multistart.csv')
+        elif GLOBAL_METHOD != 'de':
+            raise ValueError("GLOBAL_METHOD must be 'de', 'multistart' or 'de+multistart'")
         print(f'{(time.time() - start) / 60.:.1f} min (global), cost = {cost_glob:.6g}')
         s_x_glob = np.array(param_glob)[-n_cl*n_media:].reshape((n_media, n_cl))
         fm.output.json_dump({'param_ode': param_glob.astype(list), 's_x': s_x_glob, 'T_x': T_x, 'cost': cost_glob},
@@ -165,7 +186,9 @@ if __name__ == "__main__":
     # 3) local refinement ------------------------------------------------
     if RUN_LOCAL:
         param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
-                                                         maxiter=1000, n_restarts=3, jitter_frac=0.01, n_jobs=n_jobs,
+                                                         maxiter=200 if LOCAL_METHOD == 'least_squares' else 1000,
+                                                         n_restarts=3, jitter_frac=0.05, n_jobs=n_jobs,
+                                                         method=LOCAL_METHOD,
                                                          history_file=path + 'optimization_history_local.csv')
         print(f'{(time.time() - start) / 60.:.1f} min (global + local), cost = {cost_opt:.6g}')
         s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
@@ -210,6 +233,8 @@ if __name__ == "__main__":
                + {False: '', 'estimate': '_fixS', 'true': '_fixStrue'}[FIX_S])
         out_csv = out_path + f'profile_likelihood_results{tag}.csv'
 
+        profile_options = ({'method': 'least_squares', 'maxiter': 200} if LOCAL_METHOD == 'least_squares'
+                           else {'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8})
         if EXTEND is not None:
             print('Parameter indices:')
             for i in profile_indices:
@@ -219,7 +244,7 @@ if __name__ == "__main__":
                 n_jobs=n_jobs, n_restarts=1, jitter_frac=0.05,
                 fixed_indices=fixed_indices,
                 stop_factor=3,
-                minimize_options={'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8},
+                minimize_options=profile_options,
                 plot_path=out_path + f'profile_likelihood{tag}.png',
                 true_params=param_true if SHOW_TRUE_VALUE else None,
                 auto_n_points=EXTEND_N_POINTS,
@@ -238,7 +263,7 @@ if __name__ == "__main__":
                 fixed_indices=fixed_indices,
                 refine=False or FIX_S == 'true',  # re-fit first (always when FIX_S='true', which moves the optimum)
                 stop_factor=3,                 # stop each side once Delta > 1.5 x threshold
-                minimize_options={'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8},
+                minimize_options=profile_options,
                 true_params=param_true if SHOW_TRUE_VALUE else None,
                 verbose=1,
                 restart_on_better=False,

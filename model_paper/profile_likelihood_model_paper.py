@@ -190,6 +190,10 @@ if __name__ == "__main__":
     #            Indices are printed as "Parameter indices" when EXTEND is set.
     EXTEND = None
     EXTEND_N_POINTS = 6
+    # fit at every profile point: 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on the
+    # residuals, parameters scaled; much faster convergence for ill-conditioned problems)
+    LOCAL_METHOD = "L-BFGS-B"
+    profile_options = {"method": "least_squares", "maxiter": 200} if LOCAL_METHOD == "least_squares" else None
     # ODE solver: numba-compiled fusion_model2 is used automatically if numba is installed (~6x faster,
     # identical results). 'odeint' is ~2x faster again, results differ only at solver tolerance (~1e-5).
     fm.mdl.solving.ODE_BACKEND = "solve_ivp"
@@ -234,6 +238,7 @@ if __name__ == "__main__":
             n_jobs=20, n_restarts=1, jitter_frac=0.05,
             fixed_indices=fixed_indices,
             stop_factor=1.5,
+            minimize_options=profile_options,
             plot_path=out_path + f"profile_likelihood{tag}.png",
             true_params=true_params if SHOW_TRUE_VALUE else None,
             auto_n_points=EXTEND_N_POINTS,
@@ -255,6 +260,7 @@ if __name__ == "__main__":
         fixed_indices=fixed_indices,
         refine=True,            # re-fit the optimum with the profiling objective first (needed for FIX_S="true")
         stop_factor=1.5,        # stop a walk once Delta > 1.5 * threshold (None: whole grid)
+        minimize_options=profile_options,
         true_params=true_params if SHOW_TRUE_VALUE else None,
         verbose=1,              # 1: one line per profile point with overall progress/ETA; 2: + inner iterations
     )

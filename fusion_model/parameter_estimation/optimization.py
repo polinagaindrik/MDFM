@@ -190,6 +190,17 @@ def _local_run(task):
     processes (only possible in the main process, i.e. when the starts run sequentially)."""
     r, objective, z0, bounds, options, print_every, grad_jobs = task
     history = []
+    if options.get('method') == 'least_squares':
+        from .least_squares_fit import least_squares_fit
+        x_start = objective.full(z0)
+        c, x, ok, njev = least_squares_fit(
+            objective.cost_func, x_start, objective.free, objective.calibr_setup,
+            residual_func=options.get('residual_func'), jac_spasity=objective.jac_spasity, n_jobs=grad_jobs,
+            log_scale=options.get('log_scale', 'auto'), maxiter=options['maxiter'],
+            max_outer=options.get('max_outer', 8), label=f'[start {r}]', print_every=print_every,
+            history=history)
+        print(f'  [start {r}] cost = {c:.10g}, Jacobians = {njev}, success = {ok} (least_squares)', flush=True)
+        return r, np.array(x)[objective.free], float(c), bool(ok), history
 
     def callback(intermediate_result):
         """Record the current full parameter vector and cost during a local run."""
@@ -212,10 +223,21 @@ def _local_run(task):
 
 def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, maxiter=500, ftol=1e-12, gtol=1e-8,
                        n_restarts=1, jitter_frac=0.02, seed=0, history_file=output_file_local, print_every=10,
-                       n_jobs=1, maxfun=None):
+                       n_jobs=1, maxfun=None, method='L-BFGS-B', residual_func=None, log_scale='auto',
+                       start_points=None, max_outer=8):
     """
     L-BFGS-B minimization of cost_func starting from param_init (e.g. the result of
     differential_evolution) to reach the exact local optimum.
+
+    method      : 'L-BFGS-B' (default) or 'least_squares': trust-region least squares on the
+                  residuals with reweighting for the aggregation, parameters scaled to [0, 1]
+                  (log10 for wide positive ranges, log_scale='auto'), see least_squares_fit.py.
+                  Much faster convergence for ill-conditioned problems. maxiter is then the max.
+                  number of residual evaluations per least-squares solve, max_outer the max.
+                  number of reweighting steps. residual_func: signed residuals belonging to
+                  cost_func (default: known for fm.pest.cost_withS).
+    start_points: additional full start vectors (e.g. Latin hypercube points, see
+                  multistart_optimization); start 0 is param_init, then the jittered starts.
 
     Only free parameters (lower bound < upper bound) are optimized; fixed ones (e.g. the
     diagonal k_ii = 0 or predefined S entries) stay at their value.
@@ -252,11 +274,21 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     for _ in range(max(0, n_restarts - 1)):
         z = param_init[free] + rng.normal(0., jitter_frac, size=len(free)) * (hi[free] - lo[free])
         starts.append(np.clip(z, lo[free], hi[free]))
+    for xs in (start_points or []):
+        starts.append(np.clip(np.asarray(xs, dtype=float)[free], lo[free], hi[free]))
 
     bounds = list(zip(lo[free], hi[free]))
-    if maxfun is None:
-        maxfun = 2 * (len(free) + 1) * maxiter
-    options = {'maxiter': maxiter, 'maxfun': maxfun, 'ftol': ftol, 'gtol': gtol}
+    if method == 'least_squares':
+        options = {'method': 'least_squares', 'maxiter': maxiter, 'residual_func': residual_func,
+                   'log_scale': log_scale, 'max_outer': max_outer}
+        print(f'Local optimization method: least_squares (trust-region reflective, reweighted, '
+              f'log_scale={log_scale})', flush=True)
+    elif method == 'L-BFGS-B':
+        if maxfun is None:
+            maxfun = 2 * (len(free) + 1) * maxiter
+        options = {'maxiter': maxiter, 'maxfun': maxfun, 'ftol': ftol, 'gtol': gtol}
+    else:
+        raise ValueError("method must be 'L-BFGS-B' or 'least_squares'")
     if n_jobs is None or n_jobs == 0:
         n_jobs = 1
     if n_jobs < 0:
@@ -292,9 +324,15 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
                 _write_history(f'{base}_start{r}{ext}', history)
 
     if len(results) > 1:
-        print('Local optimization summary:', flush=True)
-        for r, _, c, ok, _ in results:
-            print(f'  start {r}: cost = {c:.10g}, success = {ok}', flush=True)
+        print('Local optimization summary (sorted by cost):', flush=True)
+        c_min = min(res[2] for res in results)
+        tol = 1e-6 * max(1., abs(c_min))
+        for r, _, c, ok, _ in sorted(results, key=lambda res: res[2]):
+            print(f'  start {r}: cost = {c:.10g}, success = {ok}{"  <- best" if c - c_min <= tol else ""}', flush=True)
+        n_best = sum(res[2] - c_min <= tol for res in results)
+        print(f'  {n_best} of {len(results)} starts reached the best cost '
+              f'({"several starts agree" if n_best > 1 else "only one start: run more starts to be sure"})',
+              flush=True)
 
     r_best, z_best, c_best, _, history_best = min(results, key=lambda res: res[2])
     if history_file:
@@ -305,6 +343,29 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
         return param_init, cost_init
     print(f'Local optimization: cost {cost_init:.10g} -> {c_best:.10g} (best start: {r_best})', flush=True)
     return objective.full(z_best), c_best
+
+
+def multistart_optimization(cost_func, calibr_setup, n_starts=20, seed=0, extra_starts=None, method='least_squares',
+                            maxiter=200, n_jobs=1, history_file=output_file_local, log_scale='auto', **kwargs):
+    """
+    Global search by many local fits from Latin hypercube start points over the bounds
+    (log10 for wide positive ranges, as in the least-squares fit). Alternative or addition to
+    differential evolution for many parameters (6-10 species).
+
+    n_starts     : number of Latin hypercube start points
+    extra_starts : further full start vectors, e.g. [differential evolution result]; they come first
+    method       : local method, see local_optimization
+    n_jobs       : processes; with n_jobs <= number of starts, the starts run in parallel
+    Other keyword arguments go to local_optimization. Returns (param_opt, cost_opt).
+    """
+    from .least_squares_fit import latin_hypercube_starts
+    lhs = latin_hypercube_starts(calibr_setup['param_bnds'], n_starts, seed=seed, log_scale=log_scale)
+    starts = [np.asarray(x, dtype=float) for x in (extra_starts or [])] + lhs
+    print(f'Multistart: {len(starts)} starts ({len(extra_starts or [])} given, {n_starts} Latin hypercube), '
+          f'local method {method}', flush=True)
+    return local_optimization(cost_func, starts[0], calibr_setup, maxiter=maxiter, n_restarts=1, seed=seed,
+                              history_file=history_file, n_jobs=n_jobs, method=method, log_scale=log_scale,
+                              start_points=starts[1:], **kwargs)
 
 
 def calculate_model_params_direct_local(ll_func, dfs, calibr_setup, rnd_seed=8097):

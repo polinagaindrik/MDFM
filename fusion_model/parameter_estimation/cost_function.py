@@ -43,6 +43,56 @@ def squared_differences(param_ode, x0_vals, s_x, calibr_setup, jac_spasity=None)
     return ll_ngs[ll_ngs!=0], ll_maldi[ll_maldi!=0], ll_mibi[ll_mibi!=0]
 
 
+def residuals_withS(param, calibr_setup, jac_spasity=None):
+    """
+    Signed residuals of cost_withS, for least-squares solvers:
+    returns ([r_ngs, r_maldi, r_mibi], [exp_ngs, exp_maldi, exp_mibi]) with
+    r_k = measured - model (MiBi divided by its maximum, as in sq_diff_oneexp) for all
+    measured (non-NaN) entries, and exp_k = index of the experiment of each residual
+    (sorted experiment order, as the x0 block of param). sum(r_k**2) equals the sum of
+    the squared differences that cost_withS passes to calibr_setup['aggregation_func'].
+    The length of each r_k depends only on the data, not on param.
+    """
+    n_cl = calibr_setup['n_cl']
+    n_media = calibr_setup['n_media']
+    exps_setup = calibr_setup['exps']
+    param = np.asarray(param, dtype=float)
+    param_ode = param[n_cl*len(exps_setup):-n_cl*n_media]
+    s_x = param[-n_cl*n_media:].reshape((n_media, n_cl))
+    x0_vals = param[:n_cl*len(exps_setup)]
+
+    (df_mibi, df_maldi, df_ngs, ) = calibr_setup['dfs']
+    days, meas = calibr_setup['data_array']
+    obs_mibi_meas, obs_maldi_meas, obs_ngs_meas = meas
+    n_cl_d = np.shape(obs_maldi_meas)[2]
+    exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))
+    mibi_max = np.nanmax(obs_mibi_meas, axis=(0, 1))
+    model = calibr_setup['model']
+    T_x = calibr_setup['T_x']
+    m_ngs, m_maldi, m_mibi = (np.full(np.shape(obs_ngs_meas), np.nan), np.full(np.shape(obs_maldi_meas), np.nan),
+                              np.full(np.shape(obs_mibi_meas), np.nan))
+    for i, exp in enumerate(exps):
+        const = [[calibr_setup['exp_temps'][exp]], n_cl_d, calibr_setup['media']]
+        C0 = np.concatenate((10**np.array(x0_vals[n_cl_d*i:n_cl_d*(i+1)]), np.ones((n_cl_d+1))))
+        C = model_ODE_solution(model, days, param_ode, C0, const)
+        n_C = get_bacterial_count(C, np.shape(s_x)[-1], 2)
+        n_C0 = get_bacterial_count(np.array(C0).reshape(len(C0), 1), np.shape(s_x)[-1], 2)
+        m_ngs[i] = observable_NGS(days, n_C, T_x, n_C0, const, days)[1]
+        m_maldi[i] = observable_MALDI(days, n_C, s_x, n_C0, const, days)[1]
+        m_mibi[i] = observable_MiBi(days, n_C, s_x, n_C0, const, days)[1]
+
+    res, owner = [], []
+    for obs, mdl_obs, scale in ((obs_ngs_meas, m_ngs, 1.), (obs_maldi_meas, m_maldi, 1.),
+                                (obs_mibi_meas, m_mibi, mibi_max)):
+        obs = np.asarray(obs, dtype=float)
+        mask = ~np.isnan(obs)
+        r = (obs - mdl_obs) / scale
+        res.append(r[mask])
+        owner.append(np.broadcast_to(np.arange(len(obs)).reshape((-1,) + (1,) * (obs.ndim - 1)),
+                                     obs.shape)[mask])
+    return res, owner
+
+
 def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
     """Evaluate the calibration cost with experiment-specific alpha parameters and fitted media weights."""
     n_cl = calibr_setup['n_cl']

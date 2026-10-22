@@ -319,9 +319,33 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
                                      tol=1e-6, atol=1e-6, maxiter=100, popsize=15, polish=True,
                                      init="latinhypercube", updating="deferred", workers=per_point_workers)
         best_c, best_z, best_ok, nit = float(res.fun), res.x, bool(res.success), int(res.nit)
+    elif method == "local" and (minimize_options or {}).get("method") == "least_squares":
+        from .least_squares_fit import least_squares_fit
+        o = dict(minimize_options)
+        starts = [x_start] + [np.asarray(xs, dtype=float) for xs in extra_starts]
+        for _ in range(max(0, int(n_restarts) - 1)):
+            xj = x_start.copy()
+            xj[opt_idx] = np.clip(x_start[opt_idx] + rng.normal(0., jitter_frac, size=len(opt_idx)) * (hi - lo), lo, hi)
+            starts.append(xj)
+        n_ls = getattr(evaluator, "n_jobs", 1) if evaluator is not None else 1
+        best_c, best_x, best_ok, nit = np.inf, x_start.copy(), False, 0
+        for r, xs in enumerate(starts):
+            c, x, ok, njev = least_squares_fit(cost_func, xs, opt_idx, calibr_setup,
+                                               residual_func=o.get("residual_func"), jac_spasity=jac_spasity,
+                                               n_jobs=n_ls, log_scale=o.get("log_scale", "auto"),
+                                               maxiter=o.get("maxiter", 200), max_outer=o.get("max_outer", 8),
+                                               solve_timeout=solve_timeout,
+                                               label=(label or "fit") + (f" start {r + 1}/{len(starts)}"
+                                                                         if len(starts) > 1 else ""),
+                                               print_every=print_every)
+            nit += njev
+            if c < best_c:
+                best_c, best_x, best_ok = c, x, ok
+        return best_c, best_x, best_ok, nit
     elif method == "local":
         opts = {"maxiter": 300, "ftol": 1e-10, "gtol": 1e-8}
         opts.update(minimize_options or {})
+        opts.pop("method", None)
         # finite-difference gradients cost one evaluation per parameter; scipy's default
         # maxfun=15000 would otherwise stop large fits long before maxiter
         opts.setdefault("maxfun", 2 * (len(opt_idx) + 1) * opts["maxiter"])
@@ -762,7 +786,9 @@ def run_profile_likelihood_all(
     refine            : first polish param_opt locally with the profiling objective
     stop_factor       : stop a walk once Delta > stop_factor * threshold (None: whole grid, as pool_paper)
     anchor_start      : also start each point from param_opt (pool_paper's restart 0)
-    minimize_options  : L-BFGS-B options (default maxiter=300, ftol=1e-10, gtol=1e-8)
+    minimize_options  : L-BFGS-B options (default maxiter=300, ftol=1e-10, gtol=1e-8), or
+                        {'method': 'least_squares', 'maxiter': 200, 'max_outer': 8, 'log_scale': 'auto'}
+                        for the trust-region least-squares fit (least_squares_fit.py) at every point
     solve_timeout     : seconds per cost evaluation before it counts as failed
     resume            : skip walks already stored in <out_csv>_partial.csv (same cost_opt)
     true_params       : true parameter vector (in-silico data), marked in the plot

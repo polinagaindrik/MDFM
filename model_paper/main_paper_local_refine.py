@@ -36,6 +36,9 @@ if __name__ == "__main__":
     N_RESTARTS = 3  # start 0 = global result, others = random perturbations of it
     JITTER_FRAC = 0.01  # size of the perturbations (fraction of the bound width)
     N_JOBS = 3  # starts run in parallel processes (-1 = all cores)
+    # 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on the residuals, parameters
+    # scaled; much faster convergence for ill-conditioned problems; MAXITER = evaluations per solve, ~200)
+    LOCAL_METHOD = 'L-BFGS-B'
 
     dfs, result, _ = load_calibration(path, add_name)
     df_mibi, df_maldi, df_ngs = dfs
@@ -69,6 +72,7 @@ if __name__ == "__main__":
     start = time.time()
     param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
                                                      maxiter=MAXITER, n_restarts=N_RESTARTS, jitter_frac=JITTER_FRAC, n_jobs=N_JOBS,
+                                                     method=LOCAL_METHOD,
                                                      history_file=path + "optimization_history_local.csv")
     print((time.time() - start) / 60., "min")
 

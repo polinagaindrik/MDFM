@@ -2,8 +2,10 @@
 Local refinement of an existing calibration result
 ==================================================
 
-Runs the L-BFGS-B step (fm.pest.local_optimization) on a calibration that was
+Runs the local step (fm.pest.local_optimization) on a calibration that was
 already obtained with the global optimizer, without repeating the global search.
+FIX_PARAMS holds chosen parameters at fixed values (e.g. non-identifiable ones at 0)
+and refines only the others.
 New calibrations from main_paper_calibr.py already include this step.
 
 Reads   <path>/Result_calibration<add_name>.json  (+ data frames)
@@ -20,7 +22,8 @@ import shutil
 sys.path.append(os.getcwd())
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
-from profile_likelihood_model_paper import load_calibration, s_x_predefined_from_maldi, exp_temps_from_columns
+from profile_likelihood_model_paper import (load_calibration, s_x_predefined_from_maldi, exp_temps_from_columns,
+                                            make_param_names, resolve_fixed_values, print_parameter_table)
 
 import numpy as np
 import time
@@ -39,6 +42,11 @@ if __name__ == "__main__":
     # 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on the residuals, parameters
     # scaled; much faster convergence for ill-conditioned problems; MAXITER = evaluations per solve, ~200)
     LOCAL_METHOD = 'L-BFGS-B'
+    # Parameters held at a fixed value, only the others are refined, e.g. non-identifiable ones set to 0.
+    # Keys: index or name (see the printed parameter table), e.g. {17: 0.} or {'k_00,01': 0., 'k_01,00': 0.}.
+    # The value may lie outside the bounds. The fixed values are part of param_ode in the output JSON and
+    # listed under 'fixed_params'; the profile likelihood scripts then keep them fixed as well.
+    FIX_PARAMS = {}
 
     dfs, result, _ = load_calibration(path, add_name)
     df_mibi, df_maldi, df_ngs = dfs
@@ -68,15 +76,19 @@ if __name__ == "__main__":
     if not os.path.exists(dst):
         shutil.copy(src, dst)
     param_glob = np.array(fm.output.read_from_json(f"Result_calibration{add_name}_global.json", dir=path)["param_ode"])
+    names = make_param_names(exps, list(df_maldi.index), media)
+    fixed = resolve_fixed_values(FIX_PARAMS, names)
+    print_parameter_table(names, param_glob, calibr_setup["param_bnds"], fixed)
 
     start = time.time()
     param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
                                                      maxiter=MAXITER, n_restarts=N_RESTARTS, jitter_frac=JITTER_FRAC, n_jobs=N_JOBS,
-                                                     method=LOCAL_METHOD,
+                                                     method=LOCAL_METHOD, fixed_values=fixed,
                                                      history_file=path + "optimization_history_local.csv")
     print((time.time() - start) / 60., "min")
 
     s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
-    fm.output.json_dump({"param_ode": param_opt.astype(list), "s_x": s_x, "T_x": result["T_x"], "cost": cost_opt},
+    fm.output.json_dump({"param_ode": param_opt.astype(list), "s_x": s_x, "T_x": result["T_x"], "cost": cost_opt,
+                         "fixed_params": fm.pest.fixed_values_record(fixed, names)},
                         f"Result_calibration{add_name}.json", dir=path)
     print(f"Saved refined optimum to {src}")

@@ -222,10 +222,44 @@ def _local_run(task):
     return r, np.array(res.x), float(res.fun), bool(res.success), history
 
 
+def apply_fixed_values(calibr_setup, fixed_values, param=None, names=None, verbose=True):
+    """
+    Hold parameters at given values (e.g. non-identifiable ones set to 0): returns a copy of
+    calibr_setup whose param_bnds are (value, value) for these indices, so that every optimizer
+    and the profile likelihood treat them as fixed; the value may lie outside the normal bounds.
+    fixed_values : {index: value}
+    param        : full parameter vector; if given, a copy with the fixed values is returned too
+    Returns calibr_setup (and the parameter vector if param is given).
+    """
+    fixed_values = {int(i): float(v) for i, v in (fixed_values or {}).items()}
+    bnds = list(calibr_setup['param_bnds'])
+    for i, v in fixed_values.items():
+        if not 0 <= i < len(bnds):
+            raise IndexError(f'fixed parameter index {i} outside 0..{len(bnds) - 1}')
+        if verbose:
+            old = bnds[i]
+            name = names[i] if names is not None else f'param[{i}]'
+            print(f'Fixed: [{i}] {name} = {v:g} (bounds were {old})', flush=True)
+        bnds[i] = (v, v)
+    setup = dict(calibr_setup, param_bnds=tuple(bnds))
+    if param is None:
+        return setup
+    x = np.array(param, dtype=float)
+    for i, v in fixed_values.items():
+        x[i] = v
+    return setup, x
+
+
+def fixed_values_record(fixed_values, names=None):
+    """{'index': {'name': ..., 'value': ...}} for the result JSON (see apply_fixed_values)."""
+    return {str(int(i)): {'name': None if names is None else names[int(i)], 'value': float(v)}
+            for i, v in (fixed_values or {}).items()}
+
+
 def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, maxiter=500, ftol=1e-12, gtol=1e-8,
                        n_restarts=1, jitter_frac=0.02, seed=0, history_file=output_file_local, print_every=10,
                        n_jobs=1, maxfun=None, method='L-BFGS-B', residual_func=None, log_scale='auto',
-                       start_points=None, max_outer=8):
+                       start_points=None, max_outer=8, fixed_values=None):
     """
     L-BFGS-B minimization of cost_func starting from param_init (e.g. the result of
     differential_evolution) to reach the exact local optimum.
@@ -239,6 +273,9 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
                   cost_func (default: known for fm.pest.cost_withS).
     start_points: additional full start vectors (e.g. Latin hypercube points, see
                   multistart_optimization); start 0 is param_init, then the jittered starts.
+    fixed_values: {index: value}: these parameters are held at value (also outside their bounds,
+                  e.g. 0 for a non-identifiable k_ij) and only the others are refined; the returned
+                  vector contains the fixed values. See apply_fixed_values.
 
     Only free parameters (lower bound < upper bound) are optimized; fixed ones (e.g. the
     diagonal k_ii = 0 or predefined S entries) stay at their value.
@@ -260,6 +297,8 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     than param_init.
     """
     param_init = np.asarray(param_init, dtype=float)
+    if fixed_values:
+        calibr_setup = apply_fixed_values(calibr_setup, fixed_values)
     bnds = calibr_setup['param_bnds']
     lo = np.array([b[0] for b in bnds], dtype=float)
     hi = np.array([b[1] for b in bnds], dtype=float)

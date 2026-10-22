@@ -22,7 +22,8 @@ sys.path.append(os.getcwd())
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
 from fusion_model.parameter_estimation import profile_likelihood as pl
-from profile_likelihood_model_paper import make_param_names, exp_temps_from_columns
+from profile_likelihood_model_paper import (make_param_names, exp_temps_from_columns, resolve_fixed_values,
+                                            fixed_values_from_result, print_parameter_table)
 
 import numpy as np
 
@@ -88,6 +89,11 @@ if __name__ == "__main__":
     # local step and profile fits: 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on
     # the residuals, parameters scaled, much faster convergence for ill-conditioned problems)
     LOCAL_METHOD = 'L-BFGS-B'
+    # local step: parameters held at a fixed value, only the others are refined (e.g. non-identifiable ones
+    # set to 0). Keys: index or name (see the printed parameter table), e.g. {17: 0., 18: 0.} or
+    # {'k_00,01': 0.}; the value may lie outside the bounds. Stored as 'fixed_params' in
+    # Result_calibration*.json and kept fixed in the profile likelihood (not profiled, not re-fitted).
+    FIX_PARAMS = {}
 
     # profile likelihood settings
     PROFILE = 'all'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
@@ -185,17 +191,22 @@ if __name__ == "__main__":
 
     # 3) local refinement ------------------------------------------------
     if RUN_LOCAL:
+        fixed = resolve_fixed_values(FIX_PARAMS, names)
+        print_parameter_table(names, param_glob, calibr_setup['param_bnds'], fixed)
         param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
+                                                         fixed_values=fixed,
                                                          maxiter=200 if LOCAL_METHOD == 'least_squares' else 1000,
                                                          n_restarts=3, jitter_frac=0.05, n_jobs=n_jobs,
                                                          method=LOCAL_METHOD,
                                                          history_file=path + 'optimization_history_local.csv')
         print(f'{(time.time() - start) / 60.:.1f} min (global + local), cost = {cost_opt:.6g}')
         s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
-        fm.output.json_dump({'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt},
+        fm.output.json_dump({'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt,
+                             'fixed_params': fm.pest.fixed_values_record(fixed, names)},
                             f'Result_calibration{add_name}.json', dir=path)
     else:
         param_opt = np.array(fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path)['param_ode'])
+    fixed = fixed_values_from_result(fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path))
     print_comparison(names, param_opt, param_true, calibr_setup['param_bnds'], 'Local refinement vs. truth:')
 
     # 4) profile likelihood ----------------------------------------------
@@ -203,6 +214,8 @@ if __name__ == "__main__":
         out_path = path + 'profile_likelihood/'
         os.makedirs(out_path, exist_ok=True)
         pl_setup = dict(calibr_setup)
+        if fixed:  # parameters fixed in the refinement stay fixed (not profiled, not re-fitted)
+            pl_setup, param_opt = fm.pest.apply_fixed_values(pl_setup, fixed, param=param_opt, names=names)
         pl_setup['aggregation_func'] = {
             'neg2logL': pl.make_gaussian_neg2loglik(pl_setup['data_array']),
             'geomean': pl.make_geomean_neg2loglik(pl_setup['data_array']),

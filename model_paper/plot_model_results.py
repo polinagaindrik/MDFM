@@ -8,15 +8,24 @@ import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     plt.rcParams['figure.dpi'] = 500
-    n_cl = 4
-    n_media = 2
-    relnoise = 0.1
+    # 'paper'   : model_complexity calibration (n_cl species, set below)
+    # 'test_2sp': 2-species test of model_paper/test_2sp.py
+    CASE = 'test_2sp'
 
-    #path = 'model_paper/out/'#f'model_paper/out/{int(n_cl)}_dim/calibration/'#
-    #path2 = path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
-    path = f'model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
+    if CASE == 'test_2sp':
+        n_cl = 2
+        n_media = 2
+        path = 'model_paper/out/test_2sp/'
+        add_name = f'_{int(n_cl)}dim_{int(n_media)}media_test'
+    else:
+        n_cl = 4
+        n_media = 2
+        relnoise = 0.1
+        #path = 'model_paper/out/'#f'model_paper/out/{int(n_cl)}_dim/calibration/'#
+        #path2 = path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
+        path = f'model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
+        add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
     path2 = path
-    add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
     data = fm.dtf.filter_dataframe_regex('V.._', data)
@@ -28,6 +37,8 @@ if __name__ == "__main__":
     # 'json': final result Result_calibration<add_name>.json (after local refinement)
     # 'history': last step of the global optimization history (optimization_history1.csv)
     RESULT_SOURCE = 'json'
+    print(f'Plotting {CASE}: {path}, result from ' +
+          (f'Result_calibration{add_name}.json' if RESULT_SOURCE == 'json' else 'optimization_history1.csv'))
     if RESULT_SOURCE == 'json':
         param_opt = np.array(fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path)['param_ode'], dtype=float)
     else:
@@ -44,7 +55,8 @@ if __name__ == "__main__":
         'model': fm.mdl.fusion_model2,
         'T_x': T_x,
         'output_path': path2,
-        'exp_temps': fm.output.read_from_json(''+'exp_temps_model_paper.json', dir='model_paper/'),
+        # temperature of each experiment from the column names, e.g. 'V01_M1_02C_00_MRS-mibi' -> 2.0
+        'exp_temps': {c.split('_')[0]: float(c.split('_')[2].rstrip('C')) for c in data[0].columns},
         's_x': s_x,
         'media': media, 
     }
@@ -65,11 +77,14 @@ if __name__ == "__main__":
             k += 1
 
     labels = ('Time',  r'log CFU mL$^{-1}$')
+    temps_all = sorted(set(calibr_setup['exp_temps'].values()))
     for j, med in enumerate(media):
-        fm.plotting.plot_all([2., 6., 10.], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med), clrs=exp_clrs,
-                 temps=temps_model, mtimes=t_model, mestim=obs_mibi_model[:,j, : ], dir=path2, add_name=f'MiBi_{med}_const_model'+add_name, time_lim=[17.5, 17.5, 17.5])
+        fm.plotting.plot_all(temps_all, labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med), clrs=exp_clrs,
+                 temps=temps_model, mtimes=t_model, mestim=obs_mibi_model[:,j, : ], dir=path2, add_name=f'MiBi_{med}_const_model'+add_name, time_lim=[17.5 for _ in temps_all])
     for j, med in enumerate(media):
-        for i, temp in enumerate([2., 6., 10.]):
-            obs_mibi = obs_mibi_model[3*i:3*i+3,j,:]
+        for temp in temps_all:
+            # model rows (experiments, sorted as in calc_obs_model) at this temperature
+            rows = [k for k, e in enumerate(exps) if calibr_setup['exp_temps'][e] == temp]
+            obs_mibi = obs_mibi_model[rows, j, :]
             fm.plotting.plot_all([temp], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med).filter(like=f'_{int(temp):02d}C_'),
                      clrs=exp_clrs,temps=temps_model, mtimes=t_model, mestim=obs_mibi, dir=path2, add_name=f'MiBi_{med}_const_model_{int(temp)}Grad'+add_name, time_lim=[17.5])

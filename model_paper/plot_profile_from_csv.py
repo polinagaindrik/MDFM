@@ -30,14 +30,14 @@ if __name__ == "__main__":
     add_name = f"_{int(n_cl)}dim_{int(n_media)}media_test"
     #path2 = f"model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/"
     path2 = f"model_paper/out/test_2sp/"
-    tag = f"{add_name}_all"
+    tag = f"{add_name}_all_geomean"
     CSV_PATH = path2 + f"profile_likelihood/profile_likelihood_results{tag}.csv"
 
     SCALE = "auto"  # read from <csv>_summary.json; or a float as in pool_paper
     # 'optimum': Delta relative to the optimum of the run; 'best': relative to the lowest cost
     # found, if profile points are below the optimum (negative Delta, refit did not converge)
     REFERENCE = "optimum"
-    SHOW_TRUE_VALUE = True  # False: no green "true value" line (e.g. for real data or final figures)
+    SHOW_TRUE_VALUE = False  # False: no green "true value" line (e.g. for real data or final figures)
 
     MAKE_GRID_PLOT = True
     GRID_OUT_PATH = path2 + f"profile_likelihood/profile_likelihood_grid{tag}.png"

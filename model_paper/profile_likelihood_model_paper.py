@@ -170,7 +170,7 @@ if __name__ == "__main__":
     path2 = f"model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/"
     out_path = path2 + "profile_likelihood/"
 
-    PROFILE = "ode+S"       # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
+    PROFILE = "all"       # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
     FIX_X0 = False          # True: x0 held at the estimate (faster, profiles conditional on x0)
     # S (media matrix): False = re-fitted at every profile point (default)
     #                   'estimate' = held at the estimated values, 'true' = held at the true values (in-silico)
@@ -178,7 +178,7 @@ if __name__ == "__main__":
     # Objective: 'neg2logL' (-2 log L, data types weighted by number of points),
     # 'geomean' (-2 log L form of the calibration cost: same optimum as the calibration, equal
     # weight per data type) or 'calibration' (cost_sum_and_geometric_mean itself, linearized scale)
-    OBJECTIVE = "neg2logL"
+    OBJECTIVE = "geomean"
     SHOW_TRUE_VALUE = True  # False: profile plots without the green "true value" line
     # Add points to the existing profiles (same PROFILE / FIX_* / OBJECTIVE -> same CSV) instead of a new run:
     #   None   : normal profile run
@@ -192,8 +192,8 @@ if __name__ == "__main__":
     EXTEND_N_POINTS = 6
     # fit at every profile point: 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on the
     # residuals, parameters scaled; much faster convergence for ill-conditioned problems)
-    LOCAL_METHOD = "L-BFGS-B"
-    profile_options = {"method": "least_squares", "maxiter": 200} if LOCAL_METHOD == "least_squares" else None
+    LOCAL_METHOD = "least_squares"
+    profile_options = {"method": "least_squares", "maxiter": 200, "xtol": 1e-8} if LOCAL_METHOD == "least_squares" else None
     # ODE solver: numba-compiled fusion_model2 is used automatically if numba is installed (~6x faster,
     # identical results). 'odeint' is ~2x faster again, results differ only at solver tolerance (~1e-5).
     fm.mdl.solving.ODE_BACKEND = "solve_ivp"
@@ -248,13 +248,13 @@ if __name__ == "__main__":
 
     df, cis = run_profile_likelihood_all(
         param_opt, calibr_setup,
-        span=1., n_points=30, method="local",
+        span=1., n_points=15, method="local",
         n_jobs=20,              # <-- parallelize across (parameter, direction) walks
         per_point_workers=1,    # <-- irrelevant for method="local", leave at 1
         out_csv=out_path + f"profile_likelihood_results{tag}.csv",
         plot_path=out_path + f"profile_likelihood{tag}.png",
         param_names=ode_param_names,
-        n_restarts=1, jitter_frac=0.05,
+        n_restarts=3, jitter_frac=0.05,
         # optional extras (model_paper):
         profile_indices=profile_indices,
         fixed_indices=fixed_indices,

@@ -8,15 +8,26 @@ import pandas as pd
 
 
 if __name__ == "__main__":
-    n_cl = 4
-    n_media = 2
-    relnoise = 0.1
+    # 'paper'   : model_complexity calibration (n_cl species, set below)
+    # 'test_2sp': 2-species test of model_paper/test_2sp.py
+    CASE = 'test_2sp'
 
-    #path = 'model_paper/out/'#f'model_paper/out/{int(n_cl)}_dim/calibration/'#
-    #path2 = path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
-    path = f'model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
+    if CASE == 'test_2sp':
+        n_cl = 2
+        n_media = 2
+        path = 'model_paper/out/test_2sp/'
+        add_name = f'_{int(n_cl)}dim_{int(n_media)}media_test'
+        real_file = f'Result_real{add_name}.json'
+    else:
+        n_cl = 4
+        n_media = 2
+        relnoise = 0.1
+        #path = 'model_paper/out/'#f'model_paper/out/{int(n_cl)}_dim/calibration/'#
+        #path2 = path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
+        path = f'model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
+        add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
+        real_file = 'Result_temp_together_real.json'
     path2 = path
-    add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
     data = fm.dtf.filter_dataframe_regex('V.._', data)
@@ -33,6 +44,8 @@ if __name__ == "__main__":
     # 'json': final result Result_calibration<add_name>.json (after local refinement)
     # 'history': last step of the global optimization history (optimization_history1.csv)
     RESULT_SOURCE = 'json'
+    print(f'Plotting {CASE}: {path}, result from ' +
+          (f'Result_calibration{add_name}.json' if RESULT_SOURCE == 'json' else 'optimization_history1.csv'))
     os.makedirs(path2+'optimization/', exist_ok=True)
 
     # Cost function along the optimization (global and, if present, local refinement)
@@ -65,7 +78,7 @@ if __name__ == "__main__":
         'media': sorted(list(set([s.split('_')[-1].split('-')[0] for s in data[1].columns]))),
     }
     calibr_setup['s_x'] = s_x
-    res_real = fm.output.read_from_json('Result_temp_together_real.json', dir=path2)
+    res_real = fm.output.read_from_json(real_file, dir=path2)
     param_ode_real = np.array(res_real['param_ode'])[n_cl*len(exps):]
     
     fm.plotting.plot_parameters(param_ode, bact_all, exps, clrs1, param_real=param_ode_real, path=path2+'optimization/')

@@ -94,6 +94,9 @@ if __name__ == "__main__":
     # {'k_00,01': 0.}; the value may lie outside the bounds. Stored as 'fixed_params' in
     # Result_calibration*.json and kept fixed in the profile likelihood (not profiled, not re-fitted).
     FIX_PARAMS = {}
+    # True: FIX_PARAMS also in the global step (new differential evolution / multistart search with these
+    # parameters fixed) instead of only refining from the earlier global result
+    FIX_IN_GLOBAL = False
 
     # profile likelihood settings
     PROFILE = 'all'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
@@ -168,22 +171,28 @@ if __name__ == "__main__":
 
     # 2) global optimization ---------------------------------------------
     fm.pest.optimization.output_file = path + 'optimization_history1.csv'  # DE history into the test folder
+    fixed_glob = resolve_fixed_values(FIX_PARAMS, names) if FIX_IN_GLOBAL else {}
     if RUN_GLOBAL:
+        glob_setup = calibr_setup
+        if fixed_glob:
+            print_parameter_table(names, param_true, calibr_setup['param_bnds'], fixed_glob)
+            glob_setup = fm.pest.apply_fixed_values(calibr_setup, fixed_glob, names=names)
         de_starts = []
         if GLOBAL_METHOD in ('de', 'de+multistart'):
-            param_glob, cost_glob = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_setup)
+            param_glob, cost_glob = fm.pest.calculate_model_params(fm.pest.cost_withS, glob_setup)
             print(f'{(time.time() - start) / 60.:.1f} min (differential evolution), cost = {cost_glob:.6g}')
             de_starts = [param_glob]
         if GLOBAL_METHOD in ('multistart', 'de+multistart'):
             param_glob, cost_glob = fm.pest.multistart_optimization(
-                fm.pest.cost_withS, calibr_setup, n_starts=N_STARTS, extra_starts=de_starts, method=LOCAL_METHOD,
+                fm.pest.cost_withS, glob_setup, n_starts=N_STARTS, extra_starts=de_starts, method=LOCAL_METHOD,
                 maxiter=200 if LOCAL_METHOD == 'least_squares' else 1000, n_jobs=n_jobs,
                 history_file=path + 'optimization_history_multistart.csv')
         elif GLOBAL_METHOD != 'de':
             raise ValueError("GLOBAL_METHOD must be 'de', 'multistart' or 'de+multistart'")
         print(f'{(time.time() - start) / 60.:.1f} min (global), cost = {cost_glob:.6g}')
         s_x_glob = np.array(param_glob)[-n_cl*n_media:].reshape((n_media, n_cl))
-        fm.output.json_dump({'param_ode': param_glob.astype(list), 's_x': s_x_glob, 'T_x': T_x, 'cost': cost_glob},
+        fm.output.json_dump({'param_ode': param_glob.astype(list), 's_x': s_x_glob, 'T_x': T_x, 'cost': cost_glob,
+                             'fixed_params': fm.pest.fixed_values_record(fixed_glob, names)},
                             f'Result_calibration{add_name}_global.json', dir=path)
     else:
         param_glob = np.array(fm.output.read_from_json(f'Result_calibration{add_name}_global.json', dir=path)['param_ode'])

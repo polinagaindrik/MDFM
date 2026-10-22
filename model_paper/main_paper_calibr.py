@@ -1,7 +1,9 @@
 import os
 import sys
 sys.path.append(os.getcwd())
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
+from profile_likelihood_model_paper import make_param_names, resolve_fixed_values, print_parameter_table
 
 import numpy as np
 import time
@@ -12,6 +14,11 @@ if __name__ == "__main__":
     n_cl = 6
     n_media = 1
     relnoise = 0.1
+    # Parameters held at a fixed value, e.g. non-identifiable ones at 0 (keys: index or name, value may lie
+    # outside the bounds), e.g. {'k_00,01': 0.}. Applied in the local refinement; with FIX_IN_GLOBAL = True
+    # also in the global search. Stored as 'fixed_params' in the result JSON (profiles keep them fixed).
+    FIX_PARAMS = {}
+    FIX_IN_GLOBAL = False
 
     add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
     path_new = path#path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
@@ -47,12 +54,20 @@ if __name__ == "__main__":
         }
     fm.output.json_dump(calibr_presetup['exp_temps'], 'exp_temps_model_paper.json', dir='model_paper/')
     calibr_setup = fm.pest.define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=s_x_predefined, s_x=None)
-    
+    names = make_param_names(exps_calibr, list(df_maldi.index), media)
+    fixed = resolve_fixed_values(FIX_PARAMS, names)
+    fixed_glob = fixed if FIX_IN_GLOBAL else {}
+    if fixed:
+        print_parameter_table(names, [b[0] for b in calibr_setup['param_bnds']], calibr_setup['param_bnds'], fixed)
+
     # 1) Global optimization (differential evolution)
-    param_glob, cost_glob = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_setup)
+    glob_setup = fm.pest.apply_fixed_values(calibr_setup, fixed_glob, names=names) if fixed_glob else calibr_setup
+    param_glob, cost_glob = fm.pest.calculate_model_params(fm.pest.cost_withS, glob_setup)
+    calibr_setup['data_array'] = glob_setup['data_array']
     print((time.time()-start)/60., 'min (global)')
     s_x_glob = np.array(param_glob)[-n_cl*n_media:].reshape((n_media, n_cl))
-    fm.output.json_dump({'param_ode': param_glob.astype(list), 's_x': s_x_glob, 'T_x': T_x, 'cost': cost_glob},
+    fm.output.json_dump({'param_ode': param_glob.astype(list), 's_x': s_x_glob, 'T_x': T_x, 'cost': cost_glob,
+                         'fixed_params': fm.pest.fixed_values_record(fixed_glob, names)},
                         f'Result_calibration{add_name}_global.json', dir=path_new)
 
     # 2) Local refinement from the global result -> exact local optimum
@@ -64,6 +79,7 @@ if __name__ == "__main__":
     param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
                                                      maxiter=200 if LOCAL_METHOD == 'least_squares' else 1000,
                                                      n_restarts=4, jitter_frac=0.02, n_jobs=4, method=LOCAL_METHOD,
+                                                     fixed_values=fixed,
                                                      history_file=path_new+'optimization_history_local.csv')
     print((time.time()-start)/60., 'min (global + local)')
 
@@ -72,6 +88,7 @@ if __name__ == "__main__":
     calibr_setup['s_x'] = s_x
 
     # Final (refined) result keeps the usual file name, so all downstream scripts use it
-    fm.output.json_dump({'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt},
+    fm.output.json_dump({'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt,
+                         'fixed_params': fm.pest.fixed_values_record(fixed, names)},
                         f'Result_calibration{add_name}.json', dir=path_new)
     param_opt = fm.output.read_from_json(''+f'Result_calibration{add_name}.json', dir=path_new)['param_ode']

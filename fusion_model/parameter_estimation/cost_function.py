@@ -189,3 +189,26 @@ def cost_arithmetic_mean(J_vect):#ll_ngs, ll_maldi, ll_mibi):
 def cost_sum_and_geometric_mean(J_vect):#ll_ngs, ll_maldi, ll_mibi):
     """Return the geometric mean of the non-NaN residual sum from each array."""
     return gmean([np.nansum(Ji) for Ji in J_vect], nan_policy='omit', axis=None)
+
+
+DATA_TYPES = ('ngs', 'maldi', 'mibi')  # order of J_vect in cost_withS / squared_differences
+
+
+class SelectedDataTypes:
+    """
+    Aggregation over a subset of the data types: calls aggregation_func only with the
+    residual arrays of the data types in use (names from DATA_TYPES), e.g.
+    SelectedDataTypes(cost_sum_and_geometric_mean, ['ngs', 'maldi']) calibrates without MiBi.
+    A class (not a closure) so that calibr_setup stays picklable for the worker pools.
+    """
+    def __init__(self, aggregation_func, use):
+        """Store the wrapped aggregation and the data types in use."""
+        unknown = set(use) - set(DATA_TYPES)
+        if unknown:
+            raise ValueError(f'unknown data types {sorted(unknown)}, choose from {DATA_TYPES}')
+        self.aggregation_func = aggregation_func
+        self.use = [k in use for k in DATA_TYPES]
+
+    def __call__(self, J_vect):
+        """Aggregate the residual arrays of the selected data types."""
+        return self.aggregation_func([J for J, u in zip(J_vect, self.use) if u])

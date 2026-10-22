@@ -20,7 +20,7 @@ output_file_predict = 'out/optimization_history_predict.csv'
 output_file_local = 'out/optimization_history_local.csv'
 
 
-def calculate_model_params(cost_func, calibr_setup, local_polish=False, local_options=None):
+def calculate_model_params(cost_func, calibr_setup, local_polish=False, local_options=None, maxiter=1000):
     """
     Global optimization (differential_evolution) of the model parameters.
 
@@ -30,6 +30,7 @@ def calculate_model_params(cost_func, calibr_setup, local_polish=False, local_op
                     result is usually close to, but not at, a local minimum.
     local_options : dict of keyword arguments for local_optimization
                     (e.g. {'maxiter': 1000, 'n_restarts': 3}).
+    maxiter       : max. number of differential evolution generations.
     Returns (param_opt, cost_opt); with local_polish the refined values.
     """
     jac_spasity = mdl.jacobian_sparsity(np.shape(calibr_setup['dfs'][1])[0])
@@ -41,7 +42,7 @@ def calculate_model_params(cost_func, calibr_setup, local_polish=False, local_op
     data_array = extract_observables_from_df(calibr_setup['dfs'])
     calibr_setup['data_array'] = data_array
     optim_output = optimization_func(cost_func, calibr_setup['param_bnds'], args=(calibr_setup, jac_spasity),
-                                     workers=calibr_setup['workers'])
+                                     workers=calibr_setup['workers'], maxiter=maxiter)
     param_opt, cost_opt = np.array(optim_output.x), optim_output.fun
     if local_polish:
         param_opt, cost_opt = local_optimization(cost_func, param_opt, calibr_setup, jac_spasity=jac_spasity,
@@ -398,9 +399,9 @@ def calculate_prediction(cost_func, calibr_setup):
 
 
 # Parameter estimation using minimizstion of the negative log-likelihood function (func)
-def optimization_func(func, bnds, args=(), workers=1):
+def optimization_func(func, bnds, args=(), workers=1, maxiter=1000):
     """Run differential evolution with the calibration search settings."""
-    return differential_evolution(func, args=args, tol=1e-6, atol=1e-6, maxiter=1000, mutation=(0.3, 1.9), recombination=0.7, popsize=30,
+    return differential_evolution(func, args=args, tol=1e-6, atol=1e-6, maxiter=maxiter, mutation=(0.3, 1.9), recombination=0.7, popsize=30,
                                   bounds=bnds, init='latinhypercube', disp=True, polish=False, updating='deferred', workers=workers,
                                   strategy='randtobest1bin', callback=_callback_ll) #init='sobol'
 

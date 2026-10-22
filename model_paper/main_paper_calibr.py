@@ -55,11 +55,15 @@ if __name__ == "__main__":
     fm.output.json_dump({'param_ode': param_glob.astype(list), 's_x': s_x_glob, 'T_x': T_x, 'cost': cost_glob},
                         f'Result_calibration{add_name}_global.json', dir=path_new)
 
-    # 2) Local refinement (L-BFGS-B) from the global result -> exact local optimum
+    # 2) Local refinement from the global result -> exact local optimum
+    #    LOCAL_METHOD: 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on the residuals,
+    #    parameters scaled; much faster convergence for ill-conditioned problems, maxiter = evaluations per solve)
     #    n_restarts: start 0 = global result, the others = random perturbations of it (jitter_frac*bound width)
     #    n_jobs: starts run in parallel processes (-1 = all cores)
+    LOCAL_METHOD = 'L-BFGS-B'
     param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
-                                                     maxiter=1000, n_restarts=4, jitter_frac=0.02, n_jobs=4,
+                                                     maxiter=200 if LOCAL_METHOD == 'least_squares' else 1000,
+                                                     n_restarts=4, jitter_frac=0.02, n_jobs=4, method=LOCAL_METHOD,
                                                      history_file=path_new+'optimization_history_local.csv')
     print((time.time()-start)/60., 'min (global + local)')
 

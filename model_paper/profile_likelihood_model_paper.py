@@ -119,6 +119,26 @@ def make_param_names(exps, bact, media):
     return names
 
 
+def resolve_fixed_values(fix, names):
+    """{index: value} from a dict whose keys are indices or parameter names (as in make_param_names,
+    with or without the LaTeX $ \\ { }), e.g. {17: 0.} or {'k_00,01': 0., 'alpha_exp,00': 0.}."""
+    return {pl._resolve_param_index(k, names): float(v) for k, v in (fix or {}).items()}
+
+
+def fixed_values_from_result(result):
+    """{index: value} stored by the refinement as 'fixed_params' in Result_calibration*.json."""
+    return {int(i): float(d["value"]) for i, d in (result.get("fixed_params") or {}).items()}
+
+
+def print_parameter_table(names, param, bnds, fixed=None):
+    """Index, name, value and bounds of every parameter (to choose indices for FIX_PARAMS)."""
+    fixed = fixed or {}
+    print("Parameters (index, name, value, bounds):")
+    for i, (n, v, b) in enumerate(zip(names, param, bnds)):
+        tag = f"   fixed at {fixed[i]:g}" if i in fixed else ("   (fixed by bounds)" if b[1] <= b[0] else "")
+        print(f"  {i:3d}  {n:<28} {v:12.5g}   ({b[0]:g}, {b[1]:g}){tag}")
+
+
 def build_calibr_setup(path, add_name, n_cl, n_media, objective="neg2logL"):
     """calibr_setup (incl. param_bnds and data_array) for a saved calibration.
     objective: 'neg2logL'    GaussianNeg2LogLik: -2 log L, data types weighted by their number of points
@@ -156,6 +176,9 @@ def build_calibr_setup(path, add_name, n_cl, n_media, objective="neg2logL"):
     param_opt = np.array(result["param_ode"], dtype=float)
     param_names = make_param_names(exps, bact, media)
     assert len(param_opt) == len(calibr_setup["param_bnds"]) == len(param_names)
+    fixed = fixed_values_from_result(result)
+    if fixed:  # parameters held fixed in the refinement stay fixed (not profiled, not re-fitted)
+        calibr_setup, param_opt = fm.pest.apply_fixed_values(calibr_setup, fixed, param=param_opt, names=param_names)
     return calibr_setup, param_opt, param_names, true_params
 
 

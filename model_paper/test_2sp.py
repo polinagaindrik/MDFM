@@ -73,13 +73,13 @@ if __name__ == "__main__":
     temps = [2., 6., 10.]          # 3 experiments, 3 temperatures
     ntr = 1
     add_name = f'_{n_cl}dim_{n_media}media_test'
-    workers = 3#-1                   # differential evolution: -1 = all cores
-    n_jobs = 3#os.cpu_count()-2 or 1   # local multistart / profile likelihood processes
+    workers = 21#-1                   # differential evolution: -1 = all cores
+    n_jobs = 21#os.cpu_count()-2 or 1   # local multistart / profile likelihood processes
 
     RUN_DATA = False               # generate the in-silico data
     RUN_GLOBAL = False             # 2) differential evolution
     RUN_LOCAL = True               # 3) local refinement
-    RUN_PROFILE = False             # 4) profile likelihood
+    RUN_PROFILE = True             # 4) profile likelihood
 
     # optimizer settings
     # global step: 'de'            differential evolution (as before)
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     # Penalty so that the largest media coefficient S is 1 (fixes the x0/S scale trade-off): weight w, the cost
     # rises by the factor exp(w * (max S - 1)^2), e.g. w = 100: max S = 0.9 -> +172 %, 0.97 -> +9 %. None: off.
     # Stored in the result JSON; the profile likelihood uses the same penalty (needs new profiles).
-    S_MAX_PENALTY = None
+    S_MAX_PENALTY = 100
 
     # profile likelihood settings
     PROFILE = 'all'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
@@ -241,7 +241,7 @@ if __name__ == "__main__":
     if RUN_LOCAL:
         fixed = resolve_fixed_values(FIX_PARAMS, names)
         print_parameter_table(names, param_glob, calibr_setup['param_bnds'], fixed)
-        param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup, fixed_values=fixed, maxiter=500 if LOCAL_METHOD == 'least_squares' else 1000,n_restarts=3, jitter_frac=0.1, n_jobs=n_jobs, method=LOCAL_METHOD, history_file=path + 'optimization_history_local.csv')
+        param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup, fixed_values=fixed, maxiter=500 if LOCAL_METHOD == 'least_squares' else 1000,n_restarts=5, jitter_frac=0.1, n_jobs=n_jobs, method=LOCAL_METHOD, history_file=path + 'optimization_history_local.csv')
         print(f'{(time.time() - start) / 60.:.1f} min (global + local), cost = {cost_opt:.6g}')
         s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
         save_result(f'Result_calibration{add_name}.json',
@@ -306,7 +306,7 @@ if __name__ == "__main__":
                 print(f'  {i:3d}  {names[i]:<28} estimate = {param_opt[i]:.6g}, bounds {calibr_setup["param_bnds"][i]}')
             pl.extend_profile_likelihood(
                 fm.pest.cost_withS, pl_setup, out_csv, EXTEND,
-                n_jobs=n_jobs, n_restarts=1, jitter_frac=0.05,
+                n_jobs=n_jobs, n_restarts=3, jitter_frac=0.05,
                 fixed_indices=fixed_indices,
                 stop_factor=3,
                 minimize_options=profile_options,
@@ -318,12 +318,12 @@ if __name__ == "__main__":
         else:
             df, cis = pl.run_profile_likelihood_all(
                 fm.pest.cost_withS, param_opt, pl_setup,
-                span=3, n_points=12, method='local',
+                span=1., n_points=12, method='local',
                 n_jobs=n_jobs,
                 out_csv=out_csv,
                 plot_path=out_path + f'profile_likelihood{tag}.png',
                 param_names=names,
-                n_restarts=1, jitter_frac=0.05,
+                n_restarts=3, jitter_frac=0.05,
                 profile_indices=profile_indices,
                 fixed_indices=fixed_indices,
                 refine=FIX_S == 'true' or not same_optimum,  # re-fit first if the optimum differs (FIX_S='true', objective)

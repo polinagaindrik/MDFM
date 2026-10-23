@@ -305,6 +305,13 @@ if __name__ == "__main__":
                   f'the profiles use {OBJECTIVE!r} / {NOISE_MODEL!r}: the estimate is re-fitted first (refine)')
         print(f'Profile objective ({OBJECTIVE}) at the truth: {fm.pest.cost_withS(param_true, pl_setup, None):.6g}, '
               f'at the estimate: {fm.pest.cost_withS(param_opt, pl_setup, None):.6g}')
+        # breakdown per data type: sum of squared residuals and number of data points (degrees of freedom)
+        n_dof = fm.pest.count_data_points_noise(pl_setup['data_array'], NOISE_MODEL)
+        for lab, p_ in (('truth', param_true), ('estimate', param_opt)):
+            groups, _ = fm.pest.residuals_withS(p_, pl_setup)
+            print(f'  {lab:8s}: ' + ', '.join(f'{k} SSR = {np.sum(r**2):.4g} (n = {n})'
+                                              for k, r, n in zip(('NGS', 'MALDI', 'MiBi'), groups, n_dof))
+                  + f', max S = {np.max(np.asarray(p_)[-n_cl*n_media:]):.3g}')
 
         n_x0 = n_cl * len(exps)
         n_ode = 4 * n_cl + 2 + n_cl * n_cl

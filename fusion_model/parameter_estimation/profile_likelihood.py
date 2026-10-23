@@ -166,6 +166,41 @@ class GeometricMeanNeg2LogLik(GaussianNeg2LogLik):
         return total
 
 
+class KnownNoiseNeg2LogLik(GaussianNeg2LogLik):
+    """
+    -2 log L for a KNOWN noise level (no variance estimated from the residuals):
+        sum_k SSR_k / sigma_k^2      (+ constant)
+    sigma: one value or one per data type [ngs, maldi, mibi], in the units of the residuals
+    (noise_model='relative': standard deviation of the log residuals, e.g. 0.1 for 10 % noise).
+    Use it for noise-free (or simulated 'expected') data: the variance-estimating objectives
+    (GaussianNeg2LogLik, GeometricMeanNeg2LogLik) diverge to -inf when the residuals go to 0, while
+    this one gives the profiles that an experiment with noise level sigma would have.
+    """
+
+    def __init__(self, n_data, sigma):
+        super().__init__(n_data)
+        s = np.atleast_1d(np.asarray(sigma, dtype=float))
+        self.sigma = [float(v) for v in (np.repeat(s, len(self.n_data)) if len(s) == 1 else s)]
+        if len(self.sigma) != len(self.n_data) or min(self.sigma) <= 0:
+            raise ValueError("sigma: one positive value or one per data type [ngs, maldi, mibi]")
+
+    def __call__(self, J_vect):
+        total = 0.
+        for J, n, sig in zip(J_vect, self.n_data, self.sigma):
+            if n == 0:
+                continue
+            J = np.asarray(J, dtype=float)
+            if np.any(np.isinf(J)):
+                return PENALTY
+            total += np.nansum(J) / sig**2
+        return total
+
+
+def make_known_noise_neg2loglik(data_array, sigma, noise_model="absolute"):
+    """KnownNoiseNeg2LogLik from calibr_setup['data_array'] (see make_gaussian_neg2loglik)."""
+    return KnownNoiseNeg2LogLik(make_gaussian_neg2loglik(data_array, noise_model).n_data, sigma)
+
+
 def make_geomean_neg2loglik(data_array, noise_model="absolute"):
     """GeometricMeanNeg2LogLik from calibr_setup['data_array'] (see make_gaussian_neg2loglik)."""
     return GeometricMeanNeg2LogLik(make_gaussian_neg2loglik(data_array, noise_model).n_data)

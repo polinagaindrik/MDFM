@@ -113,11 +113,16 @@ if __name__ == "__main__":
     FIX_S = False        # S re-fitted at every profile point (as before)
     #FIX_S = 'estimate'   # S held at the estimated values
     #FIX_S = 'true'       # S held at the true values (in-silico data only)  
+    # Objective of the profiles and (CALIBRATION_OBJECTIVE = OBJECTIVE) of all optimizations:
     # 'neg2logL'   : -2 log L, data types weighted by their number of points
-    # 'geomean'    : -2 log L form of the calibration cost cost_sum_and_geometric_mean
-    #                (same optimum as the calibration, equal weight per data type)
-    # 'calibration': cost_sum_and_geometric_mean itself (scale linearized: G_opt / N)
-    OBJECTIVE = 'geomean'
+    # 'geomean'    : -2 log L form of cost_sum_and_geometric_mean (same optimum, equal weight per data type)
+    # 'calibration': cost_sum_and_geometric_mean itself (profile scale linearized: G_opt / N)
+    OBJECTIVE = 'neg2logL'
+    # objective of differential evolution / multistart / local refinement; OBJECTIVE = the same objective
+    # everywhere (the optimum of the calibration is then directly the optimum of the profiles).
+    # 'calibration' = cost_sum_and_geometric_mean as before. Stored as 'objective' in the result JSON files;
+    # an existing result with a different objective is kept as Result_calibration<...>_<objective>.json.
+    CALIBRATION_OBJECTIVE = OBJECTIVE
     SHOW_TRUE_VALUE = True         # False: profile plots without the green "true value" line
     # Add points to the existing profiles (same PROFILE / FIX_* / OBJECTIVE -> same CSV) instead of a new run:
     #   None   : normal profile run
@@ -175,10 +180,32 @@ if __name__ == "__main__":
     calibr_setup = fm.pest.define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=s_x_predefined, s_x=None)
     calibr_setup['data_array'] = fm.dtf.extract_observables_from_df(dfs)
     calibr_setup['s_max_penalty'] = S_MAX_PENALTY
+
+    def make_objective(name):
+        """Aggregation function of an objective name (see OBJECTIVE)."""
+        return {'neg2logL': pl.make_gaussian_neg2loglik(calibr_setup['data_array']),
+                'geomean': pl.make_geomean_neg2loglik(calibr_setup['data_array']),
+                'calibration': fm.pest.cost_sum_and_geometric_mean}[name]
+
+    def save_result(fname, data):
+        """Write a result JSON with its objective; keep an existing file that has a different objective."""
+        f = os.path.join(path, fname)
+        if os.path.exists(f):
+            old_obj = fm.output.read_from_json(fname, dir=path).get('objective', 'calibration')
+            if old_obj != CALIBRATION_OBJECTIVE:
+                bak = f.replace('.json', f'_{old_obj}.json')
+                if not os.path.exists(bak):
+                    import shutil
+                    shutil.copy(f, bak)
+                    print(f'Kept the previous result (objective {old_obj}) as {bak}')
+        fm.output.json_dump(dict(data, objective=CALIBRATION_OBJECTIVE), fname, dir=path)
+
+    calibr_setup['aggregation_func'] = make_objective(CALIBRATION_OBJECTIVE)
+    print(f'Objective of the optimizations: {CALIBRATION_OBJECTIVE}')
     names = make_param_names(exps, bact, media)
     param_true = true_parameter_vector(path, add_name, media, n_cl)
     assert len(param_true) == len(calibr_setup['param_bnds']) == len(names)
-    print(f'Cost (calibration objective) at the true parameters: '
+    print(f'Cost ({CALIBRATION_OBJECTIVE}) at the true parameters: '
           f'{fm.pest.cost_withS(param_true, calibr_setup, None):.6g}')
 
     # 2) global optimization ---------------------------------------------
@@ -203,10 +230,9 @@ if __name__ == "__main__":
             raise ValueError("GLOBAL_METHOD must be 'de', 'multistart' or 'de+multistart'")
         print(f'{(time.time() - start) / 60.:.1f} min (global), cost = {cost_glob:.6g}')
         s_x_glob = np.array(param_glob)[-n_cl*n_media:].reshape((n_media, n_cl))
-        fm.output.json_dump({'param_ode': param_glob.astype(list), 's_x': s_x_glob, 'T_x': T_x, 'cost': cost_glob,
-                             'fixed_params': fm.pest.fixed_values_record(fixed_glob, names),
-                             's_max_penalty': S_MAX_PENALTY},
-                            f'Result_calibration{add_name}_global.json', dir=path)
+        save_result(f'Result_calibration{add_name}_global.json',
+                    {'param_ode': param_glob.astype(list), 's_x': s_x_glob, 'T_x': T_x, 'cost': cost_glob,
+                     'fixed_params': fm.pest.fixed_values_record(fixed_glob, names), 's_max_penalty': S_MAX_PENALTY})
     else:
         param_glob = np.array(fm.output.read_from_json(f'Result_calibration{add_name}_global.json', dir=path)['param_ode'])
     print_comparison(names, param_glob, param_true, calibr_setup['param_bnds'], 'Global optimization vs. truth:')
@@ -218,14 +244,15 @@ if __name__ == "__main__":
         param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup, fixed_values=fixed, maxiter=500 if LOCAL_METHOD == 'least_squares' else 1000,n_restarts=3, jitter_frac=0.1, n_jobs=n_jobs, method=LOCAL_METHOD, history_file=path + 'optimization_history_local.csv')
         print(f'{(time.time() - start) / 60.:.1f} min (global + local), cost = {cost_opt:.6g}')
         s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
-        fm.output.json_dump({'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt,
-                             'fixed_params': fm.pest.fixed_values_record(fixed, names),
-                             's_max_penalty': S_MAX_PENALTY},
-                            f'Result_calibration{add_name}.json', dir=path)
+        save_result(f'Result_calibration{add_name}.json',
+                    {'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt,
+                     'fixed_params': fm.pest.fixed_values_record(fixed, names), 's_max_penalty': S_MAX_PENALTY})
         copy_result_to_all_profiles(path, add_name)  # new optimum into existing profile JSON files
     else:
         param_opt = np.array(fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path)['param_ode'])
-    fixed = fixed_values_from_result(fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path))
+    result_local = fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path)
+    fixed = fixed_values_from_result(result_local)
+    result_objective = result_local.get('objective', 'calibration')
     print_comparison(names, param_opt, param_true, calibr_setup['param_bnds'], 'Local refinement vs. truth:')
 
     # 4) profile likelihood ----------------------------------------------
@@ -235,10 +262,12 @@ if __name__ == "__main__":
         pl_setup = dict(calibr_setup)
         if fixed:  # parameters fixed in the refinement stay fixed (not profiled, not re-fitted)
             pl_setup, param_opt = fm.pest.apply_fixed_values(pl_setup, fixed, param=param_opt, names=names)
-        pl_setup['aggregation_func'] = {
-            'neg2logL': pl.make_gaussian_neg2loglik(pl_setup['data_array']),
-            'geomean': pl.make_geomean_neg2loglik(pl_setup['data_array']),
-            'calibration': fm.pest.cost_sum_and_geometric_mean}[OBJECTIVE]
+        pl_setup['aggregation_func'] = make_objective(OBJECTIVE)
+        # 'geomean' and 'calibration' have the same optimum; otherwise the estimate is re-fitted first
+        same_optimum = {result_objective, OBJECTIVE} <= {'geomean', 'calibration'} or result_objective == OBJECTIVE
+        if not same_optimum:
+            print(f'Result_calibration was optimized with {result_objective!r}, the profiles use {OBJECTIVE!r}: '
+                  f'the estimate is re-fitted with {OBJECTIVE!r} first (refine)')
         print(f'Profile objective ({OBJECTIVE}) at the truth: {fm.pest.cost_withS(param_true, pl_setup, None):.6g}, '
               f'at the estimate: {fm.pest.cost_withS(param_opt, pl_setup, None):.6g}')
 
@@ -297,7 +326,7 @@ if __name__ == "__main__":
                 n_restarts=1, jitter_frac=0.05,
                 profile_indices=profile_indices,
                 fixed_indices=fixed_indices,
-                refine=False or FIX_S == 'true',  # re-fit first (always when FIX_S='true', which moves the optimum)
+                refine=FIX_S == 'true' or not same_optimum,  # re-fit first if the optimum differs (FIX_S='true', objective)
                 stop_factor=3,                 # stop each side once Delta > 1.5 x threshold
                 minimize_options=profile_options,
                 true_params=param_true if SHOW_TRUE_VALUE else None,

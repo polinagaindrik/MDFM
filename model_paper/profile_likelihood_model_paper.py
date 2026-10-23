@@ -258,7 +258,13 @@ if __name__ == "__main__":
     # fit at every profile point: 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on the
     # residuals, parameters scaled; much faster convergence for ill-conditioned problems)
     LOCAL_METHOD = "least_squares"
-    profile_options = {"method": "least_squares", "maxiter": 200, "xtol": 1e-8} if LOCAL_METHOD == "least_squares" else None
+    # derivatives of the fits: 'numpy' (finite differences, as before) or 'jax' (exact derivatives by automatic
+    # differentiation, much faster and a more accurate ODE solve; needs: pip install jax diffrax). Used for the
+    # local step, multistart and the profiles (not for differential evolution). Don't mix backends within one
+    # profile run: the profile tools check the cost at the stored optimum and stop if it differs.
+    BACKEND = "numpy"
+    profile_options = {"method": "least_squares", "maxiter": 200, "xtol": 1e-8} if LOCAL_METHOD == "least_squares" else {}
+    profile_options["backend"] = BACKEND
     # ODE solver: numba-compiled fusion_model2 is used automatically if numba is installed (~6x faster,
     # identical results). 'odeint' is ~2x faster again, results differ only at solver tolerance (~1e-5).
     fm.mdl.solving.ODE_BACKEND = "solve_ivp"
@@ -302,7 +308,7 @@ if __name__ == "__main__":
                                      plot_path=out_path + f"profile_likelihood{tag}.png")
         sys.exit(0)
     if UPDATE_OPTIMUM:
-        pl.update_profile_optimum(cost, calibr_setup, out_csv, param_opt,
+        pl.update_profile_optimum(cost, calibr_setup, out_csv, param_opt, backend=BACKEND,
                                   true_params=true_params if SHOW_TRUE_VALUE else None,
                                   plot_path=out_path + f"profile_likelihood{tag}.png")
         sys.exit(0)

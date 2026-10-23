@@ -89,9 +89,14 @@ if __name__ == "__main__":
     #    n_restarts: start 0 = global result, the others = random perturbations of it (jitter_frac*bound width)
     #    n_jobs: starts run in parallel processes (-1 = all cores)
     LOCAL_METHOD = 'L-BFGS-B'
+    # derivatives of the fits: 'numpy' (finite differences, as before) or 'jax' (exact derivatives by automatic
+    # differentiation, much faster and a more accurate ODE solve; needs: pip install jax diffrax). Used for the
+    # local step, multistart and the profiles (not for differential evolution). Don't mix backends within one
+    # profile run: the profile tools check the cost at the stored optimum and stop if it differs.
+    BACKEND = 'numpy'
     param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
                                                      maxiter=200 if LOCAL_METHOD == 'least_squares' else 1000,
-                                                     n_restarts=4, jitter_frac=0.02, n_jobs=4, method=LOCAL_METHOD,
+                                                     n_restarts=4, jitter_frac=0.02, n_jobs=4, method=LOCAL_METHOD, backend=BACKEND,
                                                      fixed_values=fixed,
                                                      history_file=path_new+'optimization_history_local.csv')
     print((time.time()-start)/60., 'min (global + local)')

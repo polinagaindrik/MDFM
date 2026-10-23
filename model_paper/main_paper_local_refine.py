@@ -43,6 +43,11 @@ if __name__ == "__main__":
     # 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on the residuals, parameters
     # scaled; much faster convergence for ill-conditioned problems; MAXITER = evaluations per solve, ~200)
     LOCAL_METHOD = 'L-BFGS-B'
+    # derivatives of the fits: 'numpy' (finite differences, as before) or 'jax' (exact derivatives by automatic
+    # differentiation, much faster and a more accurate ODE solve; needs: pip install jax diffrax). Used for the
+    # local step, multistart and the profiles (not for differential evolution). Don't mix backends within one
+    # profile run: the profile tools check the cost at the stored optimum and stop if it differs.
+    BACKEND = 'numpy'
     # Parameters held at a fixed value, only the others are refined, e.g. non-identifiable ones set to 0.
     # Keys: index or name (see the printed parameter table), e.g. {17: 0.} or {'k_00,01': 0., 'k_01,00': 0.}.
     # The value may lie outside the bounds. The fixed values are part of param_ode in the output JSON and
@@ -95,7 +100,7 @@ if __name__ == "__main__":
     start = time.time()
     param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
                                                      maxiter=MAXITER, n_restarts=N_RESTARTS, jitter_frac=JITTER_FRAC, n_jobs=N_JOBS,
-                                                     method=LOCAL_METHOD, fixed_values=fixed,
+                                                     method=LOCAL_METHOD, fixed_values=fixed, backend=BACKEND,
                                                      history_file=path + "optimization_history_local.csv")
     print((time.time() - start) / 60., "min")
 

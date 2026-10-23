@@ -1263,6 +1263,109 @@ def extend_profile_likelihood(
     return df
 
 
+def update_profile_optimum(cost_func, calibr_setup, out_csv, param_new, jac_spasity=None, solve_timeout=30,
+                           true_params=None, plot=True, plot_path=None, ncols=4, force=False):
+    """
+    Use a new optimum (e.g. a better local minimization saved in Result_calibration*.json) as the
+    reference of an existing profile run, without recomputing the profiles:
+      * cost_opt = profiling objective at param_new (cost_func with calibr_setup of the original run,
+        i.e. the same objective; it is evaluated here, the calibration cost in the JSON is not used),
+      * the optimum row of every profile is replaced by param_new,
+      * <csv>_summary.json / _run.json (cost_opt, param_opt, CIs, identifiability) are rewritten,
+        and cost_opt in <csv>_partial.csv is updated, so that resume / extend_profile_likelihood
+        continue with the new optimum.
+    Backups: <csv>_before_update.csv, <csv>_summary_before_update.json (once).
+    The profile points stay valid only if the model setup is unchanged: same objective and the
+    same free parameters. A parameter that is profiled in the run but fixed in the new result
+    (fixed_params) makes the profiles incomparable -> error (force=True to override).
+    Returns the updated DataFrame.
+    """
+    import shutil
+    base = os.path.splitext(out_csv)[0]
+    partial_csv = base + "_partial.csv"
+    df, names, scale, cost_old, param_old = _read_csv_and_summary(out_csv, "auto")
+    info = {}
+    for p in (base + "_summary.json", base + "_run.json"):
+        if os.path.exists(p):
+            with open(p) as f:
+                info = json.load(f)
+            break
+    confidence_level = float(info.get("confidence_level", 0.95))
+    fixed_indices = info.get("fixed_indices", [])
+    bnds = calibr_setup["param_bnds"]
+    param_new = np.asarray(param_new, dtype=float)
+    if len(param_new) != len(names):
+        raise ValueError(f"param_new has {len(param_new)} entries, the profile run {len(names)}")
+
+    # same free parameters as in the run?
+    profiled = sorted(int(i) for i in df["param_index"].unique())
+    now_fixed = [i for i in profiled if bnds[i][1] <= bnds[i][0]]
+    if now_fixed and not force:
+        raise ValueError(f"Parameters {[names[i] for i in now_fixed]} are profiled in this run but fixed in the "
+                         f"new setup/result: the profile points were computed with them free and are not "
+                         f"comparable. Compute new profiles (or force=True).")
+    changed_fixed = [i for i in range(len(names)) if (bnds[i][1] <= bnds[i][0] or i in fixed_indices)
+                     and not np.isclose(param_new[i], param_old[i])]
+    if changed_fixed and not force:
+        raise ValueError(f"Fixed parameters differ between the run and the new optimum: "
+                         f"{[(names[i], param_old[i], param_new[i]) for i in changed_fixed]}. "
+                         f"The profiles were computed with the old values (force=True to override).")
+
+    cost_new = _safe_cost(cost_func, param_new, calibr_setup, jac_spasity, solve_timeout)
+    print(f"Old optimum: cost_opt = {cost_old:.10g}; new optimum: cost = {cost_new:.10g} "
+          f"(Delta = {(cost_new - cost_old) / scale:.4g})")
+    if cost_new > cost_old + 1e-9 * max(1., abs(cost_old)) and not force:
+        raise ValueError("The new parameters have a higher profiling cost than the old optimum: keeping the old "
+                         "reference (check the objective / OBJECTIVE setting; force=True to override).")
+
+    if os.path.exists(out_csv):
+        if not os.path.exists(base + "_before_update.csv"):
+            shutil.copy(out_csv, base + "_before_update.csv")
+        dff = pd.read_csv(out_csv)
+        tol = 1e-12 * max(1., abs(cost_old))
+        is_opt = np.zeros(len(dff), dtype=bool)
+        for i in profiled:
+            is_opt |= ((dff["param_index"] == i) & np.isclose(dff["param_value"], param_old[i], rtol=0, atol=1e-12)
+                       & (np.abs(dff["cost"] - cost_old) <= tol)).to_numpy()
+        dff = dff[~is_opt]
+        opt_rows = pd.DataFrame([{"param_index": i, "param_value": float(param_new[i]), "cost": cost_new,
+                                  **{n: v for n, v in zip(names, param_new)}} for i in profiled])
+        dff = pd.concat([dff, opt_rows], ignore_index=True).sort_values(["param_index", "param_value"])
+        dff.reset_index(drop=True).to_csv(out_csv, index=False)
+        print(f"Updated the optimum rows in {out_csv} (backup: {base}_before_update.csv)")
+    if os.path.exists(partial_csv):
+        dfp = pd.read_csv(partial_csv)
+        dfp["cost_opt"] = cost_new
+        dfp.to_csv(partial_csv, index=False)
+        print(f"Updated cost_opt in {partial_csv}")
+    for p in (base + "_summary.json", base + "_run.json"):
+        if os.path.exists(p):
+            if p.endswith("_summary.json") and not os.path.exists(base + "_summary_before_update.json"):
+                shutil.copy(p, base + "_summary_before_update.json")
+            with open(p) as f:
+                d = json.load(f)
+            d.update(cost_opt=cost_new, param_opt=param_new.tolist())
+            with open(p, "w") as f:
+                json.dump(d, f, indent=2)
+
+    df, names, scale, cost_opt, param_opt = _read_csv_and_summary(out_csv, "auto")
+    d_min = (df["cost"].min() - cost_opt) / scale
+    if d_min < -1e-3 * chi2.ppf(confidence_level, 1):
+        best = df.loc[df["cost"].idxmin()]
+        print(f"WARNING: a profile point is still below the new optimum (Delta = {d_min:.4g} at "
+              f"param[{int(best['param_index'])}] = {best['param_value']:.6g}): the new optimum is not the minimum "
+              f"either; its full parameter vector is in the CSV row.")
+    if os.path.exists(out_csv):
+        _ci_summary(df, profiled, names, param_opt, cost_opt, scale, confidence_level, bnds,
+                    base + "_summary.json", true_params=true_params, fixed_indices=fixed_indices)
+    if plot:
+        fig = plot_profile_likelihood_from_csv(out_csv, confidence_level=confidence_level, scale=scale,
+                                               save_path=plot_path or base + "_plot.png", ncols=ncols,
+                                               true_params=true_params)
+        plt.close(fig)
+    return df
+
+
 # ----------------------------------------------------------------------
 # Plotting
 # ----------------------------------------------------------------------

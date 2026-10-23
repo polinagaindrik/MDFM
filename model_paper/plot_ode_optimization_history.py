@@ -12,10 +12,12 @@ if __name__ == "__main__":
     # 'test_2sp': 2-species test of model_paper/test_2sp.py
     CASE = 'test_2sp'
 
+    DESIGN = 'base'  # test_2sp only: design as in test_2sp.py ('base', 'rep3', 'temps6', ...)
+
     if CASE == 'test_2sp':
         n_cl = 2
         n_media = 2
-        path = 'model_paper/out/test_2sp_0noise/'
+        path = 'model_paper/out/test_2sp/' if DESIGN == 'base' else f'model_paper/out/test_2sp_{DESIGN}/'
         add_name = f'_{int(n_cl)}dim_{int(n_media)}media_test'
         real_file = f'Result_real{add_name}.json'
     else:

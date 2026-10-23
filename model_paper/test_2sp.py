@@ -47,25 +47,79 @@ def true_parameter_vector(path, add_name, media_sorted, n_cl):
     return np.concatenate([np.ravel(tr['param_ode']), s_true.ravel()])
 
 
-def print_comparison(names, estimate, true, bnds, title):
+def normalize_truth_max_s(S_matrix_setup, x10, param_ode, n_cl):
+    """
+    Rescale the true parameters so that the largest media coefficient is 1 (as S_MAX_PENALTY assumes), with
+    (almost) unchanged observables: S / m, counts * m, i.e. x0 + log10(m), N_1 + log10(m), k_ij / m, where
+    m = max(S) of the media used (sel1, gen1). Exact up to the one initially active cell per species.
+    Returns (S_matrix_setup, x10, param_ode, m) with copies of the changed values.
+    """
+    sel = np.array(S_matrix_setup['s_selective'][0][:n_cl], dtype=float)
+    gen = np.array(S_matrix_setup['s_general'][0][:n_cl], dtype=float)
+    m = float(max(sel.max(), gen.max()))
+    S2 = dict(S_matrix_setup)
+    S2['s_selective'] = [list(r) for r in S_matrix_setup['s_selective']]
+    S2['s_general'] = [list(r) for r in S_matrix_setup['s_general']]
+    S2['s_selective'][0][:n_cl] = list(sel / m)
+    S2['s_general'][0][:n_cl] = list(gen / m)
+    p = np.array(param_ode, dtype=float)
+    p[4 * n_cl] += np.log10(m)          # N_1
+    p[4 * n_cl + 2:] = p[4 * n_cl + 2:] / m  # k_ij
+    return S2, np.asarray(x10, dtype=float) + np.log10(m), p, m
+
+
+def rescale_truth_max_s(param, n_cl, n_exps, n_media):
+    """
+    The full true parameter vector [x0 | ODE | S] rescaled to max(S) = 1, for comparing estimates obtained with
+    S_MAX_PENALTY (the data determine S only up to a common factor; the penalty fixes max(S) = 1):
+    S / m, x0 and N_1 + log10(m), k_ij / m with m = max(S). Not used for generating data.
+    """
+    p = np.array(param, dtype=float)
+    n_x0, n = n_cl * n_exps, n_cl
+    m = float(np.max(p[-n_cl * n_media:]))
+    p[:n_x0] += np.log10(m)
+    p[n_x0 + 4 * n] += np.log10(m)
+    p[n_x0 + 4 * n + 2:n_x0 + 4 * n + 2 + n * n] /= m
+    p[-n_cl * n_media:] /= m
+    return p
+
+
+def print_comparison(names, estimate, true, bnds, title, true_rescaled=None):
+    """Table estimate vs. truth; true_rescaled: additional column, e.g. the truth rescaled to max(S) = 1."""
     print(f'\n{title}')
-    print(f'{"parameter":<22}{"true":>10}{"estimate":>12}{"bounds":>18}')
-    for n, t, e, b in zip(names, true, estimate, bnds):
+    extra = f'{"true (max S=1)":>16}' if true_rescaled is not None else ''
+    print(f'{"parameter":<22}{"true":>10}{extra}{"estimate":>12}{"bounds":>18}')
+    tr = true_rescaled if true_rescaled is not None else [None] * len(names)
+    for n, t, r, e, b in zip(names, true, tr, estimate, bnds):
         if b[1] > b[0]:
             flag = '  <- at bound' if np.isclose(e, b[0]) or np.isclose(e, b[1]) else ''
-            print(f'{n:<22}{t:>10.4g}{e:>12.4g}   ({b[0]:g}, {b[1]:g}){flag}')
+            col = f'{r:>16.4g}' if r is not None else ''
+            print(f'{n:<22}{t:>10.4g}{col}{e:>12.4g}   ({b[0]:g}, {b[1]:g}){flag}')
 
 
 if __name__ == "__main__":
     # ================================================================
     # Settings
     # ================================================================
-    path = 'model_paper/out/test_2sp_0noise/'
+    # Experimental design of the in-silico data (each design has its own output folder, so that the
+    # designs can be compared; 'base' = model_paper/out/test_2sp/ as before). Replicates = repeated
+    # temperatures, each experiment with its own initial values (max. 15 experiments). 'days': measurement
+    # days (whole days), default 0, 1, ..., 17. After switching to a new design: RUN_DATA = True.
+    DESIGNS = {
+        'base':        {'temps': [2., 6., 10.]},                                         # 3 experiments
+        'rep3':        {'temps': [2., 2., 2., 6., 6., 6., 10., 10., 10.]},                # 3 replicates each
+        'temps6':      {'temps': [2., 4., 6., 8., 10., 14.]},                            # more temperatures
+        'temps6_rep2': {'temps': [2., 2., 4., 4., 6., 6., 8., 8., 10., 10., 14., 14.]},  # both
+        'long':        {'temps': [2., 6., 10.], 'days': list(range(0, 31))},             # 30 days
+    }
+    DESIGN = 'base'
+    temps = DESIGNS[DESIGN]['temps']
+    days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
+    path = 'model_paper/out/test_2sp/' if DESIGN == 'base' else f'model_paper/out/test_2sp_{DESIGN}/'
     n_cl = N_CL
     n_media = 2
-    relnoise = 0.
-    temps = [2., 6., 10.]          # 3 experiments, 3 temperatures
-    ntr = 1
+    relnoise = 0.1
+    ntr = 1                        # keep 1: replicates via repeated temperatures (see DESIGNS)
     add_name = f'_{n_cl}dim_{n_media}media_test'
     workers = 21#-1                   # differential evolution: -1 = all cores
     n_jobs = 21#os.cpu_count()-2 or 1   # local multistart / profile likelihood processes
@@ -104,6 +158,11 @@ if __name__ == "__main__":
     # rises by the factor exp(w * (max S - 1)^2), e.g. w = 100: max S = 0.9 -> +172 %, 0.97 -> +9 %. None: off.
     # Stored in the result JSON; the profile likelihood uses the same penalty (needs new profiles).
     S_MAX_PENALTY = 100
+    # False (default): data from the actual truth; with S_MAX_PENALTY the comparison tables show an extra column
+    #   'true (max S=1)': the truth rescaled to max(S) = 1, which is what the penalized fit estimates.
+    # True: generate the data from the rescaled truth (S / m, x0 and N_1 + log10(m), k / m; same observables),
+    #   output folder suffix '_normS' (e.g. to test that a noise-free fit with the penalty recovers the truth).
+    NORMALIZE_TRUE_S = False
     # Noise model of the residuals (all optimizations and the profiles):
     #   'absolute': measured - model (MiBi divided by its maximum), as before
     #   'relative': multiplicative noise (measured = model * (1 + eps)): log residuals for MiBi, centred
@@ -122,7 +181,13 @@ if __name__ == "__main__":
     # 'neg2logL'   : -2 log L, data types weighted by their number of points
     # 'geomean'    : -2 log L form of cost_sum_and_geometric_mean (same optimum, equal weight per data type)
     # 'calibration': cost_sum_and_geometric_mean itself (profile scale linearized: G_opt / N)
+    # 'known_noise': -2 log L with a KNOWN noise level KNOWN_SIGMA (sum SSR_k / sigma_k^2), e.g. for noise-free
+    #                data (relnoise = 0): the profiles of an experiment with that noise level. The objectives
+    #                above estimate the noise from the residuals and diverge for noise-free data.
     OBJECTIVE = 'neg2logL'
+    # noise level for OBJECTIVE = 'known_noise': one value or [NGS, MALDI, MiBi], in the units of the residuals
+    # (NOISE_MODEL = 'relative': standard deviation of the log residuals, 0.1 ~ 10 % relative noise)
+    KNOWN_SIGMA = 0.1
     # objective of differential evolution / multistart / local refinement; OBJECTIVE = the same objective
     # everywhere (the optimum of the calibration is then directly the optimum of the profiles).
     # 'calibration' = cost_sum_and_geometric_mean as before. Stored as 'objective' in the result JSON files;
@@ -150,16 +215,26 @@ if __name__ == "__main__":
     POLISH_PROFILES = False
     # ================================================================
 
+    if NORMALIZE_TRUE_S:
+        path = path.rstrip('/') + '_normS/'
     os.makedirs(path, exist_ok=True)
     start = time.time()
 
     # 1) in-silico data -------------------------------------------------
     S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=fm.data.SETUP_DIR)
     x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=fm.data.SETUP_DIR)['x0'])[:len(temps), :n_cl]
+    if len(x10) < len(temps):
+        raise ValueError(f'design {DESIGN!r} has {len(temps)} experiments, the setup has initial values for {len(x10)}')
+    print(f'Design {DESIGN!r}: temperatures {temps}, days {days_meas if days_meas is not None else "0..17"}, output {path}')
+    param_ode_gen = PARAM_ODE_TRUE.copy()
+    if NORMALIZE_TRUE_S:
+        S_matrix_setup, x10, param_ode_gen, m_s = normalize_truth_max_s(S_matrix_setup, x10, param_ode_gen, n_cl)
+        print(f'True parameters rescaled to max(S) = 1 (factor {m_s:g}): x0, N_1 + {np.log10(m_s):.4f}, S and k / {m_s:g}')
     if RUN_DATA or not os.path.exists(path + f'dataframe_mibi{add_name}_preprocessed.pkl'):
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
-            fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=PARAM_ODE_TRUE.copy(),
-            x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name)
+            fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode_gen,
+            x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name,
+            t_meas=days_meas)
     else:
         import pandas as pd
         dfs = [pd.read_pickle(path + f'dataframe_{k}{add_name}_preprocessed.pkl') for k in ['mibi', 'maldi', 'ngs']]
@@ -195,7 +270,8 @@ if __name__ == "__main__":
         """Aggregation function of an objective name (see OBJECTIVE)."""
         return {'neg2logL': pl.make_gaussian_neg2loglik(calibr_setup['data_array'], NOISE_MODEL),
                 'geomean': pl.make_geomean_neg2loglik(calibr_setup['data_array'], NOISE_MODEL),
-                'calibration': fm.pest.cost_sum_and_geometric_mean}[name]
+                'calibration': fm.pest.cost_sum_and_geometric_mean,
+                'known_noise': pl.make_known_noise_neg2loglik(calibr_setup['data_array'], KNOWN_SIGMA, NOISE_MODEL)}[name]
 
     def save_result(fname, data):
         """Write a result JSON with its objective and noise model; keep an existing file that has a different
@@ -250,7 +326,11 @@ if __name__ == "__main__":
                      'fixed_params': fm.pest.fixed_values_record(fixed_glob, names), 's_max_penalty': S_MAX_PENALTY})
     else:
         param_glob = np.array(fm.output.read_from_json(f'Result_calibration{add_name}_global.json', dir=path)['param_ode'])
-    print_comparison(names, param_glob, param_true, calibr_setup['param_bnds'], 'Global optimization vs. truth:')
+    # with S_MAX_PENALTY the estimates correspond to the truth rescaled to max(S) = 1 (extra column)
+    param_true_rs = (rescale_truth_max_s(param_true, n_cl, len(exps), n_media)
+                     if S_MAX_PENALTY and not NORMALIZE_TRUE_S else None)
+    print_comparison(names, param_glob, param_true, calibr_setup['param_bnds'], 'Global optimization vs. truth:',
+                     true_rescaled=param_true_rs)
 
     # 3) local refinement ------------------------------------------------
     if RUN_LOCAL:
@@ -270,7 +350,8 @@ if __name__ == "__main__":
     result_objective = result_local.get('objective', 'calibration')
     result_noise_model = result_local.get('noise_model', 'absolute')
     result_backend = result_local.get('backend', 'numpy')
-    print_comparison(names, param_opt, param_true, calibr_setup['param_bnds'], 'Local refinement vs. truth:')
+    print_comparison(names, param_opt, param_true, calibr_setup['param_bnds'], 'Local refinement vs. truth:',
+                     true_rescaled=param_true_rs)
 
     # 4) profile likelihood ----------------------------------------------
     if RUN_PROFILE:
@@ -288,6 +369,13 @@ if __name__ == "__main__":
                   f'the profiles use {OBJECTIVE!r} / {NOISE_MODEL!r}: the estimate is re-fitted first (refine)')
         print(f'Profile objective ({OBJECTIVE}) at the truth: {fm.pest.cost_withS(param_true, pl_setup, None):.6g}, '
               f'at the estimate: {fm.pest.cost_withS(param_opt, pl_setup, None):.6g}')
+        # breakdown per data type: sum of squared residuals and number of data points (degrees of freedom)
+        n_dof = fm.pest.count_data_points_noise(pl_setup['data_array'], NOISE_MODEL)
+        for lab, p_ in (('truth', param_true), ('estimate', param_opt)):
+            groups, _ = fm.pest.residuals_withS(p_, pl_setup)
+            print(f'  {lab:8s}: ' + ', '.join(f'{k} SSR = {np.sum(r**2):.4g} (n = {n})'
+                                              for k, r, n in zip(('NGS', 'MALDI', 'MiBi'), groups, n_dof))
+                  + f', max S = {np.max(np.asarray(p_)[-n_cl*n_media:]):.3g}')
 
         n_x0 = n_cl * len(exps)
         n_ode = 4 * n_cl + 2 + n_cl * n_cl

@@ -68,13 +68,33 @@ def normalize_truth_max_s(S_matrix_setup, x10, param_ode, n_cl):
     return S2, np.asarray(x10, dtype=float) + np.log10(m), p, m
 
 
-def print_comparison(names, estimate, true, bnds, title):
+def rescale_truth_max_s(param, n_cl, n_exps, n_media):
+    """
+    The full true parameter vector [x0 | ODE | S] rescaled to max(S) = 1, for comparing estimates obtained with
+    S_MAX_PENALTY (the data determine S only up to a common factor; the penalty fixes max(S) = 1):
+    S / m, x0 and N_1 + log10(m), k_ij / m with m = max(S). Not used for generating data.
+    """
+    p = np.array(param, dtype=float)
+    n_x0, n = n_cl * n_exps, n_cl
+    m = float(np.max(p[-n_cl * n_media:]))
+    p[:n_x0] += np.log10(m)
+    p[n_x0 + 4 * n] += np.log10(m)
+    p[n_x0 + 4 * n + 2:n_x0 + 4 * n + 2 + n * n] /= m
+    p[-n_cl * n_media:] /= m
+    return p
+
+
+def print_comparison(names, estimate, true, bnds, title, true_rescaled=None):
+    """Table estimate vs. truth; true_rescaled: additional column, e.g. the truth rescaled to max(S) = 1."""
     print(f'\n{title}')
-    print(f'{"parameter":<22}{"true":>10}{"estimate":>12}{"bounds":>18}')
-    for n, t, e, b in zip(names, true, estimate, bnds):
+    extra = f'{"true (max S=1)":>16}' if true_rescaled is not None else ''
+    print(f'{"parameter":<22}{"true":>10}{extra}{"estimate":>12}{"bounds":>18}')
+    tr = true_rescaled if true_rescaled is not None else [None] * len(names)
+    for n, t, r, e, b in zip(names, true, tr, estimate, bnds):
         if b[1] > b[0]:
             flag = '  <- at bound' if np.isclose(e, b[0]) or np.isclose(e, b[1]) else ''
-            print(f'{n:<22}{t:>10.4g}{e:>12.4g}   ({b[0]:g}, {b[1]:g}){flag}')
+            col = f'{r:>16.4g}' if r is not None else ''
+            print(f'{n:<22}{t:>10.4g}{col}{e:>12.4g}   ({b[0]:g}, {b[1]:g}){flag}')
 
 
 if __name__ == "__main__":
@@ -138,10 +158,11 @@ if __name__ == "__main__":
     # rises by the factor exp(w * (max S - 1)^2), e.g. w = 100: max S = 0.9 -> +172 %, 0.97 -> +9 %. None: off.
     # Stored in the result JSON; the profile likelihood uses the same penalty (needs new profiles).
     S_MAX_PENALTY = 100
-    # True: generate the data from the truth rescaled to max(S) = 1 (S / m, x0 and N_1 + log10(m), k / m with
-    # m = true max(S); same observables), so that the truth satisfies the S_MAX_PENALTY constraint and can be
-    # recovered (e.g. noise-free test). Output folder gets the suffix '_normS'; truth comparisons use it.
-    NORMALIZE_TRUE_S = True
+    # False (default): data from the actual truth; with S_MAX_PENALTY the comparison tables show an extra column
+    #   'true (max S=1)': the truth rescaled to max(S) = 1, which is what the penalized fit estimates.
+    # True: generate the data from the rescaled truth (S / m, x0 and N_1 + log10(m), k / m; same observables),
+    #   output folder suffix '_normS' (e.g. to test that a noise-free fit with the penalty recovers the truth).
+    NORMALIZE_TRUE_S = False
     # Noise model of the residuals (all optimizations and the profiles):
     #   'absolute': measured - model (MiBi divided by its maximum), as before
     #   'relative': multiplicative noise (measured = model * (1 + eps)): log residuals for MiBi, centred
@@ -305,7 +326,11 @@ if __name__ == "__main__":
                      'fixed_params': fm.pest.fixed_values_record(fixed_glob, names), 's_max_penalty': S_MAX_PENALTY})
     else:
         param_glob = np.array(fm.output.read_from_json(f'Result_calibration{add_name}_global.json', dir=path)['param_ode'])
-    print_comparison(names, param_glob, param_true, calibr_setup['param_bnds'], 'Global optimization vs. truth:')
+    # with S_MAX_PENALTY the estimates correspond to the truth rescaled to max(S) = 1 (extra column)
+    param_true_rs = (rescale_truth_max_s(param_true, n_cl, len(exps), n_media)
+                     if S_MAX_PENALTY and not NORMALIZE_TRUE_S else None)
+    print_comparison(names, param_glob, param_true, calibr_setup['param_bnds'], 'Global optimization vs. truth:',
+                     true_rescaled=param_true_rs)
 
     # 3) local refinement ------------------------------------------------
     if RUN_LOCAL:
@@ -325,7 +350,8 @@ if __name__ == "__main__":
     result_objective = result_local.get('objective', 'calibration')
     result_noise_model = result_local.get('noise_model', 'absolute')
     result_backend = result_local.get('backend', 'numpy')
-    print_comparison(names, param_opt, param_true, calibr_setup['param_bnds'], 'Local refinement vs. truth:')
+    print_comparison(names, param_opt, param_true, calibr_setup['param_bnds'], 'Local refinement vs. truth:',
+                     true_rescaled=param_true_rs)
 
     # 4) profile likelihood ----------------------------------------------
     if RUN_PROFILE:

@@ -1263,6 +1263,47 @@ def extend_profile_likelihood(
     return df
 
 
+def copy_result_to_profile_json(result_json, profile_csv, cost=None):
+    """
+    Just copy the parameter values of a calibration result into the JSON files of a profile run,
+    without any model evaluation: param_ode of result_json (e.g. Result_calibration*.json)
+    becomes param_opt (and the 'estimate' of every CI entry) in <csv>_summary.json and
+    <csv>_run.json. The profile points, cost_opt and the CIs are not changed, so Delta in the
+    plots stays relative to the old cost_opt; pass cost=<value of the profiling objective at the
+    new parameters> to replace cost_opt as well (the 'cost' in the result JSON is the calibration
+    objective and is not used). For a consistent update use update_profile_optimum instead.
+    Backup of each changed file: <name>_before_copy.json (once).
+    """
+    import shutil
+    with open(result_json) as f:
+        param = np.asarray(json.load(f)["param_ode"], dtype=float)
+    base = os.path.splitext(profile_csv)[0]
+    changed = []
+    for p in (base + "_summary.json", base + "_run.json"):
+        if not os.path.exists(p):
+            continue
+        with open(p) as f:
+            d = json.load(f)
+        if len(d.get("param_opt", param)) != len(param):
+            raise ValueError(f"{result_json} has {len(param)} parameters, {p} {len(d['param_opt'])}")
+        bak = os.path.splitext(p)[0] + "_before_copy.json"
+        if not os.path.exists(bak):
+            shutil.copy(p, bak)
+        d["param_opt"] = param.tolist()
+        for i, entry in (d.get("ci") or {}).items():
+            entry["estimate"] = float(param[int(i)])
+        if cost is not None:
+            d["cost_opt"] = float(cost)
+        with open(p, "w") as f:
+            json.dump(d, f, indent=2)
+        changed.append(p)
+    if not changed:
+        raise FileNotFoundError(f"No {base}_summary.json or {base}_run.json found")
+    print(f"Copied param_ode of {result_json} to " + ", ".join(changed)
+          + ("" if cost is None else f" (cost_opt = {cost})"))
+    return param
+
+
 def update_profile_optimum(cost_func, calibr_setup, out_csv, param_new, jac_spasity=None, solve_timeout=30,
                            true_params=None, plot=True, plot_path=None, ncols=4, force=False):
     """

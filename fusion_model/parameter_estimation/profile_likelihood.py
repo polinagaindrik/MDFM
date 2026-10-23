@@ -124,17 +124,15 @@ class GaussianNeg2LogLik:
         return total
 
 
-def make_gaussian_neg2loglik(data_array):
+def make_gaussian_neg2loglik(data_array, noise_model="absolute"):
     """
     Build a GaussianNeg2LogLik from ``calibr_setup['data_array']``
     (= extract_observables_from_df(dfs) -> (days, [obs_mibi, obs_maldi, obs_ngs])).
     The residual order of cost_withS / squared_differences is [ngs, maldi, mibi].
+    noise_model: as calibr_setup['noise_model'] ('relative': degrees of freedom of the log residuals).
     """
-    _, (obs_mibi, obs_maldi, obs_ngs) = data_array
-    n_data = [np.count_nonzero(np.isfinite(obs_ngs)),
-              np.count_nonzero(np.isfinite(obs_maldi)),
-              np.count_nonzero(np.isfinite(obs_mibi))]
-    return GaussianNeg2LogLik(n_data)
+    from .cost_function import count_data_points_noise
+    return GaussianNeg2LogLik(count_data_points_noise(data_array, noise_model))
 
 
 class GeometricMeanNeg2LogLik(GaussianNeg2LogLik):
@@ -168,9 +166,9 @@ class GeometricMeanNeg2LogLik(GaussianNeg2LogLik):
         return total
 
 
-def make_geomean_neg2loglik(data_array):
+def make_geomean_neg2loglik(data_array, noise_model="absolute"):
     """GeometricMeanNeg2LogLik from calibr_setup['data_array'] (see make_gaussian_neg2loglik)."""
-    return GeometricMeanNeg2LogLik(make_gaussian_neg2loglik(data_array).n_data)
+    return GeometricMeanNeg2LogLik(make_gaussian_neg2loglik(data_array, noise_model).n_data)
 
 
 # ----------------------------------------------------------------------

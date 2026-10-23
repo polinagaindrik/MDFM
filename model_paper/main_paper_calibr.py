@@ -73,7 +73,7 @@ if __name__ == "__main__":
         'exp_temps': {exp: temp for exp, temp in zip(exps_calibr, temps)},
         'media': media, 
         }
-    fm.output.json_dump(calibr_presetup['exp_temps'], 'exp_temps_model_paper.json', dir='model_paper/')
+    fm.data.save_exp_temps(calibr_presetup['exp_temps'], path_new)  # next to the results (output directory)
     calibr_setup = fm.pest.define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=s_x_predefined, s_x=None)
     calibr_setup['s_max_penalty'] = S_MAX_PENALTY
     calibr_setup['noise_model'] = NOISE_MODEL

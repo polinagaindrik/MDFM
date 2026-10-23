@@ -37,7 +37,7 @@ if __name__ == "__main__":
         'model': fm.mdl.fusion_model2,
         'T_x': T_x,
         'output_path': path2,
-        'exp_temps': fm.output.read_from_json(''+'exp_temps_model_paper.json', dir='model_paper/'),
+        'exp_temps': fm.data.read_exp_temps(path2, data[0]),
         's_x': s_x,
         'media': media, 
     }

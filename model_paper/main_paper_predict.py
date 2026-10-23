@@ -37,7 +37,7 @@ if __name__ == "__main__":
     param_model = param_opt[:-n_cl*n_media]
     param_ode = param_model[n_cl*len(exps_calibr):]
 
-    exp_temps = fm.output.read_from_json(''+'exp_temps_model_paper.json', dir='model_paper/')
+    exp_temps = fm.data.read_exp_temps(path + 'calibration/', dfs_calibr[0])
 
 
     # Define the experiments for the model prediction:

@@ -31,9 +31,12 @@ def save_all_dfs(dfs, names=[''], path=''):
         df.to_pickle(path+f'dataframe_{n}.pkl')
 
 
-def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name=''):
-    """Generate synthetic observations and align their MALDI and NGS bacteria."""
-    data = insilico_model(n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name)
+def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name='', t_meas=None):
+    """Generate synthetic observations and align their MALDI and NGS bacteria.
+    t_meas: measurement days (whole days; default: module attribute t = 0, 1, ..., 17); only for the
+    model_exp based generators (model_1media_exp_*, model_2media_exp*)."""
+    extra = {} if t_meas is None else {'t_meas': np.asarray(t_meas, dtype=float)}
+    data = insilico_model(n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name, **extra)
     dfs = data[:-1]
     (df_mibi, df_maldi, df_ngs) = dfs
     df_ngs, bact_ngs = dtf.preprocess_dataframe(df_ngs, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
@@ -440,7 +443,7 @@ def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, pa
     return df_mibi, df_maldi, df_ngs, df_realx\
 
 
-def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
+def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name='', t_meas=None):
     """Generate synthetic observations using the exponential temperature-dependent model."""
     np.random.seed(46987)
     if param_ode is None:  # true ODE parameters from the setup folder (see read_true_parameters)
@@ -453,7 +456,9 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path=
         x0 = set_initial_vals(x10, temps, n_cl)
     else:
         x10, x0 = get_random_initial_vals(temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    if t_meas is not None and np.any(np.asarray(t_meas) != np.round(t_meas)):
+        raise ValueError('t_meas must be whole days (the data column names contain the day as an integer)')
+    df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t if t_meas is None else t_meas, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                  noise=noise, rel_noise=rel_noise, media=media)
     save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, f'Result_real{add_name}.json', dir=path)

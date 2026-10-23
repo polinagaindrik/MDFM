@@ -60,12 +60,25 @@ if __name__ == "__main__":
     # ================================================================
     # Settings
     # ================================================================
-    path = 'model_paper/out/test_2sp/'
+    # Experimental design of the in-silico data (each design has its own output folder, so that the
+    # designs can be compared; 'base' = model_paper/out/test_2sp/ as before). Replicates = repeated
+    # temperatures, each experiment with its own initial values (max. 15 experiments). 'days': measurement
+    # days (whole days), default 0, 1, ..., 17. After switching to a new design: RUN_DATA = True.
+    DESIGNS = {
+        'base':        {'temps': [2., 6., 10.]},                                         # 3 experiments
+        'rep3':        {'temps': [2., 2., 2., 6., 6., 6., 10., 10., 10.]},                # 3 replicates each
+        'temps6':      {'temps': [2., 4., 6., 8., 10., 14.]},                            # more temperatures
+        'temps6_rep2': {'temps': [2., 2., 4., 4., 6., 6., 8., 8., 10., 10., 14., 14.]},  # both
+        'long':        {'temps': [2., 6., 10.], 'days': list(range(0, 31))},             # 30 days
+    }
+    DESIGN = 'base'
+    temps = DESIGNS[DESIGN]['temps']
+    days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
+    path = 'model_paper/out/test_2sp/' if DESIGN == 'base' else f'model_paper/out/test_2sp_{DESIGN}/'
     n_cl = N_CL
     n_media = 2
     relnoise = 0.1
-    temps = [2., 6., 10.]          # 3 experiments, 3 temperatures
-    ntr = 1
+    ntr = 1                        # keep 1: replicates via repeated temperatures (see DESIGNS)
     add_name = f'_{n_cl}dim_{n_media}media_test'
     workers = 21#-1                   # differential evolution: -1 = all cores
     n_jobs = 21#os.cpu_count()-2 or 1   # local multistart / profile likelihood processes
@@ -156,10 +169,14 @@ if __name__ == "__main__":
     # 1) in-silico data -------------------------------------------------
     S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=fm.data.SETUP_DIR)
     x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=fm.data.SETUP_DIR)['x0'])[:len(temps), :n_cl]
+    if len(x10) < len(temps):
+        raise ValueError(f'design {DESIGN!r} has {len(temps)} experiments, the setup has initial values for {len(x10)}')
+    print(f'Design {DESIGN!r}: temperatures {temps}, days {days_meas if days_meas is not None else "0..17"}, output {path}')
     if RUN_DATA or not os.path.exists(path + f'dataframe_mibi{add_name}_preprocessed.pkl'):
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
             fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=PARAM_ODE_TRUE.copy(),
-            x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name)
+            x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name,
+            t_meas=days_meas)
     else:
         import pandas as pd
         dfs = [pd.read_pickle(path + f'dataframe_{k}{add_name}_preprocessed.pkl') for k in ['mibi', 'maldi', 'ngs']]

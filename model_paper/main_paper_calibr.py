@@ -3,7 +3,8 @@ import sys
 sys.path.append(os.getcwd())
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
-from profile_likelihood_model_paper import make_param_names, resolve_fixed_values, print_parameter_table
+from profile_likelihood_model_paper import (make_param_names, resolve_fixed_values, print_parameter_table,
+                                            copy_result_to_all_profiles)
 
 import numpy as np
 import time
@@ -91,4 +92,5 @@ if __name__ == "__main__":
     fm.output.json_dump({'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt,
                          'fixed_params': fm.pest.fixed_values_record(fixed, names)},
                         f'Result_calibration{add_name}.json', dir=path_new)
+    copy_result_to_all_profiles(path_new, add_name)  # new optimum into existing profile JSON files
     param_opt = fm.output.read_from_json(''+f'Result_calibration{add_name}.json', dir=path_new)['param_ode']

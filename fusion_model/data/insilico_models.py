@@ -316,6 +316,29 @@ INITIAL_VALUES_FILE = 'Initial_values_x0_paper.json'
 MEDIA_MATRIX_FILE = 'Media_matrix_S_paper.json'
 
 
+EXP_TEMPS_FILE = 'exp_temps_model_paper.json'  # experiment -> temperature, saved next to the calibration results
+
+
+def save_exp_temps(exp_temps, dir):
+    """Save the temperature of each experiment into the output directory dir."""
+    json_dump({str(k): float(v) for k, v in exp_temps.items()}, EXP_TEMPS_FILE, dir=dir)
+
+
+def read_exp_temps(dir, df=None):
+    """
+    Temperature of each experiment of the run in dir (exp_temps_model_paper.json saved there by the
+    calibration). If the file does not exist (results from before), the temperatures are taken from the
+    column names of the data frame df (e.g. 'V01_M1_02C_00_MRS-mibi' -> 2.0).
+    """
+    import os
+    if os.path.exists(os.path.join(dir, EXP_TEMPS_FILE)):
+        return read_from_json(EXP_TEMPS_FILE, dir=dir)
+    if df is None:
+        raise FileNotFoundError(f'{dir}{EXP_TEMPS_FILE} not found; pass the data frame to read the temperatures '
+                                f'from its column names')
+    return {c.split('_')[0]: float(c.split('_')[2].rstrip('C')) for c in df.columns}
+
+
 def _split_true_param_ode(param_ode, n_cl_file):
     """[x0 (n_exps x n_cl) | lambda_1 | lambda_exp | alpha_0 | alpha_exp | N_1, N_exp | k (n_cl x n_cl)] -> parts."""
     p = np.asarray(param_ode, dtype=float)

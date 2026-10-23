@@ -90,6 +90,11 @@ if __name__ == "__main__":
     # local step and profile fits: 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on
     # the residuals, parameters scaled, much faster convergence for ill-conditioned problems)
     LOCAL_METHOD = 'least_squares'
+    # derivatives of the fits: 'numpy' (finite differences, as before) or 'jax' (exact derivatives by automatic
+    # differentiation, much faster and a more accurate ODE solve; needs: pip install jax diffrax). Used for the
+    # local step, multistart and the profiles (not for differential evolution). Don't mix backends within one
+    # profile run: the profile tools check the cost at the stored optimum and stop if it differs.
+    BACKEND = 'numpy'
     # local step: parameters held at a fixed value, only the others are refined (e.g. non-identifiable ones
     # set to 0). Keys: index or name (see the printed parameter table), e.g. {17: 0., 18: 0.} or
     # {'k_00,01': 0.}; the value may lie outside the bounds. Stored as 'fixed_params' in
@@ -212,7 +217,8 @@ if __name__ == "__main__":
                     import shutil
                     shutil.copy(f, bak)
                     print(f'Kept the previous result (objective {old_obj}) as {bak}')
-        fm.output.json_dump(dict(data, objective=CALIBRATION_OBJECTIVE, noise_model=NOISE_MODEL), fname, dir=path)
+        fm.output.json_dump(dict(data, objective=CALIBRATION_OBJECTIVE, noise_model=NOISE_MODEL, backend=BACKEND),
+                            fname, dir=path)
 
     calibr_setup['aggregation_func'] = make_objective(CALIBRATION_OBJECTIVE)
     print(f'Objective of the optimizations: {CALIBRATION_OBJECTIVE}, noise model: {NOISE_MODEL}')
@@ -238,6 +244,7 @@ if __name__ == "__main__":
         if GLOBAL_METHOD in ('multistart', 'de+multistart'):
             param_glob, cost_glob = fm.pest.multistart_optimization(
                 fm.pest.cost_withS, glob_setup, n_starts=N_STARTS, extra_starts=de_starts, method=LOCAL_METHOD,
+                backend=BACKEND,
                 maxiter=200 if LOCAL_METHOD == 'least_squares' else 1000, n_jobs=n_jobs,
                 history_file=path + 'optimization_history_multistart.csv')
         elif GLOBAL_METHOD != 'de':
@@ -255,7 +262,7 @@ if __name__ == "__main__":
     if RUN_LOCAL:
         fixed = resolve_fixed_values(FIX_PARAMS, names)
         print_parameter_table(names, param_glob, calibr_setup['param_bnds'], fixed)
-        param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup, fixed_values=fixed, maxiter=500 if LOCAL_METHOD == 'least_squares' else 1000,n_restarts=5, jitter_frac=0.1, n_jobs=n_jobs, method=LOCAL_METHOD, history_file=path + 'optimization_history_local.csv')
+        param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup, fixed_values=fixed, maxiter=500 if LOCAL_METHOD == 'least_squares' else 1000,n_restarts=5, jitter_frac=0.1, n_jobs=n_jobs, method=LOCAL_METHOD, backend=BACKEND, history_file=path + 'optimization_history_local.csv')
         print(f'{(time.time() - start) / 60.:.1f} min (global + local), cost = {cost_opt:.6g}')
         s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
         save_result(f'Result_calibration{add_name}.json',
@@ -268,6 +275,7 @@ if __name__ == "__main__":
     fixed = fixed_values_from_result(result_local)
     result_objective = result_local.get('objective', 'calibration')
     result_noise_model = result_local.get('noise_model', 'absolute')
+    result_backend = result_local.get('backend', 'numpy')
     print_comparison(names, param_opt, param_true, calibr_setup['param_bnds'], 'Local refinement vs. truth:')
 
     # 4) profile likelihood ----------------------------------------------
@@ -280,7 +288,7 @@ if __name__ == "__main__":
         pl_setup['aggregation_func'] = make_objective(OBJECTIVE)
         # 'geomean' and 'calibration' have the same optimum; otherwise the estimate is re-fitted first
         same_optimum = (({result_objective, OBJECTIVE} <= {'geomean', 'calibration'} or result_objective == OBJECTIVE)
-                        and result_noise_model == NOISE_MODEL)
+                        and result_noise_model == NOISE_MODEL and result_backend == BACKEND)
         if not same_optimum:
             print(f'Result_calibration was optimized with {result_objective!r} / noise model {result_noise_model!r}, '
                   f'the profiles use {OBJECTIVE!r} / {NOISE_MODEL!r}: the estimate is re-fitted first (refine)')
@@ -312,8 +320,9 @@ if __name__ == "__main__":
 
         profile_options = ({'method': 'least_squares', 'maxiter': 200} if LOCAL_METHOD == 'least_squares'
                            else {'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8})
+        profile_options['backend'] = BACKEND
         if UPDATE_OPTIMUM:
-            pl.update_profile_optimum(fm.pest.cost_withS, pl_setup, out_csv, param_opt,
+            pl.update_profile_optimum(fm.pest.cost_withS, pl_setup, out_csv, param_opt, backend=BACKEND,
                                       true_params=param_true if SHOW_TRUE_VALUE else None,
                                       plot_path=out_path + f'profile_likelihood{tag}.png')
         elif EXTEND is not None:

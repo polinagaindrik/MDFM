@@ -213,6 +213,9 @@ if __name__ == "__main__":
     #            Indices are printed as "Parameter indices" when EXTEND is set.
     EXTEND = None
     EXTEND_N_POINTS = 6
+    # True: use the current Result_calibration*.json (e.g. a new, better local minimization) as the optimum of
+    # the existing profiles (same PROFILE / FIX_* / OBJECTIVE -> same CSV); profile points are kept.
+    UPDATE_OPTIMUM = False
     # fit at every profile point: 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on the
     # residuals, parameters scaled; much faster convergence for ill-conditioned problems)
     LOCAL_METHOD = "least_squares"
@@ -251,6 +254,11 @@ if __name__ == "__main__":
            + {False: "", "estimate": "_fixS", "true": "_fixStrue"}[FIX_S])
 
     out_csv = out_path + f"profile_likelihood_results{tag}.csv"
+    if UPDATE_OPTIMUM:
+        pl.update_profile_optimum(cost, calibr_setup, out_csv, param_opt,
+                                  true_params=true_params if SHOW_TRUE_VALUE else None,
+                                  plot_path=out_path + f"profile_likelihood{tag}.png")
+        sys.exit(0)
     if EXTEND is not None:
         print("Parameter indices:")
         for i in profile_indices:

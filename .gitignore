@@ -13,6 +13,7 @@
 *.toc
 *.jl
 *.json
+!model_paper/setup/*.json
 *.pkl
 *.csv
 Pkg

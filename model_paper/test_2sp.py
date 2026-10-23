@@ -94,9 +94,10 @@ if __name__ == "__main__":
     # set to 0). Keys: index or name (see the printed parameter table), e.g. {17: 0., 18: 0.} or
     # {'k_00,01': 0.}; the value may lie outside the bounds. Stored as 'fixed_params' in
     # Result_calibration*.json and kept fixed in the profile likelihood (not profiled, not re-fitted).
-    FIX_PARAMS = {'k_00,01': 0.,
-                  'alpha_exp,00': 0.,
-                  'lambda_exp,00': 0.}
+    #FIX_PARAMS = {'k_00,01': 0.,
+    #              'alpha_exp,00': 0.,
+    #              'lambda_exp,00': 0.}
+    FIX_PARAMS = {}
     # True: FIX_PARAMS also in the global step (new differential evolution / multistart search with these
     # parameters fixed) instead of only refining from the earlier global result
     FIX_IN_GLOBAL = True
@@ -329,7 +330,7 @@ if __name__ == "__main__":
         else:
             df, cis = pl.run_profile_likelihood_all(
                 fm.pest.cost_withS, param_opt, pl_setup,
-                span=1., n_points=12, method='local',
+                span=1., n_points=30, method='local',
                 n_jobs=n_jobs,
                 out_csv=out_csv,
                 plot_path=out_path + f'profile_likelihood{tag}.png',

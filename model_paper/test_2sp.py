@@ -144,6 +144,10 @@ if __name__ == "__main__":
     # the existing profiles (same PROFILE / FIX_* / OBJECTIVE -> same CSV) instead of computing profiles:
     # optimum rows, cost_opt, summary JSON (CIs) and plots are updated, the profile points are kept.
     UPDATE_OPTIMUM = False
+    # Refit the points of the existing profiles from their neighbours (removes jumps where points ended in a
+    # worse local minimum; no new values): False, True (all profiles) or a list of indices / names, e.g.
+    # ['k_01,00']. Runs after the profile run / EXTEND / UPDATE_OPTIMUM. Backup: <csv>_before_polish.csv
+    POLISH_PROFILES = False
     # ================================================================
 
     os.makedirs(path, exist_ok=True)
@@ -345,6 +349,14 @@ if __name__ == "__main__":
                 restart_on_better=False,
                 resume=True,
             )
+        if POLISH_PROFILES:
+            polish_idx = (None if POLISH_PROFILES is True
+                          else sorted(resolve_fixed_values({k: 0. for k in POLISH_PROFILES}, names)))
+            pl.polish_profile_likelihood(fm.pest.cost_withS, pl_setup, out_csv, profile_indices=polish_idx,
+                                         n_jobs=n_jobs, fixed_indices=fixed_indices,
+                                         minimize_options=profile_options,
+                                         true_params=param_true if SHOW_TRUE_VALUE else None,
+                                         plot_path=out_path + f'profile_likelihood{tag}.png')
         pl.plot_profile_likelihood_individual(out_csv, out_dir=out_path + 'individual', file_ext='pdf',
                                               true_params=param_true if SHOW_TRUE_VALUE else None)
         print(f'{(time.time() - start) / 60.:.1f} min in total')

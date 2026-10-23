@@ -251,6 +251,10 @@ if __name__ == "__main__":
     # True: use the current Result_calibration*.json (e.g. a new, better local minimization) as the optimum of
     # the existing profiles (same PROFILE / FIX_* / OBJECTIVE -> same CSV); profile points are kept.
     UPDATE_OPTIMUM = False
+    # Refit the points of the existing profiles from their neighbours (removes jumps where points ended in a
+    # worse local minimum; no new values): False, True (all profiles) or a list of indices / names, e.g.
+    # ['k_01,00']. Runs instead of a profile run. Backup: <csv>_before_polish.csv
+    POLISH_PROFILES = False
     # fit at every profile point: 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on the
     # residuals, parameters scaled; much faster convergence for ill-conditioned problems)
     LOCAL_METHOD = "least_squares"
@@ -289,6 +293,14 @@ if __name__ == "__main__":
            + {False: "", "estimate": "_fixS", "true": "_fixStrue"}[FIX_S])
 
     out_csv = out_path + f"profile_likelihood_results{tag}.csv"
+    if POLISH_PROFILES:
+        polish_idx = (None if POLISH_PROFILES is True
+                      else sorted(resolve_fixed_values({k: 0. for k in POLISH_PROFILES}, ode_param_names)))
+        pl.polish_profile_likelihood(cost, calibr_setup, out_csv, profile_indices=polish_idx, n_jobs=20,
+                                     fixed_indices=fixed_indices, minimize_options=profile_options,
+                                     true_params=true_params if SHOW_TRUE_VALUE else None,
+                                     plot_path=out_path + f"profile_likelihood{tag}.png")
+        sys.exit(0)
     if UPDATE_OPTIMUM:
         pl.update_profile_optimum(cost, calibr_setup, out_csv, param_opt,
                                   true_params=true_params if SHOW_TRUE_VALUE else None,

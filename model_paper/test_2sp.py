@@ -60,10 +60,10 @@ if __name__ == "__main__":
     # ================================================================
     # Settings
     # ================================================================
-    path = 'model_paper/out/test_2sp/'
+    path = 'model_paper/out/test_2sp_0noise/'
     n_cl = N_CL
     n_media = 2
-    relnoise = 0.1
+    relnoise = 0.
     temps = [2., 6., 10.]          # 3 experiments, 3 temperatures
     ntr = 1
     add_name = f'_{n_cl}dim_{n_media}media_test'
@@ -239,7 +239,7 @@ if __name__ == "__main__":
             param_glob, cost_glob = fm.pest.multistart_optimization(
                 fm.pest.cost_withS, glob_setup, n_starts=N_STARTS, extra_starts=de_starts, method=LOCAL_METHOD,
                 backend=BACKEND,
-                maxiter=200 if LOCAL_METHOD == 'least_squares' else 1000, n_jobs=n_jobs,
+                maxiter=200 if LOCAL_METHOD == 'least_squares' else 500, n_jobs=n_jobs,
                 history_file=path + 'optimization_history_multistart.csv')
         elif GLOBAL_METHOD != 'de':
             raise ValueError("GLOBAL_METHOD must be 'de', 'multistart' or 'de+multistart'")

@@ -215,6 +215,8 @@ if __name__ == "__main__":
     POLISH_PROFILES = False
     # ================================================================
 
+    if relnoise != 0.1:  # other noise levels in their own folder (0.1: the existing folders)
+        path = path.rstrip('/') + f'_noise{int(round(relnoise * 100))}/'
     if NORMALIZE_TRUE_S:
         path = path.rstrip('/') + '_normS/'
     os.makedirs(path, exist_ok=True)

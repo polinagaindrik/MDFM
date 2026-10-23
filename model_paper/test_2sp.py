@@ -104,6 +104,11 @@ if __name__ == "__main__":
     # rises by the factor exp(w * (max S - 1)^2), e.g. w = 100: max S = 0.9 -> +172 %, 0.97 -> +9 %. None: off.
     # Stored in the result JSON; the profile likelihood uses the same penalty (needs new profiles).
     S_MAX_PENALTY = 100
+    # Noise model of the residuals (all optimizations and the profiles):
+    #   'absolute': measured - model (MiBi divided by its maximum), as before
+    #   'relative': multiplicative noise (measured = model * (1 + eps)): log residuals for MiBi, centred
+    #               log-ratios within each composition for MALDI / NGS -> constant variance, valid chi2 threshold
+    NOISE_MODEL = 'relative'
 
     # profile likelihood settings
     PROFILE = 'all'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
@@ -180,28 +185,32 @@ if __name__ == "__main__":
     calibr_setup = fm.pest.define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=s_x_predefined, s_x=None)
     calibr_setup['data_array'] = fm.dtf.extract_observables_from_df(dfs)
     calibr_setup['s_max_penalty'] = S_MAX_PENALTY
+    calibr_setup['noise_model'] = NOISE_MODEL
 
     def make_objective(name):
         """Aggregation function of an objective name (see OBJECTIVE)."""
-        return {'neg2logL': pl.make_gaussian_neg2loglik(calibr_setup['data_array']),
-                'geomean': pl.make_geomean_neg2loglik(calibr_setup['data_array']),
+        return {'neg2logL': pl.make_gaussian_neg2loglik(calibr_setup['data_array'], NOISE_MODEL),
+                'geomean': pl.make_geomean_neg2loglik(calibr_setup['data_array'], NOISE_MODEL),
                 'calibration': fm.pest.cost_sum_and_geometric_mean}[name]
 
     def save_result(fname, data):
-        """Write a result JSON with its objective; keep an existing file that has a different objective."""
+        """Write a result JSON with its objective and noise model; keep an existing file that has a different
+        objective or noise model (as <file>_<objective>[_relative].json)."""
         f = os.path.join(path, fname)
         if os.path.exists(f):
-            old_obj = fm.output.read_from_json(fname, dir=path).get('objective', 'calibration')
-            if old_obj != CALIBRATION_OBJECTIVE:
+            old = fm.output.read_from_json(fname, dir=path)
+            old_nm = old.get('noise_model', 'absolute')
+            old_obj = old.get('objective', 'calibration') + ('' if old_nm == 'absolute' else f'_{old_nm}')
+            if old_obj != CALIBRATION_OBJECTIVE + ('' if NOISE_MODEL == 'absolute' else f'_{NOISE_MODEL}'):
                 bak = f.replace('.json', f'_{old_obj}.json')
                 if not os.path.exists(bak):
                     import shutil
                     shutil.copy(f, bak)
                     print(f'Kept the previous result (objective {old_obj}) as {bak}')
-        fm.output.json_dump(dict(data, objective=CALIBRATION_OBJECTIVE), fname, dir=path)
+        fm.output.json_dump(dict(data, objective=CALIBRATION_OBJECTIVE, noise_model=NOISE_MODEL), fname, dir=path)
 
     calibr_setup['aggregation_func'] = make_objective(CALIBRATION_OBJECTIVE)
-    print(f'Objective of the optimizations: {CALIBRATION_OBJECTIVE}')
+    print(f'Objective of the optimizations: {CALIBRATION_OBJECTIVE}, noise model: {NOISE_MODEL}')
     names = make_param_names(exps, bact, media)
     param_true = true_parameter_vector(path, add_name, media, n_cl)
     assert len(param_true) == len(calibr_setup['param_bnds']) == len(names)
@@ -253,6 +262,7 @@ if __name__ == "__main__":
     result_local = fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path)
     fixed = fixed_values_from_result(result_local)
     result_objective = result_local.get('objective', 'calibration')
+    result_noise_model = result_local.get('noise_model', 'absolute')
     print_comparison(names, param_opt, param_true, calibr_setup['param_bnds'], 'Local refinement vs. truth:')
 
     # 4) profile likelihood ----------------------------------------------
@@ -264,10 +274,11 @@ if __name__ == "__main__":
             pl_setup, param_opt = fm.pest.apply_fixed_values(pl_setup, fixed, param=param_opt, names=names)
         pl_setup['aggregation_func'] = make_objective(OBJECTIVE)
         # 'geomean' and 'calibration' have the same optimum; otherwise the estimate is re-fitted first
-        same_optimum = {result_objective, OBJECTIVE} <= {'geomean', 'calibration'} or result_objective == OBJECTIVE
+        same_optimum = (({result_objective, OBJECTIVE} <= {'geomean', 'calibration'} or result_objective == OBJECTIVE)
+                        and result_noise_model == NOISE_MODEL)
         if not same_optimum:
-            print(f'Result_calibration was optimized with {result_objective!r}, the profiles use {OBJECTIVE!r}: '
-                  f'the estimate is re-fitted with {OBJECTIVE!r} first (refine)')
+            print(f'Result_calibration was optimized with {result_objective!r} / noise model {result_noise_model!r}, '
+                  f'the profiles use {OBJECTIVE!r} / {NOISE_MODEL!r}: the estimate is re-fitted first (refine)')
         print(f'Profile objective ({OBJECTIVE}) at the truth: {fm.pest.cost_withS(param_true, pl_setup, None):.6g}, '
               f'at the estimate: {fm.pest.cost_withS(param_opt, pl_setup, None):.6g}')
 

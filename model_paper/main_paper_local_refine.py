@@ -23,7 +23,8 @@ sys.path.append(os.getcwd())
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
 from profile_likelihood_model_paper import (load_calibration, s_x_predefined_from_maldi, exp_temps_from_columns,
-                                            make_param_names, resolve_fixed_values, print_parameter_table)
+                                            make_param_names, resolve_fixed_values, print_parameter_table,
+                                            copy_result_to_all_profiles)
 
 import numpy as np
 import time
@@ -92,3 +93,4 @@ if __name__ == "__main__":
                          "fixed_params": fm.pest.fixed_values_record(fixed, names)},
                         f"Result_calibration{add_name}.json", dir=path)
     print(f"Saved refined optimum to {src}")
+    copy_result_to_all_profiles(path, add_name)  # new optimum into existing profile JSON files

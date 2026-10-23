@@ -139,6 +139,34 @@ def print_parameter_table(names, param, bnds, fixed=None):
         print(f"  {i:3d}  {n:<28} {v:12.5g}   ({b[0]:g}, {b[1]:g}){tag}")
 
 
+def copy_result_to_all_profiles(path, add_name, profile_dir="profile_likelihood"):
+    """
+    After a new local minimization: copy param_ode of <path>/Result_calibration<add_name>.json into
+    every existing profile run of this calibration (<path>/<profile_dir>/profile_likelihood_results
+    <add_name>_*_summary.json / _run.json), see pl.copy_result_to_profile_json. Runs with a different
+    number of parameters are skipped. cost_opt and the profile points are not changed.
+    """
+    import glob
+    result_json = os.path.join(path, f"Result_calibration{add_name}.json")
+    folder = os.path.join(path, profile_dir)
+    bases = set()
+    for suffix in ("_summary.json", "_run.json"):
+        for f in glob.glob(os.path.join(folder, f"profile_likelihood_results{add_name}_*{suffix}")):
+            if not f.endswith(("_before_copy.json", "_before_update.json")):
+                bases.add(f[:-len(suffix)])
+    if not bases:
+        print(f"No profile likelihood results in {folder}: nothing to update.")
+        return []
+    done = []
+    for b in sorted(bases):
+        try:
+            pl.copy_result_to_profile_json(result_json, b + ".csv")
+            done.append(b + ".csv")
+        except (ValueError, FileNotFoundError) as e:
+            print(f"Skipped {b}: {e}")
+    return done
+
+
 def build_calibr_setup(path, add_name, n_cl, n_media, objective="neg2logL"):
     """calibr_setup (incl. param_bnds and data_array) for a saved calibration.
     objective: 'neg2logL'    GaussianNeg2LogLik: -2 log L, data types weighted by their number of points

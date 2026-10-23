@@ -36,15 +36,21 @@ if __name__ == "__main__":
     #path_new = path+f'{int (n_cl)}_dim_{n_media}media_gen/calibration/'
 
     # 'Real' model:
+    # data generator = media of the in-silico data, must match n_media (functions in fusion_model/data/insilico_models.py):
+    #   1 medium : fm.data.model_1media_exp_sel1 / _sel2 / _sel3 / _gen1 / _gen2 / _gen3
+    #   2 media  : fm.data.model_2media_expgensel (sel1 + gen1), _expgen2sel2, _expgen3sel3, _expsel1sel2, ...
+    GEN_MODEL = fm.data.model_1media_exp_sel1
     temps = [2., 2., 2., 6., 6., 6., 10., 10., 10.]
     ntr = 1
     x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=path)['x0'])[:len(temps), :n_cl]
     S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=path)
-    dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(fm.data.model_2media_exp_sel, n_cl, temps, ntr, S_matrix_setup, x10=x10,
+    dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(GEN_MODEL, n_cl, temps, ntr, S_matrix_setup, x10=x10,
                                                                               inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0.,
                                                                               path=path_new, add_name=add_name)
     (df_mibi, df_maldi, df_ngs) = dfs_calibr
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
+    if len(media) != n_media:
+        raise ValueError(f'GEN_MODEL {GEN_MODEL.__name__} produces {len(media)} media {media}, but n_media = {n_media}')
     #n_cl = np.shape(dfs_calibr[1])[0] 
     exps_calibr = sorted(list(set([s.split('_')[0] for s in dfs_calibr[0].columns])))
 

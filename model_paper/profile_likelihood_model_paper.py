@@ -197,6 +197,9 @@ def build_calibr_setup(path, add_name, n_cl, n_media, objective="neg2logL"):
     calibr_setup = fm.pest.define_calibr_setup_insilico(
         calibr_presetup, inhib=True, s_x_predefined=s_x_predefined_from_maldi(df_maldi, media), s_x=None)
     calibr_setup["data_array"] = fm.dtf.extract_observables_from_df(dfs)
+    calibr_setup["s_max_penalty"] = result.get("s_max_penalty")  # same penalty as in the calibration
+    if calibr_setup["s_max_penalty"]:
+        print(f"Calibration used s_max_penalty = {calibr_setup['s_max_penalty']}: applied in the profiles too")
     if objective == "neg2logL":
         calibr_setup["aggregation_func"] = pl.make_gaussian_neg2loglik(calibr_setup["data_array"])
     elif objective == "geomean":

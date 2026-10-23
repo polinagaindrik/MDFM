@@ -100,6 +100,10 @@ if __name__ == "__main__":
     # True: FIX_PARAMS also in the global step (new differential evolution / multistart search with these
     # parameters fixed) instead of only refining from the earlier global result
     FIX_IN_GLOBAL = True
+    # Penalty so that the largest media coefficient S is 1 (fixes the x0/S scale trade-off): weight w, the cost
+    # rises by the factor exp(w * (max S - 1)^2), e.g. w = 100: max S = 0.9 -> +172 %, 0.97 -> +9 %. None: off.
+    # Stored in the result JSON; the profile likelihood uses the same penalty (needs new profiles).
+    S_MAX_PENALTY = None
 
     # profile likelihood settings
     PROFILE = 'all'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
@@ -170,6 +174,7 @@ if __name__ == "__main__":
     print('Temperatures:', calibr_presetup['exp_temps'])
     calibr_setup = fm.pest.define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=s_x_predefined, s_x=None)
     calibr_setup['data_array'] = fm.dtf.extract_observables_from_df(dfs)
+    calibr_setup['s_max_penalty'] = S_MAX_PENALTY
     names = make_param_names(exps, bact, media)
     param_true = true_parameter_vector(path, add_name, media, n_cl)
     assert len(param_true) == len(calibr_setup['param_bnds']) == len(names)
@@ -199,7 +204,8 @@ if __name__ == "__main__":
         print(f'{(time.time() - start) / 60.:.1f} min (global), cost = {cost_glob:.6g}')
         s_x_glob = np.array(param_glob)[-n_cl*n_media:].reshape((n_media, n_cl))
         fm.output.json_dump({'param_ode': param_glob.astype(list), 's_x': s_x_glob, 'T_x': T_x, 'cost': cost_glob,
-                             'fixed_params': fm.pest.fixed_values_record(fixed_glob, names)},
+                             'fixed_params': fm.pest.fixed_values_record(fixed_glob, names),
+                             's_max_penalty': S_MAX_PENALTY},
                             f'Result_calibration{add_name}_global.json', dir=path)
     else:
         param_glob = np.array(fm.output.read_from_json(f'Result_calibration{add_name}_global.json', dir=path)['param_ode'])
@@ -213,7 +219,8 @@ if __name__ == "__main__":
         print(f'{(time.time() - start) / 60.:.1f} min (global + local), cost = {cost_opt:.6g}')
         s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
         fm.output.json_dump({'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt,
-                             'fixed_params': fm.pest.fixed_values_record(fixed, names)},
+                             'fixed_params': fm.pest.fixed_values_record(fixed, names),
+                             's_max_penalty': S_MAX_PENALTY},
                             f'Result_calibration{add_name}.json', dir=path)
         copy_result_to_all_profiles(path, add_name)  # new optimum into existing profile JSON files
     else:

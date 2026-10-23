@@ -30,7 +30,7 @@ import numpy as np
 from scipy.optimize import least_squares
 
 from .optimization import die_with_parent
-from .cost_function import cost_withS, residuals_withS
+from .cost_function import cost_withS, residuals_withS, TotalCostFromResiduals
 
 RESIDUAL_FUNCS = {cost_withS: residuals_withS}  # cost function -> matching residual function
 PENALTY_RESIDUAL = 1e3  # residual value used when the ODE solve fails
@@ -156,8 +156,15 @@ def aggregation_weights(aggregation_func, residuals, rel_eps=1e-6):
     w = []
     for k in range(len(sq)):
         ssr = float(np.sum(sq[k]))
-        if ssr <= 0:
-            w.append(0.)
+        if ssr <= 0:  # e.g. penalty group exactly 0: derivative by an absolute step
+            if len(sq[k]) == 0:
+                w.append(0.)
+                continue
+            delta = 1e-10
+            sq_k = list(sq)
+            sq_k[k] = sq[k].copy()
+            sq_k[k][0] += delta
+            w.append(max((float(aggregation_func(sq_k)) - f0) / delta, 0.))
             continue
         sq_k = list(sq)
         sq_k[k] = sq[k] * (1. + rel_eps)
@@ -190,7 +197,9 @@ def least_squares_fit(cost_func, x_start, free_idx, calibr_setup, residual_func=
     Returns (cost, full parameter vector, success, number of Jacobian evaluations).
     """
     residual_func = residual_func_for(cost_func, residual_func)
-    agg = calibr_setup["aggregation_func"]
+    # cost as a function of the residual groups (incl. the optional s_max penalty group of residuals_withS)
+    agg = (TotalCostFromResiduals(calibr_setup) if residual_func is residuals_withS
+           else calibr_setup["aggregation_func"])
     x_start = np.array(x_start, dtype=float)
     free_idx = np.asarray(free_idx, dtype=int)
     bnds = calibr_setup["param_bnds"]

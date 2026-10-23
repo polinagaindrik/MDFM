@@ -48,6 +48,10 @@ if __name__ == "__main__":
     # The value may lie outside the bounds. The fixed values are part of param_ode in the output JSON and
     # listed under 'fixed_params'; the profile likelihood scripts then keep them fixed as well.
     FIX_PARAMS = {}
+    # Penalty so that the largest media coefficient S is 1 (fixes the x0/S scale trade-off): weight w, the cost
+    # rises by the factor exp(w * (max S - 1)^2), e.g. w = 100: max S = 0.9 -> +172 %, 0.97 -> +9 %. None: off.
+    # Stored in the result JSON; the profile likelihood uses the same penalty (needs new profiles).
+    S_MAX_PENALTY = None
 
     dfs, result, _ = load_calibration(path, add_name)
     df_mibi, df_maldi, df_ngs = dfs
@@ -70,6 +74,7 @@ if __name__ == "__main__":
     calibr_setup = fm.pest.define_calibr_setup_insilico(
         calibr_presetup, inhib=True, s_x_predefined=s_x_predefined_from_maldi(df_maldi, media), s_x=None)
     calibr_setup["data_array"] = fm.dtf.extract_observables_from_df(dfs)
+    calibr_setup["s_max_penalty"] = S_MAX_PENALTY
 
     # keep the global result once (don't overwrite it when the refinement is re-run)
     src = os.path.join(path, f"Result_calibration{add_name}.json")
@@ -90,7 +95,8 @@ if __name__ == "__main__":
 
     s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
     fm.output.json_dump({"param_ode": param_opt.astype(list), "s_x": s_x, "T_x": result["T_x"], "cost": cost_opt,
-                         "fixed_params": fm.pest.fixed_values_record(fixed, names)},
+                         "fixed_params": fm.pest.fixed_values_record(fixed, names),
+                         "s_max_penalty": S_MAX_PENALTY},
                         f"Result_calibration{add_name}.json", dir=path)
     print(f"Saved refined optimum to {src}")
     copy_result_to_all_profiles(path, add_name)  # new optimum into existing profile JSON files

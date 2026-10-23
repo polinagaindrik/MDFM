@@ -52,6 +52,8 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
     (sorted experiment order, as the x0 block of param). sum(r_k**2) equals the sum of
     the squared differences that cost_withS passes to calibr_setup['aggregation_func'].
     The length of each r_k depends only on the data, not on param.
+    With calibr_setup['s_max_penalty'], a 4th group [max(S) - 1] is appended (owner -1);
+    total_cost_from_residuals combines the groups exactly like cost_withS.
     """
     n_cl = calibr_setup['n_cl']
     n_media = calibr_setup['n_media']
@@ -90,7 +92,27 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
         res.append(r[mask])
         owner.append(np.broadcast_to(np.arange(len(obs)).reshape((-1,) + (1,) * (obs.ndim - 1)),
                                      obs.shape)[mask])
+    if calibr_setup.get('s_max_penalty'):
+        res.append(np.array([np.max(s_x) - 1.]))
+        owner.append(np.array([-1]))
     return res, owner
+
+
+class TotalCostFromResiduals:
+    """
+    cost_withS from the residual groups of residuals_withS: aggregation_func of the squared data
+    residuals, plus the s_max penalty from the last group if calibr_setup['s_max_penalty'] is set.
+    Used by the least-squares fit (reweighting needs the cost as a function of the sums of squares).
+    """
+    def __init__(self, calibr_setup):
+        self.calibr_setup = calibr_setup
+        self.agg = calibr_setup['aggregation_func']
+        self.penalty = bool(calibr_setup.get('s_max_penalty'))
+
+    def __call__(self, sq_groups):
+        if not self.penalty:
+            return self.agg(sq_groups)
+        return apply_s_max_penalty(self.agg(sq_groups[:-1]), self.calibr_setup, float(np.sum(sq_groups[-1])))
 
 
 def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
@@ -119,6 +141,47 @@ def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
     return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])
 
 
+def _n_total_points(aggregation_func):
+    """Total number of data points of a -2 log L aggregation (GaussianNeg2LogLik and subclasses,
+    also inside SelectedDataTypes); None for plain costs such as cost_sum_and_geometric_mean."""
+    agg = aggregation_func
+    use = None
+    if hasattr(agg, 'aggregation_func') and hasattr(agg, 'use'):  # SelectedDataTypes
+        agg, use = agg.aggregation_func, agg.use
+    n_data = getattr(agg, 'n_data', None)
+    if n_data is None:
+        return None
+    if use is None:
+        use = [True] * len(n_data)
+    return float(sum(n for n, u in zip(n_data, use) if u))
+
+
+def s_max_penalty_sq(s_x):
+    """(max(S) - 1)^2: deviation of the largest media coefficient from 1."""
+    return float((np.max(s_x) - 1.)**2)
+
+
+def apply_s_max_penalty(cost, calibr_setup, p_sq):
+    """
+    Add the penalty for max(S) != 1 to the aggregated cost, with weight w =
+    calibr_setup['s_max_penalty'] (None/0: no penalty). The penalty acts on the log scale, so that
+    calibration cost and profile objectives have the same optimum:
+      plain (positive) costs, e.g. cost_sum_and_geometric_mean:  cost * exp(w * (max S - 1)^2)
+      -2 log L objectives (GaussianNeg2LogLik, GeometricMeanNeg2LogLik): cost + N * w * (max S - 1)^2
+    (N = number of data points). Interpretation: max(S) = 1 - d raises the cost by the factor
+    exp(w d^2), e.g. w = 100, d = 0.1: +172 %; d = 0.03: +9.4 %.
+    """
+    w = calibr_setup.get('s_max_penalty')
+    if not w:
+        return cost
+    n_total = _n_total_points(calibr_setup['aggregation_func'])
+    if n_total is not None:
+        return cost + n_total * float(w) * p_sq
+    if cost <= 0:
+        raise ValueError('s_max_penalty needs a positive cost or a -2 log L aggregation')
+    return cost * np.exp(float(w) * p_sq)
+
+
 def cost_withS(param, calibr_setup, jac_spasity):
     """Evaluate the calibration cost with ODE parameters and media weights fitted together."""
     n_cl = calibr_setup['n_cl']
@@ -131,7 +194,9 @@ def cost_withS(param, calibr_setup, jac_spasity):
     x0_vals = param[:n_cl*len(exps)]
     ll_ngs, ll_maldi, ll_mibi = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
     #ll_s1, ll_s2 = S_squared_difference(np.concatenate((param[-n_cl*n_media:], [1.])), calibr_setup['dfs'], calibr_setup['data_array'], calibr_setup['T_x'])
-    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])#, ll_s1, ll_s2])
+    cost = calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])#, ll_s1, ll_s2])
+    # optional penalty so that the largest media coefficient is 1 (calibr_setup['s_max_penalty'] = weight)
+    return apply_s_max_penalty(cost, calibr_setup, s_max_penalty_sq(s_x))
 
 
 def cost_direct(param, calibr_setup, jac_spasity):

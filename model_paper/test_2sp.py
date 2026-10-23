@@ -123,6 +123,10 @@ if __name__ == "__main__":
     #   e.g. EXTEND = {2: {'upper': 5.0, 'n_points': 6}, 12: [0.01, 0.03, 0.1, 0.3, 0.6], 'auto': True}
     EXTEND = None
     EXTEND_N_POINTS = 6
+    # True: use the current Result_calibration*.json (e.g. a new, better local minimization) as the optimum of
+    # the existing profiles (same PROFILE / FIX_* / OBJECTIVE -> same CSV) instead of computing profiles:
+    # optimum rows, cost_opt, summary JSON (CIs) and plots are updated, the profile points are kept.
+    UPDATE_OPTIMUM = False
     # ================================================================
 
     os.makedirs(path, exist_ok=True)
@@ -257,7 +261,11 @@ if __name__ == "__main__":
 
         profile_options = ({'method': 'least_squares', 'maxiter': 200} if LOCAL_METHOD == 'least_squares'
                            else {'maxiter': 500, 'ftol': 1e-10, 'gtol': 1e-8})
-        if EXTEND is not None:
+        if UPDATE_OPTIMUM:
+            pl.update_profile_optimum(fm.pest.cost_withS, pl_setup, out_csv, param_opt,
+                                      true_params=param_true if SHOW_TRUE_VALUE else None,
+                                      plot_path=out_path + f'profile_likelihood{tag}.png')
+        elif EXTEND is not None:
             print('Parameter indices:')
             for i in profile_indices:
                 print(f'  {i:3d}  {names[i]:<28} estimate = {param_opt[i]:.6g}, bounds {calibr_setup["param_bnds"][i]}')

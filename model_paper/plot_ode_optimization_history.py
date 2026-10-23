@@ -15,7 +15,7 @@ if __name__ == "__main__":
     if CASE == 'test_2sp':
         n_cl = 2
         n_media = 2
-        path = 'model_paper/out/test_2sp/'
+        path = 'model_paper/out/test_2sp_0noise/'
         add_name = f'_{int(n_cl)}dim_{int(n_media)}media_test'
         real_file = f'Result_real{add_name}.json'
     else:

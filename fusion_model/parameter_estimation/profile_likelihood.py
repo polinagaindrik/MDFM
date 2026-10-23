@@ -231,6 +231,33 @@ class _TimedCost:
         return _safe_cost(self.cost_func, x, calibr_setup, jac_spasity, self.solve_timeout)
 
 
+def _is_jax(minimize_options):
+    """True if the fits use the JAX backend (minimize_options={'backend': 'jax', ...})."""
+    return (minimize_options or {}).get("backend", "numpy") == "jax"
+
+
+def _cost_for_backend(cost_func, minimize_options):
+    """cost_withS -> cost_withS_jax when the fits use the JAX backend (same solver for optimum and profiles)."""
+    if _is_jax(minimize_options):
+        from .cost_function import cost_withS
+        from .jax_backend import cost_withS_jax
+        if cost_func is cost_withS:
+            return cost_withS_jax
+    return cost_func
+
+
+def _spawn_pool(n_proc, initializer, initargs):
+    """Process pool for the JAX backend: fresh ('spawn') single-threaded processes (JAX does not survive fork)."""
+    return mp.get_context("spawn").Pool(processes=n_proc, initializer=_jax_init_then,
+                                        initargs=(initializer, initargs))
+
+
+def _jax_init_then(initializer, initargs):
+    from .optimization import jax_worker_init
+    jax_worker_init()
+    initializer(*initargs)
+
+
 def free_param_indices(param_bnds, fixed_indices=()):
     """Indices whose bounds are not fixed (lo == hi), excluding fixed_indices."""
     fixed = set(int(i) for i in (fixed_indices or ()))
@@ -333,7 +360,7 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
                                                n_jobs=n_ls, log_scale=o.get("log_scale", "auto"),
                                                maxiter=o.get("maxiter", 200), max_outer=o.get("max_outer", 8),
                                                **{k: o[k] for k in ("ftol", "xtol", "gtol") if k in o},
-                                               solve_timeout=solve_timeout,
+                                               solve_timeout=solve_timeout, backend=o.get("backend", "numpy"),
                                                label=(label or "fit") + (f" start {r + 1}/{len(starts)}"
                                                                          if len(starts) > 1 else ""),
                                                print_every=print_every)
@@ -345,6 +372,7 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
         opts = {"maxiter": 300, "ftol": 1e-10, "gtol": 1e-8}
         opts.update(minimize_options or {})
         opts.pop("method", None)
+        backend = opts.pop("backend", "numpy")
         # finite-difference gradients cost one evaluation per parameter; scipy's default
         # maxfun=15000 would otherwise stop large fits long before maxiter
         opts.setdefault("maxfun", 2 * (len(opt_idx) + 1) * opts["maxiter"])
@@ -353,6 +381,15 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
             starts.append(x_start[opt_idx] + rng.normal(0., jitter_frac, size=len(opt_idx)) * (hi - lo))
         best_c, best_z, best_ok, nit = np.inf, starts[0], False, 0
         fg = None if evaluator is None else fd_fun_and_grad(evaluator, x_start, opt_idx, lo, hi)
+        if backend == "jax":  # exact gradient by automatic differentiation
+            from .jax_backend import jax_cost_for
+            jc = jax_cost_for(calibr_setup)
+
+            def fg(z):
+                x = x_start.copy()
+                x[opt_idx] = z
+                c_, g_ = jc.value_and_grad(x)
+                return c_, g_[opt_idx]
         t0 = time.time()
         def _make_callback(r):
             """Create an iteration callback that labels progress for one restart."""
@@ -402,6 +439,9 @@ def refine_optimum(cost_func, param_opt, calibr_setup, jac_spasity=None, fixed_i
     print_every: print the cost every print_every iterations (0: silent).
     """
     param_opt = np.asarray(param_opt, dtype=float)
+    cost_func = _cost_for_backend(cost_func, minimize_options)
+    if _is_jax(minimize_options):
+        n_jobs = 1  # exact derivatives, no gradient pool needed
     opt_idx = free_param_indices(calibr_setup["param_bnds"], fixed_indices)
     c0 = _safe_cost(cost_func, param_opt, calibr_setup, jac_spasity, solve_timeout)
     maxiter = (minimize_options or {}).get("maxiter", 300)
@@ -524,6 +564,25 @@ def _run_walks(cost_func, param_opt, cost_opt, grids, tasks, calibr_setup, jac_s
                              finite-difference gradient in n_jobs processes (method='local')
     """
     n_jobs = n_jobs if n_jobs and n_jobs > 0 else (os.cpu_count() or 1)
+    if _is_jax(cfg.get("minimize_options")):
+        if n_jobs > 1 and len(tasks) > 1:
+            n_proc = min(n_jobs, len(tasks))
+            print(f"Running {len(tasks)} walks in {n_proc} parallel processes (JAX backend)", flush=True)
+            cfg_w = dict(cfg, progress=None, evaluator=None)
+            with _spawn_pool(n_proc, _pool_init, (cost_func, param_opt, cost_opt, grids, calibr_setup, jac_spasity,
+                                                  cfg_w)) as pool:
+                for idx, direction, rows in pool.imap_unordered(_pool_task, tasks):
+                    on_done(idx, direction, rows)
+            return
+        rng = np.random.default_rng(0)
+        for task in tasks:
+            idx, direction = task[:2]
+            side, x_init, extra_inits = (tuple(task[2:]) + ((),))[:3] if len(task) > 2 else (None, None, ())
+            rows = _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grids.get(idx), calibr_setup,
+                                 jac_spasity, dict(cfg, evaluator=None), rng, side=side, x_init=x_init,
+                                 extra_inits=extra_inits)
+            on_done(idx, direction, rows)
+        return
     if n_jobs > 1 and len(tasks) >= n_jobs:
         print(f"Running {len(tasks)} walks in {n_jobs} parallel processes", flush=True)
         with mp.Pool(processes=n_jobs, initializer=_pool_init,
@@ -796,7 +855,9 @@ def run_profile_likelihood_all(
     anchor_start      : also start each point from param_opt (pool_paper's restart 0)
     minimize_options  : L-BFGS-B options (default maxiter=300, ftol=1e-10, gtol=1e-8), or
                         {'method': 'least_squares', 'maxiter': 200, 'max_outer': 8, 'log_scale': 'auto'}
-                        for the trust-region least-squares fit (least_squares_fit.py) at every point
+                        for the trust-region least-squares fit (least_squares_fit.py) at every point;
+                        add 'backend': 'jax' for exact derivatives (jax_backend.py): walks then run in
+                        n_jobs fresh single-threaded processes
     solve_timeout     : seconds per cost evaluation before it counts as failed
     resume            : skip walks already stored in <out_csv>_partial.csv (same cost_opt)
     true_params       : true parameter vector (in-silico data), marked in the plot
@@ -811,6 +872,7 @@ def run_profile_likelihood_all(
     Also writes <out_csv>_summary.json (cost_opt, scale, CIs, identifiability status).
     """
     call_args = dict(locals())  # for a restart from a better optimum
+    cost_func = _cost_for_backend(cost_func, minimize_options)
     param_opt = np.asarray(param_opt, dtype=float)
     bnds = calibr_setup["param_bnds"]
     if len(bnds) != len(param_opt):
@@ -1133,6 +1195,7 @@ def extend_profile_likelihood(
         n_restarts - 1 random jitters (a single bad neighbour cannot pass on a worse local minimum)
     Returns the updated profile DataFrame.
     """
+    cost_func = _cost_for_backend(cost_func, minimize_options)
     base = os.path.splitext(out_csv)[0]
     partial_csv = base + "_partial.csv"
     final_exists = os.path.exists(out_csv)
@@ -1336,6 +1399,7 @@ def polish_profile_likelihood(cost_func, calibr_setup, out_csv, profile_indices=
     Returns the updated DataFrame.
     """
     import shutil
+    cost_func = _cost_for_backend(cost_func, minimize_options)
     base = os.path.splitext(out_csv)[0]
     partial_csv = base + "_partial.csv"
     final_exists = os.path.exists(out_csv)
@@ -1395,7 +1459,20 @@ def polish_profile_likelihood(cost_func, calibr_setup, out_csv, profile_indices=
     n_jobs = n_jobs if n_jobs and n_jobs > 0 else (os.cpu_count() or 1)
     kw = dict(cost_func=cost_func, calibr_setup=calibr_setup, jac_spasity=jac_spasity, free_idx=free_idx,
               minimize_options=minimize_options, solve_timeout=solve_timeout, tol=tol)
-    if n_jobs > 1 and len(tasks) >= n_jobs:
+    jax_backend = _is_jax(minimize_options)
+    if jax_backend and n_jobs > 1 and len(tasks) > 1:
+        n_proc = min(n_jobs, len(tasks))
+        print(f"Polishing {len(tasks)} profiles in {n_proc} parallel processes (JAX backend)", flush=True)
+        with _spawn_pool(n_proc, _polish_init, (cost_func, calibr_setup, jac_spasity, free_idx, minimize_options,
+                                                solve_timeout, tol)) as pool:
+            for idx, costs, xs, n_imp in pool.imap_unordered(_polish_task, tasks):
+                t = next(t for t in tasks if t[0] == idx)
+                save(idx, t[1], costs, xs, n_imp)
+    elif jax_backend:
+        for t in tasks:
+            idx, costs, xs, n_imp = _polish_profile(*t, **kw, evaluator=None)
+            save(idx, t[1], costs, xs, n_imp)
+    elif n_jobs > 1 and len(tasks) >= n_jobs:
         print(f"Polishing {len(tasks)} profiles in {n_jobs} parallel processes", flush=True)
         with mp.Pool(processes=n_jobs, initializer=_polish_init,
                      initargs=(cost_func, calibr_setup, jac_spasity, free_idx, minimize_options, solve_timeout,
@@ -1472,7 +1549,7 @@ def copy_result_to_profile_json(result_json, profile_csv, cost=None):
 
 
 def update_profile_optimum(cost_func, calibr_setup, out_csv, param_new, jac_spasity=None, solve_timeout=30,
-                           true_params=None, plot=True, plot_path=None, ncols=4, force=False):
+                           true_params=None, plot=True, plot_path=None, ncols=4, force=False, backend="numpy"):
     """
     Use a new optimum (e.g. a better local minimization saved in Result_calibration*.json) as the
     reference of an existing profile run, without recomputing the profiles:
@@ -1489,6 +1566,7 @@ def update_profile_optimum(cost_func, calibr_setup, out_csv, param_new, jac_spas
     Returns the updated DataFrame.
     """
     import shutil
+    cost_func = _cost_for_backend(cost_func, {"backend": backend})  # backend: as used for the profiles
     base = os.path.splitext(out_csv)[0]
     partial_csv = base + "_partial.csv"
     df, names, scale, cost_old, param_old = _read_csv_and_summary(out_csv, "auto")

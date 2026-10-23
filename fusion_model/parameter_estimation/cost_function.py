@@ -5,6 +5,61 @@ from fusion_model.model.solving import observable_NGS, observable_MALDI, observa
 from fusion_model.parameter_estimation.media_matrix import S_squared_difference
 
 
+# ----------------------------------------------------------------------
+# Noise model of the residuals: calibr_setup['noise_model']
+#   'absolute' (default): residual = measured - model (MiBi divided by its maximum)
+#   'relative': for multiplicative noise, measured = model * (1 + eps):
+#       MiBi (counts):          log(measured) - log(model)
+#       MALDI, NGS (fractions): centred log-ratio residual within each composition (over the species of one
+#                               experiment / medium / time point): log-ratios are not affected by the
+#                               normalization to proportions, the noise becomes eps_i - mean(eps)
+#   Entries with measured <= 0 (below detection, absent species) are not used; a composition with fewer than
+#   2 present species carries no information. Each composition has (present species - 1) degrees of freedom
+#   (count_data_points_noise), which -2 log L objectives must use as the number of data points.
+# ----------------------------------------------------------------------
+NOISE_MODELS = ('absolute', 'relative')
+
+
+def _noise_model(calibr_setup):
+    nm = calibr_setup.get('noise_model') or 'absolute'
+    if nm not in NOISE_MODELS:
+        raise ValueError(f"noise_model must be one of {NOISE_MODELS}, got {nm!r}")
+    return nm
+
+
+def relative_mask(meas, kind):
+    """Data entries used by the relative noise model (depends only on the data).
+    kind: 'counts' (MiBi) or 'composition' (MALDI, NGS; species on axis -2)."""
+    meas = np.asarray(meas, dtype=float)
+    use = np.isfinite(meas) & (meas > 0)
+    if kind == 'composition':
+        use = use & (use.sum(axis=-2, keepdims=True) >= 2)
+    return use
+
+
+def relative_residuals(meas, model, kind):
+    """Residuals of the relative noise model (NaN where not used), see relative_mask."""
+    meas = np.asarray(meas, dtype=float)
+    model = np.asarray(model, dtype=float)
+    use = relative_mask(meas, kind)
+    d = np.log(np.where(use, meas, 1.)) - np.log(np.maximum(np.where(use, model, 1.), 1e-300))
+    if kind == 'composition':
+        n_present = np.maximum(use.sum(axis=-2, keepdims=True), 1)
+        d = d - np.where(use, d, 0.).sum(axis=-2, keepdims=True) / n_present
+    return np.where(use, d, np.nan)
+
+
+def count_data_points_noise(data_array, noise_model='absolute'):
+    """Number of data points (degrees of freedom) per data type [ngs, maldi, mibi] for a noise model."""
+    _, (obs_mibi, obs_maldi, obs_ngs) = data_array
+    if noise_model == 'relative':
+        def comp_dof(obs):
+            use = relative_mask(obs, 'composition')
+            return int(np.sum(np.maximum(use.sum(axis=-2) - 1, 0)))
+        return [comp_dof(obs_ngs), comp_dof(obs_maldi), int(relative_mask(obs_mibi, 'counts').sum())]
+    return [int(np.count_nonzero(np.isfinite(o))) for o in (obs_ngs, obs_maldi, obs_mibi)]
+
+
 def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, mibi_max):
     """Simulate one experiment and return squared residuals for NGS, MALDI, and MiBi."""
     #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
@@ -20,12 +75,15 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, mibi_max):
     n_C0 = get_bacterial_count(np.array(C0).reshape(len(C0), 1), np.shape(s_x)[-1], 2)
 
     _, obs_ngs = observable_NGS(days, n_C, T_x, n_C0, const, days)
-    ll_ngs0 = (obs_ngs_meas[i] - obs_ngs)**2
-
     _, obs_maldi = observable_MALDI(days, n_C, s_x, n_C0, const, days)
-    ll_maldi0 = (obs_maldi_meas[i] - obs_maldi)**2
-        
     _, obs_mibi = observable_MiBi(days, n_C, s_x, n_C0, const, days)
+    if _noise_model(calibr_setup) == 'relative':
+        sq = [relative_residuals(obs_ngs_meas[i], obs_ngs, 'composition')**2,
+              relative_residuals(obs_maldi_meas[i], obs_maldi, 'composition')**2,
+              relative_residuals(obs_mibi_meas[i], obs_mibi, 'counts')**2]
+        return tuple(np.where(np.isnan(q), 0., q) for q in sq)  # unused entries: 0 (dropped later)
+    ll_ngs0 = (obs_ngs_meas[i] - obs_ngs)**2
+    ll_maldi0 = (obs_maldi_meas[i] - obs_maldi)**2
     ll_mibi0 = (obs_mibi_meas[i] - obs_mibi)**2 /mibi_max
     return ll_ngs0, ll_maldi0, ll_mibi0
 
@@ -84,11 +142,17 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
         m_mibi[i] = observable_MiBi(days, n_C, s_x, n_C0, const, days)[1]
 
     res, owner = [], []
-    for obs, mdl_obs, scale in ((obs_ngs_meas, m_ngs, 1.), (obs_maldi_meas, m_maldi, 1.),
-                                (obs_mibi_meas, m_mibi, mibi_max)):
+    relative = _noise_model(calibr_setup) == 'relative'
+    for obs, mdl_obs, scale, kind in ((obs_ngs_meas, m_ngs, 1., 'composition'),
+                                      (obs_maldi_meas, m_maldi, 1., 'composition'),
+                                      (obs_mibi_meas, m_mibi, mibi_max, 'counts')):
         obs = np.asarray(obs, dtype=float)
-        mask = ~np.isnan(obs)
-        r = (obs - mdl_obs) / scale
+        if relative:
+            mask = relative_mask(obs, kind)
+            r = relative_residuals(obs, mdl_obs, kind)
+        else:
+            mask = ~np.isnan(obs)
+            r = (obs - mdl_obs) / scale
         res.append(r[mask])
         owner.append(np.broadcast_to(np.arange(len(obs)).reshape((-1,) + (1,) * (obs.ndim - 1)),
                                      obs.shape)[mask])

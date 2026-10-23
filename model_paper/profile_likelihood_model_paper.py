@@ -200,10 +200,14 @@ def build_calibr_setup(path, add_name, n_cl, n_media, objective="neg2logL"):
     calibr_setup["s_max_penalty"] = result.get("s_max_penalty")  # same penalty as in the calibration
     if calibr_setup["s_max_penalty"]:
         print(f"Calibration used s_max_penalty = {calibr_setup['s_max_penalty']}: applied in the profiles too")
+    calibr_setup["noise_model"] = result.get("noise_model", "absolute")  # same noise model as the calibration
+    print(f"Noise model of the calibration: {calibr_setup['noise_model']}")
     if objective == "neg2logL":
-        calibr_setup["aggregation_func"] = pl.make_gaussian_neg2loglik(calibr_setup["data_array"])
+        calibr_setup["aggregation_func"] = pl.make_gaussian_neg2loglik(calibr_setup["data_array"],
+                                                                       calibr_setup["noise_model"])
     elif objective == "geomean":
-        calibr_setup["aggregation_func"] = pl.make_geomean_neg2loglik(calibr_setup["data_array"])
+        calibr_setup["aggregation_func"] = pl.make_geomean_neg2loglik(calibr_setup["data_array"],
+                                                                      calibr_setup["noise_model"])
     param_opt = np.array(result["param_ode"], dtype=float)
     param_names = make_param_names(exps, bact, media)
     assert len(param_opt) == len(calibr_setup["param_bnds"]) == len(param_names)

@@ -313,7 +313,7 @@ if __name__ == "__main__":
                   f"bounds {calibr_setup['param_bnds'][i]}")
         extend_profile_likelihood(
             calibr_setup, out_csv, EXTEND,
-            n_jobs=20, n_restarts=1, jitter_frac=0.05,
+            n_jobs=20, n_restarts=3, jitter_frac=0.05,  # multistart per new point
             fixed_indices=fixed_indices,
             stop_factor=1.5,
             minimize_options=profile_options,

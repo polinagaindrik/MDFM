@@ -428,13 +428,15 @@ def refine_optimum(cost_func, param_opt, calibr_setup, jac_spasity=None, fixed_i
 # ----------------------------------------------------------------------
 
 def _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grid, calibr_setup, jac_spasity, cfg, rng,
-                  side=None, x_init=None):
+                  side=None, x_init=None, extra_inits=()):
     """
     Re-optimize all other free parameters at the grid points on one side of the
     optimum, in order of increasing distance, warm-starting each point from the
     previous one. Returns a list of dicts.
     side, x_init (extend_profile_likelihood): walk over these values instead, starting
     from the full parameter vector x_init (an existing profile point) instead of param_opt.
+    extra_inits: further full start vectors for the first point (e.g. the other neighbour);
+    the best of all starts is kept (plus the optimum and n_restarts - 1 random jitters).
     """
     p_hat = float(param_opt[idx])
     if side is None:
@@ -456,6 +458,11 @@ def _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grid, calibr_s
         x_start = x_prev.copy()
         x_start[idx] = val
         extra = []
+        if k == 0:
+            for xi in extra_inits:
+                xe = np.array(xi, dtype=float)
+                xe[idx] = val
+                extra.append(xe)
         if cfg["anchor_start"] and (k > 0 or x_init is not None):
             x_anchor = np.array(param_opt, dtype=float)
             x_anchor[idx] = val
@@ -502,9 +509,10 @@ def _pool_init(cost_func, param_opt, cost_opt, grids, calibr_setup, jac_spasity,
 def _pool_task(task):
     """Run one parameter-profile walk in a worker process."""
     idx, direction = task[:2]
-    side, x_init = task[2:] if len(task) > 2 else (None, None)
+    side, x_init, extra_inits = (tuple(task[2:]) + ((),))[:3] if len(task) > 2 else (None, None, ())
     rows = _profile_walk(_G["cost_func"], _G["param_opt"], _G["cost_opt"], idx, direction, _G["grids"].get(idx),
-                         _G["calibr_setup"], _G["jac_spasity"], _G["cfg"], _G["rng"], side=side, x_init=x_init)
+                         _G["calibr_setup"], _G["jac_spasity"], _G["cfg"], _G["rng"], side=side, x_init=x_init,
+                         extra_inits=extra_inits)
     return idx, direction, rows
 
 
@@ -533,9 +541,10 @@ def _run_walks(cost_func, param_opt, cost_opt, grids, tasks, calibr_setup, jac_s
         cfg_serial = dict(cfg, evaluator=ev if use_grad_pool else None)
         for task in tasks:
             idx, direction = task[:2]
-            side, x_init = task[2:] if len(task) > 2 else (None, None)
+            side, x_init, extra_inits = (tuple(task[2:]) + ((),))[:3] if len(task) > 2 else (None, None, ())
             rows = _profile_walk(cost_func, param_opt, cost_opt, idx, direction, grids.get(idx),
-                                 calibr_setup, jac_spasity, cfg_serial, rng, side=side, x_init=x_init)
+                                 calibr_setup, jac_spasity, cfg_serial, rng, side=side, x_init=x_init,
+                                 extra_inits=extra_inits)
             on_done(idx, direction, rows)
 
 
@@ -1074,7 +1083,7 @@ def extend_profile_likelihood(
     extend,
     jac_spasity=None,
     n_jobs=1,
-    n_restarts=1,
+    n_restarts=3,
     jitter_frac=0.05,
     fixed_indices=None,
     anchor_start=True,
@@ -1117,10 +1126,12 @@ def extend_profile_likelihood(
     stop_factor             : stop a walk once Delta > stop_factor * threshold (None: all points)
     other arguments         : as in run_profile_likelihood_all
 
-    How: values beyond the current range are walked outward from the outermost existing
-    point (warm start from its full parameter vector, then from the previous new point);
-    values inside the range start from the nearest existing point. With anchor_start, each
-    point is also started from the optimum. Returns the updated profile DataFrame.
+    How (local multistart at every new point, the best fit is kept):
+      values beyond the current range: walked outward, starts from the outermost existing point
+        (then the previous new point), the optimum (anchor_start) and n_restarts - 1 random jitters
+      values inside the range: starts from BOTH neighbouring existing points, the optimum and
+        n_restarts - 1 random jitters (a single bad neighbour cannot pass on a worse local minimum)
+    Returns the updated profile DataFrame.
     """
     base = os.path.splitext(out_csv)[0]
     partial_csv = base + "_partial.csv"
@@ -1192,8 +1203,10 @@ def extend_profile_likelihood(
             tasks.append((idx, _EXT_DIRECTION[+1], above, x_at(cur_hi)))
         if len(below):
             tasks.append((idx, _EXT_DIRECTION[-1], below, x_at(cur_lo)))
-        for v in inside:
-            tasks.append((idx, _EXT_DIRECTION[0], np.array([v]), x_at(v)))
+        for v in inside:  # multistart from both neighbours (+ optimum, + n_restarts - 1 jitters)
+            left = pts[int(np.argmax(np.where(existing < v, existing, -np.inf)))][1]
+            right = pts[int(np.argmin(np.where(existing > v, existing, np.inf)))][1]
+            tasks.append((idx, _EXT_DIRECTION[0], np.array([v]), left, [right]))
         print(f"param[{idx}] {names[idx]}: current range [{cur_lo:.6g}, {cur_hi:.6g}], "
               f"{len(new)} new points: {np.round(new, 6).tolist()}")
     if not tasks:

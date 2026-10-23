@@ -135,7 +135,13 @@ if __name__ == "__main__":
     # 'neg2logL'   : -2 log L, data types weighted by their number of points
     # 'geomean'    : -2 log L form of cost_sum_and_geometric_mean (same optimum, equal weight per data type)
     # 'calibration': cost_sum_and_geometric_mean itself (profile scale linearized: G_opt / N)
+    # 'known_noise': -2 log L with a KNOWN noise level KNOWN_SIGMA (sum SSR_k / sigma_k^2), e.g. for noise-free
+    #                data (relnoise = 0): the profiles of an experiment with that noise level. The objectives
+    #                above estimate the noise from the residuals and diverge for noise-free data.
     OBJECTIVE = 'neg2logL'
+    # noise level for OBJECTIVE = 'known_noise': one value or [NGS, MALDI, MiBi], in the units of the residuals
+    # (NOISE_MODEL = 'relative': standard deviation of the log residuals, 0.1 ~ 10 % relative noise)
+    KNOWN_SIGMA = 0.1
     # objective of differential evolution / multistart / local refinement; OBJECTIVE = the same objective
     # everywhere (the optimum of the calibration is then directly the optimum of the profiles).
     # 'calibration' = cost_sum_and_geometric_mean as before. Stored as 'objective' in the result JSON files;
@@ -212,7 +218,8 @@ if __name__ == "__main__":
         """Aggregation function of an objective name (see OBJECTIVE)."""
         return {'neg2logL': pl.make_gaussian_neg2loglik(calibr_setup['data_array'], NOISE_MODEL),
                 'geomean': pl.make_geomean_neg2loglik(calibr_setup['data_array'], NOISE_MODEL),
-                'calibration': fm.pest.cost_sum_and_geometric_mean}[name]
+                'calibration': fm.pest.cost_sum_and_geometric_mean,
+                'known_noise': pl.make_known_noise_neg2loglik(calibr_setup['data_array'], KNOWN_SIGMA, NOISE_MODEL)}[name]
 
     def save_result(fname, data):
         """Write a result JSON with its objective and noise model; keep an existing file that has a different

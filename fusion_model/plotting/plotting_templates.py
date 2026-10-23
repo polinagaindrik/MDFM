@@ -108,7 +108,7 @@ def plot_all_crittime(temp_plot, labels, templ_meas=template_plot_measurements0,
 # Plotting of model prediction and/or measurement data:
 def plot_all(temp_plot, labels, templ_meas=template_plot_measurements0, clrs=None, df=[], temps=[], mtimes=[], mestim=[], time_lim=[], tcr=[], dir='', add_name=''):
     """Plot model predictions and measurements across the requested temperatures."""
-    ncols = [1, 1, 1,]
+    ncols = [1 for _ in temp_plot]
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df.columns])))[0]
     exps = sorted(list(set([s.split('_')[0] for s in df.columns])))
     if len(temp_plot)==1 or len(np.shape(temp_plot))==2:

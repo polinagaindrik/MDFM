@@ -53,23 +53,16 @@ def plot_measurements_insilico(ax0, temp, df, clrs=None, lab='',  media=''):
         if exp != 'V10':
             plt_templ.plot_measurement(ax0, df0.filter(like=exp+'_'), exp, exp_clrs[exp], lst[i], scatter_marker[i])
     coord_text = (0.07, 0.92)
-    if media =='PC' or media =='media1' or media =='gen1':
-        if temp == 2:
-            ax0.text(*coord_text, '(a)', fontsize=20,
-                horizontalalignment='center', verticalalignment='center', transform=ax0.transAxes)
-        elif temp == 6:#10:
-            ax0.text(*coord_text, '(b)', fontsize=20,
-                    horizontalalignment='center', verticalalignment='center', transform=ax0.transAxes)
-        else:
-            ax0.text(*coord_text, '(c)', fontsize=20,
-                    horizontalalignment='center', verticalalignment='center', transform=ax0.transAxes)
-    elif media =='MRS' or media =='media2' or media =='sel1':
-        if temp == 2:
-            ax0.text(*coord_text, '(d)', fontsize=20,
-                horizontalalignment='center', verticalalignment='center', transform=ax0.transAxes)
-        elif temp == 6:#10:
-            ax0.text(*coord_text, '(e)', fontsize=20,
-                    horizontalalignment='center', verticalalignment='center', transform=ax0.transAxes)
-        else:
-            ax0.text(*coord_text, '(f)', fontsize=20,
-                    horizontalalignment='center', verticalalignment='center', transform=ax0.transAxes)
+    # panel letters: first medium (a, b, c, ...), second medium continues after it. The paper design
+    # (2 / 6 / 10 degC) keeps its letters; other designs are lettered by temperature order.
+    all_temps = sorted({float(c.split('_')[2].rstrip('C')) for c in df.columns})
+    if set(all_temps) <= {2., 6., 10.}:
+        k, n_t = {2.: 0, 6.: 1}.get(float(temp), 2), 3
+    else:
+        k, n_t = all_temps.index(float(temp)), len(all_temps)
+    first = media in ('PC', 'media1', 'gen1')
+    second = media in ('MRS', 'media2', 'sel1')
+    if first or second:
+        letter = chr(ord('a') + k + (n_t if second else 0))
+        ax0.text(*coord_text, f'({letter})', fontsize=20,
+                 horizontalalignment='center', verticalalignment='center', transform=ax0.transAxes)

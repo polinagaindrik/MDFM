@@ -12,10 +12,12 @@ if __name__ == "__main__":
     # 'test_2sp': 2-species test of model_paper/test_2sp.py
     CASE = 'test_2sp'
 
+    DESIGN = 'base'  # test_2sp only: design as in test_2sp.py ('base', 'rep3', 'temps6', ...)
+
     if CASE == 'test_2sp':
         n_cl = 2
         n_media = 2
-        path = 'model_paper/out/test_2sp/'
+        path = 'model_paper/out/test_2sp/' if DESIGN == 'base' else f'model_paper/out/test_2sp_{DESIGN}/'
         add_name = f'_{int(n_cl)}dim_{int(n_media)}media_test'
     else:
         n_cl = 4
@@ -65,16 +67,29 @@ if __name__ == "__main__":
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     exp_clrs = {}
     i, j, k = 0, 0, 0
-    for exp, temp in zip(calibr_setup['exp_temps'], calibr_setup['exp_temps'].values()):
-        if temp == 2.:
-            exp_clrs[exp] =  fm.plotting.blue_colors[i]
-            i += 1
-        elif temp == 6.:
-            exp_clrs[exp] =  fm.plotting.green_colors[j]
-            j += 1
-        else:
-            exp_clrs[exp] =  fm.plotting.red_colors[k]
-            k += 1
+    try:  # paper colours (2 / 6 / 10 degC) as long as they suffice
+        for exp, temp in zip(calibr_setup['exp_temps'], calibr_setup['exp_temps'].values()):
+            if temp == 2.:
+                exp_clrs[exp] = fm.plotting.blue_colors[i]
+                i += 1
+            elif temp == 6.:
+                exp_clrs[exp] = fm.plotting.green_colors[j]
+                j += 1
+            elif temp == 10.:
+                exp_clrs[exp] = fm.plotting.red_colors[k]
+                k += 1
+            else:
+                raise IndexError
+    except IndexError:  # other temperatures / more replicates: colour by temperature (cold = blue, warm = red)
+        import matplotlib.colors as mcolors
+        tvals = sorted(set(calibr_setup['exp_temps'].values()))
+        norm = mcolors.Normalize(min(tvals) - 1., max(tvals) + 1.)
+        seen = {}
+        for exp, temp in sorted(calibr_setup['exp_temps'].items()):
+            r = seen.get(temp, 0)
+            seen[temp] = r + 1
+            base = np.array(plt.cm.coolwarm(norm(temp))[:3])
+            exp_clrs[exp] = tuple(base * (1. - 0.25 * r) + 0.25 * r * np.array([0.3, 0.3, 0.3]))  # replicates darker
 
     labels = ('Time',  r'log CFU mL$^{-1}$')
     temps_all = sorted(set(calibr_setup['exp_temps'].values()))

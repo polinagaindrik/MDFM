@@ -775,10 +775,13 @@ def estimate_profile_scale(cost_func, param_opt, calibr_setup, cost_opt, n_free_
     * otherwise pool_paper's estimate for a mean squared residual under i.i.d. Gaussian noise:
       sigma_hat2 = cost_opt, scale = sigma_hat2 / n_data.
     """
-    n_data = count_data_points(cost_func, param_opt, calibr_setup, jac_spasity)
     agg = calibr_setup.get("aggregation_func")
-    if isinstance(agg, GaussianNeg2LogLik):
-        return 1.0, n_data, None
+    if isinstance(agg, GaussianNeg2LogLik):  # already -2 log L, no counting needed
+        return 1.0, int(sum(agg.n_data)), None
+    if getattr(cost_func, "__name__", "") == "cost_withS_jax":  # counting needs the numpy cost function
+        from .cost_function import cost_withS
+        cost_func = cost_withS
+    n_data = count_data_points(cost_func, param_opt, calibr_setup, jac_spasity)
     if agg is cost_sum_and_geometric_mean:
         if n_data <= 0:
             raise ValueError("n_data <= 0: no data points found in cost_func().")

@@ -51,6 +51,12 @@ def _jax_aggregation(agg):
 
         def f(ssr):
             return sum(n_bar * jnp.log(jnp.maximum(s, 1e-300) / nk) for s, nk in zip(ssr, n) if nk > 0)
+    elif name == "KnownNoiseNeg2LogLik":
+        n = [float(v) for v in agg.n_data]
+        sig = [float(v) for v in agg.sigma]
+
+        def f(ssr):
+            return sum(s / sg ** 2 for s, nk, sg in zip(ssr, n, sig) if nk > 0)
     elif name == "GaussianNeg2LogLik":
         n = [float(v) for v in agg.n_data]
 
@@ -58,7 +64,7 @@ def _jax_aggregation(agg):
             return sum(nk * jnp.log(jnp.maximum(s, 1e-300) / nk) for s, nk in zip(ssr, n) if nk > 0)
     else:
         raise NotImplementedError(f"aggregation {name} has no JAX version (supported: cost_sum_and_geometric_mean, "
-                                  f"GaussianNeg2LogLik, GeometricMeanNeg2LogLik, SelectedDataTypes of these)")
+                                  f"GaussianNeg2LogLik, GeometricMeanNeg2LogLik, KnownNoiseNeg2LogLik, SelectedDataTypes of these)")
     if use is None:
         return f
     return lambda ssr: f([s for s, u in zip(ssr, use) if u])

@@ -72,31 +72,33 @@ if __name__ == "__main__":
     temps = [2., 6., 10.]          # 3 experiments, 3 temperatures
     ntr = 1
     add_name = f'_{n_cl}dim_{n_media}media_test'
-    workers = 20#-1                   # differential evolution: -1 = all cores
-    n_jobs = 20#os.cpu_count()-2 or 1   # local multistart / profile likelihood processes
+    workers = 3#-1                   # differential evolution: -1 = all cores
+    n_jobs = 3#os.cpu_count()-2 or 1   # local multistart / profile likelihood processes
 
     RUN_DATA = False               # generate the in-silico data
     RUN_GLOBAL = False             # 2) differential evolution
-    RUN_LOCAL = False              # 3) local refinement
-    RUN_PROFILE = True             # 4) profile likelihood
+    RUN_LOCAL = True               # 3) local refinement
+    RUN_PROFILE = False             # 4) profile likelihood
 
     # optimizer settings
     # global step: 'de'            differential evolution (as before)
     #              'multistart'    N_STARTS local fits from Latin hypercube points (recommended for many species)
     #              'de+multistart' differential evolution, then the multistart incl. the DE result
     GLOBAL_METHOD = 'de'
-    N_STARTS = 20
+    N_STARTS = 1
     # local step and profile fits: 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on
     # the residuals, parameters scaled, much faster convergence for ill-conditioned problems)
-    LOCAL_METHOD = 'L-BFGS-B'
+    LOCAL_METHOD = 'least_squares'
     # local step: parameters held at a fixed value, only the others are refined (e.g. non-identifiable ones
     # set to 0). Keys: index or name (see the printed parameter table), e.g. {17: 0., 18: 0.} or
     # {'k_00,01': 0.}; the value may lie outside the bounds. Stored as 'fixed_params' in
     # Result_calibration*.json and kept fixed in the profile likelihood (not profiled, not re-fitted).
-    FIX_PARAMS = {}
+    FIX_PARAMS = {'k_00,01': 0.,
+                  'alpha_exp,00': 0.,
+                  'lambda_exp,00': 0.}
     # True: FIX_PARAMS also in the global step (new differential evolution / multistart search with these
     # parameters fixed) instead of only refining from the earlier global result
-    FIX_IN_GLOBAL = False
+    FIX_IN_GLOBAL = True
 
     # profile likelihood settings
     PROFILE = 'all'              # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)
@@ -202,12 +204,7 @@ if __name__ == "__main__":
     if RUN_LOCAL:
         fixed = resolve_fixed_values(FIX_PARAMS, names)
         print_parameter_table(names, param_glob, calibr_setup['param_bnds'], fixed)
-        param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
-                                                         fixed_values=fixed,
-                                                         maxiter=200 if LOCAL_METHOD == 'least_squares' else 1000,
-                                                         n_restarts=3, jitter_frac=0.05, n_jobs=n_jobs,
-                                                         method=LOCAL_METHOD,
-                                                         history_file=path + 'optimization_history_local.csv')
+        param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup, fixed_values=fixed, maxiter=500 if LOCAL_METHOD == 'least_squares' else 1000,n_restarts=3, jitter_frac=0.1, n_jobs=n_jobs, method=LOCAL_METHOD, history_file=path + 'optimization_history_local.csv')
         print(f'{(time.time() - start) / 60.:.1f} min (global + local), cost = {cost_opt:.6g}')
         s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
         fm.output.json_dump({'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt,

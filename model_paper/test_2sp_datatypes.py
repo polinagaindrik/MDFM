@@ -94,8 +94,8 @@ if __name__ == "__main__":
     start = time.time()
 
     # in-silico data (as in test_2sp.py) ---------------------------------
-    S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir='model_paper/out/')
-    x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir='model_paper/out/')['x0'])[:len(temps), :n_cl]
+    S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=fm.data.SETUP_DIR)
+    x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=fm.data.SETUP_DIR)['x0'])[:len(temps), :n_cl]
     if RUN_DATA or not os.path.exists(data_path + f'dataframe_mibi{add_name}_preprocessed.pkl'):
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
             fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=PARAM_ODE_TRUE.copy(),

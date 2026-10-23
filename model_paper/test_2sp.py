@@ -33,15 +33,9 @@ import numpy as np
 # True model (2 species; values of species 00 and 01 of the 4-species in-silico model)
 # ----------------------------------------------------------------------
 N_CL = 2
-PARAM_ODE_TRUE = np.array(
-    [-3.6, -4.8] +          # lambda_1   (log10)
-    [1.7, 1.9] +            # lambda_exp
-    [0.8, 0.8] +            # alpha_0
-    [0.4, 0.8] +            # alpha_exp
-    [9.9, 0.7] +            # N_1 (log10), N_exp
-    [0.0, 0.5,              # k_ij (row i: inhibition of species i by species j; k_ii = 0)
-     1.9, 0.0]
-)
+# true ODE parameters of species 00 and 01 [lambda_1, lambda_exp, alpha_0, alpha_exp, N_1, N_exp, k_ij]
+# from model_paper/setup/True_parameters_paper.json (created by main_true_parameters.py)
+PARAM_ODE_TRUE = fm.data.read_true_parameters(N_CL)['param_ode']
 GEN_MEDIA = ['sel1', 'gen1']  # media order of fm.data.model_2media_expgensel (S rows in the true file)
 
 
@@ -160,8 +154,8 @@ if __name__ == "__main__":
     start = time.time()
 
     # 1) in-silico data -------------------------------------------------
-    S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir='model_paper/out/')
-    x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir='model_paper/out/')['x0'])[:len(temps), :n_cl]
+    S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=fm.data.SETUP_DIR)
+    x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=fm.data.SETUP_DIR)['x0'])[:len(temps), :n_cl]
     if RUN_DATA or not os.path.exists(path + f'dataframe_mibi{add_name}_preprocessed.pkl'):
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
             fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=PARAM_ODE_TRUE.copy(),

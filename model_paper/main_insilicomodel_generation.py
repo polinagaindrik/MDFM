@@ -20,7 +20,7 @@ def generate_S_matrix(n_cl_max, add_name=''):
 
 if __name__ == "__main__":
    np.random.seed(4698517)
-   path = 'model_paper/out/'
+   path = fm.data.SETUP_DIR  # model_paper/setup/; afterwards run main_true_parameters.py
    n_exp_max = 15
    n_cl_max = 12
    add_name = '_paper'

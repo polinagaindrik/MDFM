@@ -307,6 +307,70 @@ def model_13sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
 t = np.linspace(0., 17., 18)
 #np.random.seed(4698517)
 
+# ----------------------------------------------------------------------
+# True parameters of the in-silico data (model_paper/setup/)
+# ----------------------------------------------------------------------
+SETUP_DIR = 'model_paper/setup/'                     # relative to the repository root (working directory)
+TRUE_PARAMETERS_FILE = 'True_parameters_paper.json'  # written by model_paper/main_true_parameters.py
+INITIAL_VALUES_FILE = 'Initial_values_x0_paper.json'
+MEDIA_MATRIX_FILE = 'Media_matrix_S_paper.json'
+
+
+def _split_true_param_ode(param_ode, n_cl_file):
+    """[x0 (n_exps x n_cl) | lambda_1 | lambda_exp | alpha_0 | alpha_exp | N_1, N_exp | k (n_cl x n_cl)] -> parts."""
+    p = np.asarray(param_ode, dtype=float)
+    n = n_cl_file
+    n_ode = 4*n + 2 + n*n
+    n_x0 = len(p) - n_ode
+    if n_x0 < 0 or n_x0 % n:
+        raise ValueError(f'param_ode of length {len(p)} does not fit {n} species')
+    x0 = p[:n_x0].reshape(-1, n)
+    o = p[n_x0:]
+    return x0, o[:n], o[n:2*n], o[2*n:3*n], o[3*n:4*n], o[4*n:4*n+2], o[4*n+2:].reshape(n, n)
+
+
+def read_true_parameters(n_cl, file=TRUE_PARAMETERS_FILE, dir=SETUP_DIR):
+    """
+    True parameters of the in-silico model for the first n_cl species, from the setup JSON
+    (param_ode = [x0 | ODE] of all species, s_x = media x species, T_x). Returns a dict:
+      'param_ode': ODE parameters for n_cl species [lambda_1, lambda_exp, alpha_0, alpha_exp, N_1, N_exp, k_ij]
+                   (the layout fusion_model2 / model_exp expects)
+      'x10'      : log10 initial values, experiments x n_cl
+      's_x'      : media x n_cl, 'T_x': n_cl
+    """
+    res = read_from_json(file, dir=dir)
+    n_file = len(res['T_x'])
+    if n_cl > n_file:
+        raise ValueError(f'{dir}{file} has {n_file} species, {n_cl} requested')
+    x0, lam1, lamexp, alph0, alphexp, nmax, k = _split_true_param_ode(res['param_ode'], n_file)
+    param_ode = np.concatenate([lam1[:n_cl], lamexp[:n_cl], alph0[:n_cl], alphexp[:n_cl], nmax,
+                                k[:n_cl, :n_cl].ravel()])
+    s_x = np.asarray(res['s_x'], dtype=float).reshape(-1, n_file)[:, :n_cl]
+    return {'param_ode': param_ode, 'x10': x0[:, :n_cl], 's_x': s_x,
+            'T_x': np.asarray(res['T_x'], dtype=float)[:n_cl]}
+
+
+def true_parameters_from_zl2030(zl2030_dir, n_cl=12, n_exps=9, setup_dir=SETUP_DIR,
+                                initial_values_file=INITIAL_VALUES_FILE, media_file=MEDIA_MATRIX_FILE):
+    """
+    Build the true-parameter JSON content (see read_true_parameters) from the ZL2030 calibration
+    (zl2030_dir/Result_calibration_zl2030_copy.json, exponential model, ODE parameters rounded to one
+    decimal as in get_res_from_zl2030dict), the initial values (first n_exps experiments) and the media
+    matrix (s_x = [first selective medium, first general medium], T_x) of the setup folder.
+    """
+    _, _, ode = get_res_from_zl2030dict(n_cl, model='exponential', dir=zl2030_dir)
+    ode = np.array(ode, dtype=float)
+    k = ode[4*n_cl+2:].reshape(n_cl, n_cl)
+    np.fill_diagonal(k, 0.)  # no self-inhibition
+    ode[4*n_cl+2:] = k.ravel()
+    x10 = np.array(read_from_json(initial_values_file, dir=setup_dir)['x0'], dtype=float)[:n_exps, :n_cl]
+    S = read_from_json(media_file, dir=setup_dir)
+    s_x = np.concatenate([np.asarray(S['s_selective'][0][:n_cl], dtype=float),
+                          np.asarray(S['s_general'][0][:n_cl], dtype=float)])
+    return {'param_ode': list(np.concatenate([x10.ravel(), ode])), 's_x': list(s_x),
+            'T_x': list(np.asarray(S['T_x'][:n_cl], dtype=float))}
+
+
 def get_res_from_zl2030dict(n_cl, model='linear', dir=''):
     """Extract and reshape calibration parameters from ZL2030 project for a requested number of clusters."""
     n_cl_zl2030 = 12
@@ -356,8 +420,9 @@ def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, pa
 def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
     """Generate synthetic observations using the exponential temperature-dependent model."""
     np.random.seed(46987)
-    if param_ode is None:
-        _, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
+    if param_ode is None:  # true ODE parameters from the setup folder (see read_true_parameters)
+        param_ode = read_true_parameters(n_cl)['param_ode']
+        print(f'model_exp: true ODE parameters of {n_cl} species from {SETUP_DIR}{TRUE_PARAMETERS_FILE}')
     if not inhib:
         param_ode[-n_cl*n_cl:] = 0.
     param_model = np.concatenate([param_ode, s_x, T_x])

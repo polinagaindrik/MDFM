@@ -47,6 +47,27 @@ def true_parameter_vector(path, add_name, media_sorted, n_cl):
     return np.concatenate([np.ravel(tr['param_ode']), s_true.ravel()])
 
 
+def normalize_truth_max_s(S_matrix_setup, x10, param_ode, n_cl):
+    """
+    Rescale the true parameters so that the largest media coefficient is 1 (as S_MAX_PENALTY assumes), with
+    (almost) unchanged observables: S / m, counts * m, i.e. x0 + log10(m), N_1 + log10(m), k_ij / m, where
+    m = max(S) of the media used (sel1, gen1). Exact up to the one initially active cell per species.
+    Returns (S_matrix_setup, x10, param_ode, m) with copies of the changed values.
+    """
+    sel = np.array(S_matrix_setup['s_selective'][0][:n_cl], dtype=float)
+    gen = np.array(S_matrix_setup['s_general'][0][:n_cl], dtype=float)
+    m = float(max(sel.max(), gen.max()))
+    S2 = dict(S_matrix_setup)
+    S2['s_selective'] = [list(r) for r in S_matrix_setup['s_selective']]
+    S2['s_general'] = [list(r) for r in S_matrix_setup['s_general']]
+    S2['s_selective'][0][:n_cl] = list(sel / m)
+    S2['s_general'][0][:n_cl] = list(gen / m)
+    p = np.array(param_ode, dtype=float)
+    p[4 * n_cl] += np.log10(m)          # N_1
+    p[4 * n_cl + 2:] = p[4 * n_cl + 2:] / m  # k_ij
+    return S2, np.asarray(x10, dtype=float) + np.log10(m), p, m
+
+
 def print_comparison(names, estimate, true, bnds, title):
     print(f'\n{title}')
     print(f'{"parameter":<22}{"true":>10}{"estimate":>12}{"bounds":>18}')
@@ -117,6 +138,10 @@ if __name__ == "__main__":
     # rises by the factor exp(w * (max S - 1)^2), e.g. w = 100: max S = 0.9 -> +172 %, 0.97 -> +9 %. None: off.
     # Stored in the result JSON; the profile likelihood uses the same penalty (needs new profiles).
     S_MAX_PENALTY = 100
+    # True: generate the data from the truth rescaled to max(S) = 1 (S / m, x0 and N_1 + log10(m), k / m with
+    # m = true max(S); same observables), so that the truth satisfies the S_MAX_PENALTY constraint and can be
+    # recovered (e.g. noise-free test). Output folder gets the suffix '_normS'; truth comparisons use it.
+    NORMALIZE_TRUE_S = True
     # Noise model of the residuals (all optimizations and the profiles):
     #   'absolute': measured - model (MiBi divided by its maximum), as before
     #   'relative': multiplicative noise (measured = model * (1 + eps)): log residuals for MiBi, centred
@@ -169,6 +194,8 @@ if __name__ == "__main__":
     POLISH_PROFILES = False
     # ================================================================
 
+    if NORMALIZE_TRUE_S:
+        path = path.rstrip('/') + '_normS/'
     os.makedirs(path, exist_ok=True)
     start = time.time()
 
@@ -178,9 +205,13 @@ if __name__ == "__main__":
     if len(x10) < len(temps):
         raise ValueError(f'design {DESIGN!r} has {len(temps)} experiments, the setup has initial values for {len(x10)}')
     print(f'Design {DESIGN!r}: temperatures {temps}, days {days_meas if days_meas is not None else "0..17"}, output {path}')
+    param_ode_gen = PARAM_ODE_TRUE.copy()
+    if NORMALIZE_TRUE_S:
+        S_matrix_setup, x10, param_ode_gen, m_s = normalize_truth_max_s(S_matrix_setup, x10, param_ode_gen, n_cl)
+        print(f'True parameters rescaled to max(S) = 1 (factor {m_s:g}): x0, N_1 + {np.log10(m_s):.4f}, S and k / {m_s:g}')
     if RUN_DATA or not os.path.exists(path + f'dataframe_mibi{add_name}_preprocessed.pkl'):
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
-            fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=PARAM_ODE_TRUE.copy(),
+            fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode_gen,
             x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name,
             t_meas=days_meas)
     else:

@@ -20,6 +20,10 @@ if __name__ == "__main__":
     # also in the global search. Stored as 'fixed_params' in the result JSON (profiles keep them fixed).
     FIX_PARAMS = {}
     FIX_IN_GLOBAL = False
+    # Penalty so that the largest media coefficient S is 1 (fixes the x0/S scale trade-off): weight w, the cost
+    # rises by the factor exp(w * (max S - 1)^2), e.g. w = 100: max S = 0.9 -> +172 %, 0.97 -> +9 %. None: off.
+    # Stored in the result JSON; the profile likelihood uses the same penalty (needs new profiles).
+    S_MAX_PENALTY = None
 
     add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
     path_new = path#path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
@@ -55,6 +59,7 @@ if __name__ == "__main__":
         }
     fm.output.json_dump(calibr_presetup['exp_temps'], 'exp_temps_model_paper.json', dir='model_paper/')
     calibr_setup = fm.pest.define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=s_x_predefined, s_x=None)
+    calibr_setup['s_max_penalty'] = S_MAX_PENALTY
     names = make_param_names(exps_calibr, list(df_maldi.index), media)
     fixed = resolve_fixed_values(FIX_PARAMS, names)
     fixed_glob = fixed if FIX_IN_GLOBAL else {}
@@ -68,7 +73,8 @@ if __name__ == "__main__":
     print((time.time()-start)/60., 'min (global)')
     s_x_glob = np.array(param_glob)[-n_cl*n_media:].reshape((n_media, n_cl))
     fm.output.json_dump({'param_ode': param_glob.astype(list), 's_x': s_x_glob, 'T_x': T_x, 'cost': cost_glob,
-                         'fixed_params': fm.pest.fixed_values_record(fixed_glob, names)},
+                         'fixed_params': fm.pest.fixed_values_record(fixed_glob, names),
+                         's_max_penalty': S_MAX_PENALTY},
                         f'Result_calibration{add_name}_global.json', dir=path_new)
 
     # 2) Local refinement from the global result -> exact local optimum
@@ -90,7 +96,8 @@ if __name__ == "__main__":
 
     # Final (refined) result keeps the usual file name, so all downstream scripts use it
     fm.output.json_dump({'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt,
-                         'fixed_params': fm.pest.fixed_values_record(fixed, names)},
+                         'fixed_params': fm.pest.fixed_values_record(fixed, names),
+                         's_max_penalty': S_MAX_PENALTY},
                         f'Result_calibration{add_name}.json', dir=path_new)
     copy_result_to_all_profiles(path_new, add_name)  # new optimum into existing profile JSON files
     param_opt = fm.output.read_from_json(''+f'Result_calibration{add_name}.json', dir=path_new)['param_ode']

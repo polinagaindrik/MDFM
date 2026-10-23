@@ -42,9 +42,14 @@ if __name__ == "__main__":
     GEN_MODEL = fm.data.model_1media_exp_sel1
     temps = [2., 2., 2., 6., 6., 6., 10., 10., 10.]
     ntr = 1
-    x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=path)['x0'])[:len(temps), :n_cl]
-    S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=path)
+    # setup files in model_paper/setup/: initial values, media matrix and true parameters
+    # (True_parameters_paper.json, created from the ZL2030 estimates by main_true_parameters.py)
+    x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=fm.data.SETUP_DIR)['x0'])[:len(temps), :n_cl]
+    S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=fm.data.SETUP_DIR)
+    param_ode_true = fm.data.read_true_parameters(n_cl)['param_ode']
+    print(f'True ODE parameters ({n_cl} species) from {fm.data.SETUP_DIR}{fm.data.TRUE_PARAMETERS_FILE}:', param_ode_true)
     dfs_calibr, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(GEN_MODEL, n_cl, temps, ntr, S_matrix_setup, x10=x10,
+                                                                              param_ode=param_ode_true.copy(),
                                                                               inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0.,
                                                                               path=path_new, add_name=add_name)
     (df_mibi, df_maldi, df_ngs) = dfs_calibr

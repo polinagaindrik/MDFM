@@ -106,7 +106,7 @@ if __name__ == "__main__":
     rms, rms_mibi, rms_maldi, rms_ngs, cost = [np.zeros((len(n_cl))) for _ in range(5)]
     rms_param = np.zeros((3, len(n_cl))) # 3: param_ode, x0, s_x
     rms_per_species = []
-    L_0_real = np.array(fm.data.read_from_json('model_paper/out/Initial_values_x0_paper.json')['x0'])
+    L_0_real = np.array(fm.data.read_from_json(fm.data.SETUP_DIR + 'Initial_values_x0_paper.json')['x0'])
     path_base = 'model_paper/out/model_complexity/'
     for i, n in enumerate(n_cl):
         path = path_base+f'{int(n)}_dim_{n_media}media_exp_{int(relnoise*100)}noise/calibration/'

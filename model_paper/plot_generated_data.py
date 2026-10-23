@@ -29,7 +29,7 @@ if __name__ == "__main__":
     T_x = np.array(setup_real['T_x'])
     s_x = np.array(setup_real['s_x']).reshape((n_media, -1))
 
-    L_0 = np.array(fm.data.read_from_json('model_paper/out/Initial_values_x0_paper.json')['x0'])[:len(exps), :n_cl]
+    L_0 = np.array(fm.data.read_from_json(fm.data.SETUP_DIR + 'Initial_values_x0_paper.json')['x0'])[:len(exps), :n_cl]
     x_0 = fm.data.set_initial_vals(L_0, exps, n_cl)
 
     # Solve model ODE:

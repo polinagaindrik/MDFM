@@ -145,6 +145,11 @@ class _Transform:
         t = self.tlo + np.clip(u, 0., 1.) * (self.thi - self.tlo)
         return np.clip(np.where(self.log, 10. ** t, t), self.lo, self.hi)
 
+    def dz_du(self, u):
+        """Derivative of to_z (per parameter)."""
+        z = self.to_z(u)
+        return np.where(self.log, z * np.log(10.), 1.) * (self.thi - self.tlo)
+
 
 # ----------------------------------------------------------------------
 # Weights of the reweighted least-squares problem
@@ -182,7 +187,7 @@ def aggregation_weights(aggregation_func, residuals, rel_eps=1e-6):
 def least_squares_fit(cost_func, x_start, free_idx, calibr_setup, residual_func=None, jac_spasity=None,
                       n_jobs=1, evaluator=None, log_scale="auto", group_x0=True, maxiter=200, max_outer=8,
                       outer_rtol=1e-9, ftol=1e-12, xtol=1e-12, gtol=1e-10, fd_step=1e-7, solve_timeout=None,
-                      label=None, print_every=10, history=None):
+                      label=None, print_every=10, history=None, backend="numpy"):
     """
     Minimize calibr_setup['aggregation_func'] of the residuals over the parameters free_idx
     (all others held at x_start) with scipy.optimize.least_squares (trf) and reweighting.
@@ -194,6 +199,8 @@ def least_squares_fit(cost_func, x_start, free_idx, calibr_setup, residual_func=
     max_outer      : max. number of reweighting steps
     n_jobs         : processes for the finite-difference Jacobian (ignored if evaluator is given)
     history        : list; (full parameter vector, cost) is appended at every Jacobian evaluation
+    backend        : 'numpy' (finite-difference Jacobian, n_jobs processes) or 'jax' (exact Jacobian by
+                     automatic differentiation, jax_backend.JaxCost; n_jobs and evaluator are not used)
     Returns (cost, full parameter vector, success, number of Jacobian evaluations).
     """
     residual_func = residual_func_for(cost_func, residual_func)
@@ -212,6 +219,14 @@ def least_squares_fit(cost_func, x_start, free_idx, calibr_setup, residual_func=
     import multiprocessing as mp
     if mp.current_process().daemon:  # inside a pool worker: no nested pool
         n_jobs = 1
+    jc = None
+    if backend == "jax":
+        from .jax_backend import jax_cost_for
+        jc = jax_cost_for(calibr_setup)
+        evaluator = lambda xs: [([np.where(np.isfinite(r), r, PENALTY_RESIDUAL) for r in jc.residuals(x)], None)  # noqa: E731
+                                for x in xs]
+    elif backend != "numpy":
+        raise ValueError("backend must be 'numpy' or 'jax'")
     own_eval = evaluator is None
     ev = evaluator if evaluator is not None else ResidualEvaluator(residual_func, calibr_setup, jac_spasity,
                                                                    n_jobs=n_jobs, timeout=solve_timeout)
@@ -225,7 +240,7 @@ def least_squares_fit(cost_func, x_start, free_idx, calibr_setup, residual_func=
         if base is None:
             raise RuntimeError("model evaluation at the start point failed")
         n_rows = [len(r) for r in base[0]]
-        owners = np.concatenate(base[1])
+        owners = None if base[1] is None else np.concatenate(base[1])
 
         # Jacobian column groups: x0 of the same species in different experiments together
         groups = [[c] for c in range(len(free_idx))]
@@ -264,6 +279,11 @@ def least_squares_fit(cost_func, x_start, free_idx, calibr_setup, residual_func=
 
         def jac(u):
             r0 = raw(u)
+            if jc is not None:  # exact Jacobian (JAX): d r / d x  *  d x / d u, rows weighted
+                J = jc.residual_jacobian(full(u))[:, free_idx] * tr.dz_du(u)[None, :]
+                J = np.where(np.isfinite(J), J, 0.)
+                J = J * np.repeat(np.sqrt(state["w"]), n_rows)[:, None]
+                return _jac_bookkeeping(u, r0, J)
             f0 = weighted(r0)
             pts, steps = [], []
             for g in groups:
@@ -282,6 +302,9 @@ def least_squares_fit(cost_func, x_start, free_idx, calibr_setup, residual_func=
                     for c in g:
                         rows = owners == col_owner[c]
                         J[rows, c] = d[rows]
+            return _jac_bookkeeping(u, r0, J)
+
+        def _jac_bookkeeping(u, r0, J):
             state["njev"] += 1
             if r0 is not None:
                 c_now = float(agg([r ** 2 for r in r0]))
@@ -322,7 +345,7 @@ def least_squares_fit(cost_func, x_start, free_idx, calibr_setup, residual_func=
                 break
         cost, x_best = state["best"]
     finally:
-        if own_eval:
+        if own_eval and hasattr(ev, "close"):
             ev.close()
     return float(cost), x_best, success, state["njev"]
 

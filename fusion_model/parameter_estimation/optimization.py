@@ -74,6 +74,14 @@ def die_with_parent():
         pass
 
 
+def jax_worker_init():
+    """Initializer of 'spawn' worker processes for the JAX backend: die with the parent, one thread
+    per process (the processes themselves run in parallel), no GPU memory preallocation."""
+    die_with_parent()
+    os.environ.setdefault('XLA_FLAGS', '--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1')
+    os.environ.setdefault('XLA_PYTHON_CLIENT_PREALLOCATE', 'false')
+
+
 def _eval_init(cost_func, calibr_setup, jac_spasity):
     """Initialize a worker's shared objective and calibration arguments."""
     die_with_parent()
@@ -191,6 +199,7 @@ def _local_run(task):
     processes (only possible in the main process, i.e. when the starts run sequentially)."""
     r, objective, z0, bounds, options, print_every, grad_jobs = task
     history = []
+    backend = options.get('backend', 'numpy')
     if options.get('method') == 'least_squares':
         from .least_squares_fit import least_squares_fit
         x_start = objective.full(z0)
@@ -199,7 +208,7 @@ def _local_run(task):
             residual_func=options.get('residual_func'), jac_spasity=objective.jac_spasity, n_jobs=grad_jobs,
             log_scale=options.get('log_scale', 'auto'), maxiter=options['maxiter'],
             max_outer=options.get('max_outer', 8), label=f'[start {r}]', print_every=print_every,
-            history=history)
+            history=history, backend=backend)
         print(f'  [start {r}] cost = {c:.10g}, Jacobians = {njev}, success = {ok} (least_squares)', flush=True)
         return r, np.array(x)[objective.free], float(c), bool(ok), history
 
@@ -209,14 +218,24 @@ def _local_run(task):
         if print_every and len(history) % print_every == 0:
             print(f'  [start {r}] iteration {len(history)}: cost = {intermediate_result.fun:.10g}', flush=True)
 
-    if grad_jobs > 1:
+    lbfgs_options = {k: v for k, v in options.items() if k != 'backend'}
+    if backend == 'jax':  # exact gradient by automatic differentiation
+        from .jax_backend import jax_cost_for
+        jc = jax_cost_for(objective.calibr_setup)
+
+        def fg(z):
+            c, g = jc.value_and_grad(objective.full(z))
+            return c, g[objective.free]
+        res = minimize(fg, z0, jac=True, method='L-BFGS-B', bounds=bounds, callback=callback, options=lbfgs_options)
+    elif grad_jobs > 1:
         lo = np.array([b[0] for b in bounds]); hi = np.array([b[1] for b in bounds])
         with CostEvaluator(objective.cost_func, objective.calibr_setup, objective.jac_spasity,
                            n_jobs=grad_jobs) as ev:
             fg = fd_fun_and_grad(ev, objective.param_init, objective.free, lo, hi)
-            res = minimize(fg, z0, jac=True, method='L-BFGS-B', bounds=bounds, callback=callback, options=options)
+            res = minimize(fg, z0, jac=True, method='L-BFGS-B', bounds=bounds, callback=callback,
+                           options=lbfgs_options)
     else:
-        res = minimize(objective, z0, method='L-BFGS-B', bounds=bounds, callback=callback, options=options)
+        res = minimize(objective, z0, method='L-BFGS-B', bounds=bounds, callback=callback, options=lbfgs_options)
     print(f'  [start {r}] cost = {res.fun:.10g}, iterations = {res.nit}, success = {res.success} ({res.message})',
           flush=True)
     return r, np.array(res.x), float(res.fun), bool(res.success), history
@@ -259,7 +278,7 @@ def fixed_values_record(fixed_values, names=None):
 def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, maxiter=500, ftol=1e-12, gtol=1e-8,
                        n_restarts=1, jitter_frac=0.02, seed=0, history_file=output_file_local, print_every=10,
                        n_jobs=1, maxfun=None, method='L-BFGS-B', residual_func=None, log_scale='auto',
-                       start_points=None, max_outer=8, fixed_values=None):
+                       start_points=None, max_outer=8, fixed_values=None, backend='numpy'):
     """
     L-BFGS-B minimization of cost_func starting from param_init (e.g. the result of
     differential_evolution) to reach the exact local optimum.
@@ -273,6 +292,9 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
                   cost_func (default: known for fm.pest.cost_withS).
     start_points: additional full start vectors (e.g. Latin hypercube points, see
                   multistart_optimization); start 0 is param_init, then the jittered starts.
+    backend     : 'numpy' (finite-difference derivatives, as before) or 'jax' (exact gradient / Jacobian by
+                  automatic differentiation, jax_backend.py; much faster, ODE solved more accurately). With
+                  'jax' the starts run in n_jobs separate processes ('spawn'), each single-threaded.
     fixed_values: {index: value}: these parameters are held at value (also outside their bounds,
                   e.g. 0 for a non-identifiable k_ij) and only the others are refined; the returned
                   vector contains the fixed values. See apply_fixed_values.
@@ -297,6 +319,11 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     than param_init.
     """
     param_init = np.asarray(param_init, dtype=float)
+    if backend == 'jax':  # same (more accurate) solver for start cost, fits and result
+        from .cost_function import cost_withS
+        from .jax_backend import cost_withS_jax
+        if cost_func is cost_withS:
+            cost_func = cost_withS_jax
     if fixed_values:
         calibr_setup = apply_fixed_values(calibr_setup, fixed_values)
     bnds = calibr_setup['param_bnds']
@@ -320,27 +347,32 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     bounds = list(zip(lo[free], hi[free]))
     if method == 'least_squares':
         options = {'method': 'least_squares', 'maxiter': maxiter, 'residual_func': residual_func,
-                   'log_scale': log_scale, 'max_outer': max_outer}
+                   'log_scale': log_scale, 'max_outer': max_outer, 'backend': backend}
         print(f'Local optimization method: least_squares (trust-region reflective, reweighted, '
               f'log_scale={log_scale})', flush=True)
     elif method == 'L-BFGS-B':
         if maxfun is None:
             maxfun = 2 * (len(free) + 1) * maxiter
-        options = {'maxiter': maxiter, 'maxfun': maxfun, 'ftol': ftol, 'gtol': gtol}
+        options = {'maxiter': maxiter, 'maxfun': maxfun, 'ftol': ftol, 'gtol': gtol, 'backend': backend}
     else:
         raise ValueError("method must be 'L-BFGS-B' or 'least_squares'")
     if n_jobs is None or n_jobs == 0:
         n_jobs = 1
     if n_jobs < 0:
         n_jobs = os.cpu_count() or 1
-    grad_jobs = n_jobs if n_jobs > len(starts) else 1
+    grad_jobs = n_jobs if n_jobs > len(starts) and backend != 'jax' else 1
     tasks = [(r, objective, z0, bounds, options, print_every, grad_jobs) for r, z0 in enumerate(starts)]
 
     n_proc = 1 if grad_jobs > 1 else min(n_jobs, len(tasks))
     if n_proc > 1:
         print(f'Running {len(tasks)} local optimizations in {n_proc} parallel processes', flush=True)
-        with mp.Pool(processes=n_proc, initializer=die_with_parent) as pool:
-            results = list(pool.imap_unordered(_local_run, tasks))
+        if backend == 'jax':  # JAX does not survive fork: fresh single-threaded processes
+            ctx = mp.get_context('spawn')
+            with ctx.Pool(processes=n_proc, initializer=jax_worker_init) as pool:
+                results = list(pool.imap_unordered(_local_run, tasks))
+        else:
+            with mp.Pool(processes=n_proc, initializer=die_with_parent) as pool:
+                results = list(pool.imap_unordered(_local_run, tasks))
     else:
         if grad_jobs > 1:
             print(f'Running {len(tasks)} local optimization(s) one after another, each with a parallel '

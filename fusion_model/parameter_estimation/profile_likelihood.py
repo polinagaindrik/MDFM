@@ -332,6 +332,7 @@ def _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, *, metho
                                                residual_func=o.get("residual_func"), jac_spasity=jac_spasity,
                                                n_jobs=n_ls, log_scale=o.get("log_scale", "auto"),
                                                maxiter=o.get("maxiter", 200), max_outer=o.get("max_outer", 8),
+                                               **{k: o[k] for k in ("ftol", "xtol", "gtol") if k in o},
                                                solve_timeout=solve_timeout,
                                                label=(label or "fit") + (f" start {r + 1}/{len(starts)}"
                                                                          if len(starts) > 1 else ""),
@@ -1258,6 +1259,161 @@ def extend_profile_likelihood(
                                                    true_params=true_params)
         plt.close(df_plot)
     df, *_ = _read_csv_and_summary(out_csv, scale)
+    return df
+
+
+# ----------------------------------------------------------------------
+# Polish existing profiles: refit every point from its neighbours
+# ----------------------------------------------------------------------
+_PG = {}
+
+
+def _polish_init(cost_func, calibr_setup, jac_spasity, free_idx, minimize_options, solve_timeout, tol):
+    die_with_parent()
+    _PG.update(cost_func=cost_func, calibr_setup=calibr_setup, jac_spasity=jac_spasity, free_idx=free_idx,
+               minimize_options=minimize_options, solve_timeout=solve_timeout, tol=tol, evaluator=None)
+
+
+def _polish_task(task):
+    return _polish_profile(*task, **_PG)
+
+
+def _polish_profile(idx, values, costs, xs, name, cost_opt, scale, *, cost_func, calibr_setup, jac_spasity,
+                    free_idx, minimize_options, solve_timeout, tol, evaluator=None):
+    """Upward then downward sweep over the sorted points of one profile: each point is refitted from the
+    (current) solution of its neighbour; the lower cost is kept. Returns (idx, costs, xs, n_improved)."""
+    costs = np.array(costs, dtype=float)
+    xs = [np.array(x, dtype=float) for x in xs]
+    opt_idx = [j for j in free_idx if j != idx]
+    n_improved = 0
+    order_up = list(range(1, len(values)))
+    order_down = list(range(len(values) - 2, -1, -1))
+    for sweep, order, nb in (("up", order_up, -1), ("down", order_down, +1)):
+        for k in order:
+            x_start = xs[k + nb].copy()
+            x_start[idx] = values[k]
+            c, x, ok, nit = _fit_others(cost_func, x_start, opt_idx, calibr_setup, jac_spasity, method="local",
+                                        minimize_options=minimize_options, solve_timeout=solve_timeout,
+                                        evaluator=evaluator, label=f"{name} {values[k]:.6g}")
+            if c < costs[k] - tol:
+                print(f"  [{time.strftime('%H:%M:%S')}] param[{idx}] {name} = {values[k]:.6g} ({sweep}): "
+                      f"Delta {(costs[k] - cost_opt) / scale:.4g} -> {(c - cost_opt) / scale:.4g}", flush=True)
+                costs[k], xs[k] = c, x
+                n_improved += 1
+    return idx, costs, xs, n_improved
+
+
+def polish_profile_likelihood(cost_func, calibr_setup, out_csv, profile_indices=None, jac_spasity=None, n_jobs=1,
+                              fixed_indices=None, minimize_options=None, solve_timeout=30, tol=1e-6,
+                              true_params=None, plot=True, plot_path=None, ncols=4):
+    """
+    Refit the points of existing profiles from their neighbours, to remove jumps where points ended in a
+    worse local minimum (a profile is the LOWEST cost at each fixed value, so it changes smoothly).
+    For every profile: an upward sweep (each point started from the solution of its left neighbour), then a
+    downward sweep (from the right neighbour); a point is replaced only if the new fit is lower by more
+    than tol. No new values are added (see extend_profile_likelihood for that).
+
+    cost_func, calibr_setup : as in the original run (checked at the optimum, as in extend_profile_likelihood)
+    out_csv                 : out_csv of the original run (final CSV; otherwise <csv>_partial.csv)
+    profile_indices         : profiles to polish (default: all in the CSV)
+    n_jobs                  : processes; profiles in parallel if there are at least n_jobs of them, else one
+                              after another with a parallel gradient / Jacobian in n_jobs processes
+    minimize_options        : as in run_profile_likelihood_all (e.g. {'method': 'least_squares', 'maxiter': 200})
+    Backup: <csv>_before_polish.csv (once). Updates the CSV(s), summary JSON (CIs) and plot.
+    Returns the updated DataFrame.
+    """
+    import shutil
+    base = os.path.splitext(out_csv)[0]
+    partial_csv = base + "_partial.csv"
+    final_exists = os.path.exists(out_csv)
+    df, names, scale, cost_opt, param_opt = _read_csv_and_summary(out_csv, "auto")
+    info = {}
+    for p in (base + "_summary.json", base + "_run.json"):
+        if os.path.exists(p):
+            with open(p) as f:
+                info = json.load(f)
+            break
+    confidence_level = float(info.get("confidence_level", 0.95))
+    if fixed_indices is None:
+        fixed_indices = info.get("fixed_indices", ())
+    bnds = calibr_setup["param_bnds"]
+    if len(bnds) != len(names):
+        raise ValueError(f"calibr_setup has {len(bnds)} parameters, the CSV {len(names)}: different model setup.")
+    c_check = _safe_cost(cost_func, param_opt, calibr_setup, jac_spasity, solve_timeout)
+    if not np.isclose(c_check, cost_opt, rtol=1e-6, atol=1e-9):
+        raise ValueError(f"Cost at the stored optimum = {c_check:.10g}, but the run has cost_opt = {cost_opt:.10g}. "
+                         f"cost_func/calibr_setup differ from the original run (objective, noise model, data, bounds?).")
+    free_idx = free_param_indices(bnds, fixed_indices)
+    indices = sorted(int(i) for i in df["param_index"].unique())
+    if profile_indices is not None:
+        indices = [i for i in indices if i in set(int(j) for j in profile_indices)]
+
+    tasks = []
+    for idx in indices:
+        sub = df[df["param_index"] == idx].sort_values("param_value")
+        sub = sub.drop_duplicates("param_value", keep="first")
+        if len(sub) < 2:
+            continue
+        tasks.append((idx, sub["param_value"].to_numpy(dtype=float), sub["cost"].to_numpy(dtype=float),
+                      [r[names].to_numpy(dtype=float) for _, r in sub.iterrows()], names[idx], cost_opt, scale))
+    n_fits = sum(2 * (len(t[1]) - 1) for t in tasks)
+    print(f"Polishing {len(tasks)} profiles: {n_fits} refits (each point once from each neighbour)", flush=True)
+    if final_exists and not os.path.exists(base + "_before_polish.csv"):
+        shutil.copy(out_csv, base + "_before_polish.csv")
+        print(f"Backup of the original results: {base}_before_polish.csv")
+
+    t0 = time.time()
+    n_total = [0]
+
+    def save(idx, values, costs, xs, n_improved):
+        n_total[0] += n_improved
+        if n_improved:
+            for path_ in ([out_csv] if final_exists else []) + ([partial_csv] if os.path.exists(partial_csv) else []):
+                d = pd.read_csv(path_)
+                for v, c, x in zip(values, costs, xs):
+                    rows = (d["param_index"] == idx) & np.isclose(d["param_value"], v, rtol=0, atol=1e-12)
+                    if rows.any():
+                        d.loc[rows, "cost"] = c
+                        d.loc[rows, names] = np.tile(x, (int(rows.sum()), 1))
+                d.to_csv(path_, index=False)
+        print(f"[{time.strftime('%H:%M:%S')}] param[{idx}] {names[idx]}: {n_improved} points improved, "
+              f"elapsed {_fmt_time(time.time() - t0)}", flush=True)
+
+    n_jobs = n_jobs if n_jobs and n_jobs > 0 else (os.cpu_count() or 1)
+    kw = dict(cost_func=cost_func, calibr_setup=calibr_setup, jac_spasity=jac_spasity, free_idx=free_idx,
+              minimize_options=minimize_options, solve_timeout=solve_timeout, tol=tol)
+    if n_jobs > 1 and len(tasks) >= n_jobs:
+        print(f"Polishing {len(tasks)} profiles in {n_jobs} parallel processes", flush=True)
+        with mp.Pool(processes=n_jobs, initializer=_polish_init,
+                     initargs=(cost_func, calibr_setup, jac_spasity, free_idx, minimize_options, solve_timeout,
+                               tol)) as pool:
+            for idx, costs, xs, n_imp in pool.imap_unordered(_polish_task, tasks):
+                t = next(t for t in tasks if t[0] == idx)
+                save(idx, t[1], costs, xs, n_imp)
+    else:
+        with CostEvaluator(_TimedCost(cost_func, solve_timeout), calibr_setup, jac_spasity,
+                           n_jobs=n_jobs if n_jobs > 1 else 1) as ev:
+            for t in tasks:
+                idx, costs, xs, n_imp = _polish_profile(*t, **kw, evaluator=ev if n_jobs > 1 else None)
+                save(idx, t[1], costs, xs, n_imp)
+    print(f"Polishing finished in {_fmt_time(time.time() - t0)}: {n_total[0]} points improved", flush=True)
+
+    df, names, scale, cost_opt, param_opt = _read_csv_and_summary(out_csv, "auto")
+    d_min = (df["cost"].min() - cost_opt) / scale
+    if d_min < -1e-3 * chi2.ppf(confidence_level, 1):
+        best = df.loc[df["cost"].idxmin()]
+        print(f"WARNING: a polished point is below the optimum (Delta = {d_min:.4g} at param[{int(best['param_index'])}]"
+              f" = {best['param_value']:.6g}): the optimum is not the minimum. Re-fit from that point (full vector in "
+              f"the CSV row) and use update_profile_optimum.")
+    if final_exists:
+        _ci_summary(df, sorted(int(i) for i in df["param_index"].unique()), names, param_opt, cost_opt, scale,
+                    confidence_level, bnds, base + "_summary.json", true_params=true_params,
+                    fixed_indices=fixed_indices)
+    if plot:
+        fig = plot_profile_likelihood_from_csv(out_csv, confidence_level=confidence_level, scale=scale,
+                                               save_path=plot_path or base + "_plot.png", ncols=ncols,
+                                               true_params=true_params)
+        plt.close(fig)
     return df
 
 

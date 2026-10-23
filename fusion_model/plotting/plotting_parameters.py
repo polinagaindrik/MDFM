@@ -236,6 +236,7 @@ def plot_cost_function(df_optim, path='', add_name=''):
     ax.plot(df_optim['iteration'], df_optim['cost'])
     ax.set_xlabel('optimization step', fontsize=12)
     ax.set_ylabel('cost function', fontsize=12)
-    ax.set_yscale('log')
+    if np.all(np.asarray(df_optim['cost'], dtype=float) > 0):  # -2 log L objectives can be negative
+        ax.set_yscale('log')
     plt.savefig(path+f'cost_plot{add_name}.png')#, bbox_inches='tight')
     plt.close(fig)

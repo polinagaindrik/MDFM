@@ -107,26 +107,26 @@ if __name__ == "__main__":
     # days (whole days), default 0, 1, ..., 17. After switching to a new design: RUN_DATA = True.
     DESIGNS = {
         'base':        {'temps': [2., 6., 10.]},                                         # 3 experiments
-        'rep3':        {'temps': [2., 2., 2., 6., 6., 6., 10., 10., 10.]},                # 3 replicates each
+        'rep3':        {'temps': [2., 2., 2., 6., 6., 6., 10., 10., 10.]},               # 3 replicates each
         'temps6':      {'temps': [2., 4., 6., 8., 10., 14.]},                            # more temperatures
         'temps6_rep2': {'temps': [2., 2., 4., 4., 6., 6., 8., 8., 10., 10., 14., 14.]},  # both
         'long':        {'temps': [2., 6., 10.], 'days': list(range(0, 31))},             # 30 days
     }
-    DESIGN = 'base'
+    DESIGN = 'rep3'
     temps = DESIGNS[DESIGN]['temps']
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
-    path = 'model_paper/out/test_2sp/' if DESIGN == 'base' else f'model_paper/out/test_2sp_{DESIGN}/'
+    path = f'model_paper/out/test_2sp_10noise/' if DESIGN == 'base' else f'model_paper/out/test_2sp_{DESIGN}/'
     n_cl = N_CL
     n_media = 2
     relnoise = 0.1
     ntr = 1                        # keep 1: replicates via repeated temperatures (see DESIGNS)
     add_name = f'_{n_cl}dim_{n_media}media_test'
-    workers = 21#-1                   # differential evolution: -1 = all cores
-    n_jobs = 21#os.cpu_count()-2 or 1   # local multistart / profile likelihood processes
+    workers = 22#-1                   # differential evolution: -1 = all cores
+    n_jobs = 22#os.cpu_count()-2 or 1   # local multistart / profile likelihood processes
 
-    RUN_DATA = False               # generate the in-silico data
-    RUN_GLOBAL = False             # 2) differential evolution
-    RUN_LOCAL = True               # 3) local refinement
+    RUN_DATA = True               # generate the in-silico data
+    RUN_GLOBAL = True             # 2) differential evolution
+    RUN_LOCAL = True              # 3) local refinement
     RUN_PROFILE = True             # 4) profile likelihood
 
     # optimizer settings
@@ -142,7 +142,7 @@ if __name__ == "__main__":
     # differentiation, much faster and a more accurate ODE solve; needs: pip install jax diffrax). Used for the
     # local step, multistart and the profiles (not for differential evolution). Don't mix backends within one
     # profile run: the profile tools check the cost at the stored optimum and stop if it differs.
-    BACKEND = 'numpy'
+    BACKEND = 'jax'
     # local step: parameters held at a fixed value, only the others are refined (e.g. non-identifiable ones
     # set to 0). Keys: index or name (see the printed parameter table), e.g. {17: 0., 18: 0.} or
     # {'k_00,01': 0.}; the value may lie outside the bounds. Stored as 'fixed_params' in
@@ -150,7 +150,7 @@ if __name__ == "__main__":
     #FIX_PARAMS = {'k_00,01': 0.,
     #              'alpha_exp,00': 0.,
     #              'lambda_exp,00': 0.}
-    FIX_PARAMS = {}
+    FIX_PARAMS = {}#'lambda_exp,01': 0.}
     # True: FIX_PARAMS also in the global step (new differential evolution / multistart search with these
     # parameters fixed) instead of only refining from the earlier global result
     FIX_IN_GLOBAL = True
@@ -212,7 +212,7 @@ if __name__ == "__main__":
     # Refit the points of the existing profiles from their neighbours (removes jumps where points ended in a
     # worse local minimum; no new values): False, True (all profiles) or a list of indices / names, e.g.
     # ['k_01,00']. Runs after the profile run / EXTEND / UPDATE_OPTIMUM. Backup: <csv>_before_polish.csv
-    POLISH_PROFILES = False
+    POLISH_PROFILES = True
     # ================================================================
 
     if relnoise != 0.1:  # other noise levels in their own folder (0.1: the existing folders)
@@ -257,7 +257,7 @@ if __name__ == "__main__":
         'n_cl': n_cl,
         'n_media': n_media,
         'dfs': dfs,
-        'aggregation_func': fm.pest.cost_sum_and_geometric_mean,
+        #'aggregation_func': fm.pest.cost_sum_and_geometric_mean,
         'exps': exps,
         'exp_temps': exp_temps_from_columns(df_mibi),
         'media': media,
@@ -310,7 +310,7 @@ if __name__ == "__main__":
             glob_setup = fm.pest.apply_fixed_values(calibr_setup, fixed_glob, names=names)
         de_starts = []
         if GLOBAL_METHOD in ('de', 'de+multistart'):
-            param_glob, cost_glob = fm.pest.calculate_model_params(fm.pest.cost_withS, glob_setup)
+            param_glob, cost_glob = fm.pest.calculate_model_params(fm.pest.cost_withS, glob_setup, maxiter=500)
             print(f'{(time.time() - start) / 60.:.1f} min (differential evolution), cost = {cost_glob:.6g}')
             de_starts = [param_glob]
         if GLOBAL_METHOD in ('multistart', 'de+multistart'):
@@ -338,7 +338,7 @@ if __name__ == "__main__":
     if RUN_LOCAL:
         fixed = resolve_fixed_values(FIX_PARAMS, names)
         print_parameter_table(names, param_glob, calibr_setup['param_bnds'], fixed)
-        param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup, fixed_values=fixed, maxiter=500 if LOCAL_METHOD == 'least_squares' else 1000,n_restarts=5, jitter_frac=0.1, n_jobs=n_jobs, method=LOCAL_METHOD, backend=BACKEND, history_file=path + 'optimization_history_local.csv')
+        param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup, fixed_values=fixed, maxiter=400 if LOCAL_METHOD == 'least_squares' else 1000,n_restarts=5, jitter_frac=0.1, n_jobs=n_jobs, method=LOCAL_METHOD, backend=BACKEND, history_file=path + 'optimization_history_local.csv')
         print(f'{(time.time() - start) / 60.:.1f} min (global + local), cost = {cost_opt:.6g}')
         s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
         save_result(f'Result_calibration{add_name}.json',
@@ -417,7 +417,7 @@ if __name__ == "__main__":
                 fm.pest.cost_withS, pl_setup, out_csv, EXTEND,
                 n_jobs=n_jobs, n_restarts=3, jitter_frac=0.05,
                 fixed_indices=fixed_indices,
-                stop_factor=3,
+                stop_factor=1.5,
                 minimize_options=profile_options,
                 plot_path=out_path + f'profile_likelihood{tag}.png',
                 true_params=param_true if SHOW_TRUE_VALUE else None,
@@ -427,7 +427,7 @@ if __name__ == "__main__":
         else:
             df, cis = pl.run_profile_likelihood_all(
                 fm.pest.cost_withS, param_opt, pl_setup,
-                span=1., n_points=30, method='local',
+                span=0.3, n_points=35, method='local',
                 n_jobs=n_jobs,
                 out_csv=out_csv,
                 plot_path=out_path + f'profile_likelihood{tag}.png',
@@ -436,12 +436,12 @@ if __name__ == "__main__":
                 profile_indices=profile_indices,
                 fixed_indices=fixed_indices,
                 refine=FIX_S == 'true' or not same_optimum,  # re-fit first if the optimum differs (FIX_S='true', objective)
-                stop_factor=3,                 # stop each side once Delta > 1.5 x threshold
+                stop_factor=1.5,                 # stop each side once Delta > 1.5 x threshold
                 minimize_options=profile_options,
                 true_params=param_true if SHOW_TRUE_VALUE else None,
                 verbose=1,
                 restart_on_better=False,
-                resume=True,
+                resume=False,
             )
         if POLISH_PROFILES:
             polish_idx = (None if POLISH_PROFILES is True

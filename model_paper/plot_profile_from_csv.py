@@ -20,17 +20,28 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from fusion_model.parameter_estimation.profile_likelihood import (  # noqa: E402
     plot_profile_likelihood_from_csv, plot_profile_likelihood_individual)
 from profile_likelihood_model_paper import load_calibration  # noqa: E402
+import paper_paths as pp  # noqa: E402
 
 
 if __name__ == "__main__":
     # ================================================================
     # EDIT THESE, THEN JUST RUN THIS FILE (no command-line args needed)
     # ================================================================
+    # STUDY: 'test_2sp' (DESIGN as in test_2sp.py) or 'model_complexity', 'noise_vs_nspecies', 'media_influence'
+    # (MEDIA), folders see paper_paths.py
+    STUDY = "test_2sp"
+    DESIGN = "base"
     n_cl, n_media, relnoise = 2, 2, 0.1
-    add_name = f"_{int(n_cl)}dim_{int(n_media)}media_test"
-    #path2 = f"model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/"
-    path2 = f"model_paper/out/test_2sp/"
-    tag = f"{add_name}_all_geomean"
+    MEDIA = None  # media_influence only, e.g. "gen2+sel2" (sets n_media)
+    if STUDY == "test_2sp":
+        add_name = f"_{int(n_cl)}dim_{int(n_media)}media_test"
+        path2 = pp.test_2sp_path(DESIGN, relnoise)
+    else:
+        if MEDIA is not None:
+            n_media = pp.media_n(MEDIA)
+        add_name = pp.add_name(n_cl, n_media, media=MEDIA)
+        path2 = pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=MEDIA)
+    tag = f"{add_name}_all_neg2logL"
     CSV_PATH = path2 + f"profile_likelihood/profile_likelihood_results{tag}.csv"
 
     SCALE = "auto"  # read from <csv>_summary.json; or a float as in pool_paper

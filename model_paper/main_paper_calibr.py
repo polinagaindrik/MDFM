@@ -5,16 +5,19 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
 from profile_likelihood_model_paper import (make_param_names, resolve_fixed_values, print_parameter_table,
                                             copy_result_to_all_profiles)
+import paper_paths as pp
 
 import numpy as np
 import time
 
 if __name__ == "__main__":
-    path = 'model_paper/out/'
+    # Output folder (see paper_paths.py): 'model_complexity', 'noise_vs_nspecies' or 'media_influence'
+    STUDY = 'media_influence'
     workers = -1
     n_cl = 6
-    n_media = 1
+    n_media = 2
     relnoise = 0.1
+    MEDIA = 'sel1'  # media_influence only: 'gen1', ..., 'sel3', 'gen1+sel1', 'gen2+sel2', ... (sets n_media and GEN_MODEL)
     # Parameters held at a fixed value, e.g. non-identifiable ones at 0 (keys: index or name, value may lie
     # outside the bounds), e.g. {'k_00,01': 0.}. Applied in the local refinement; with FIX_IN_GLOBAL = True
     # also in the global search. Stored as 'fixed_params' in the result JSON (profiles keep them fixed).
@@ -30,16 +33,21 @@ if __name__ == "__main__":
     #               log-ratios within each composition for MALDI / NGS -> constant variance, valid chi2 threshold
     NOISE_MODEL = 'absolute'
 
-    add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
-    path_new = path#path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
-    #add_name = f'_{int(n_cl)}dim_{int(n_media)}media_gen'
-    #path_new = path+f'{int (n_cl)}_dim_{n_media}media_gen/calibration/'
+    media_run = MEDIA if STUDY == 'media_influence' else None
+    if media_run is not None:
+        n_media = pp.media_n(media_run)
+    add_name = pp.add_name(n_cl, n_media, media=media_run)
+    path_new = pp.ensure_dir(pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=media_run))
+    print(f'Output: {path_new} (files *{add_name}*)')
 
     # 'Real' model:
     # data generator = media of the in-silico data, must match n_media (functions in fusion_model/data/insilico_models.py):
     #   1 medium : fm.data.model_1media_exp_sel1 / _sel2 / _sel3 / _gen1 / _gen2 / _gen3
     #   2 media  : fm.data.model_2media_expgensel (sel1 + gen1), _expgen2sel2, _expgen3sel3, _expsel1sel2, ...
-    GEN_MODEL = fm.data.model_1media_exp_sel1
+    #   media_influence: chosen from MEDIA automatically
+    GEN_MODEL = fm.data.model_2media_expgensel
+    if media_run is not None:
+        GEN_MODEL = getattr(fm.data, pp.generator_name(media_run))
     temps = [2., 2., 2., 6., 6., 6., 10., 10., 10.]
     ntr = 1
     # setup files in model_paper/setup/: initial values, media matrix and true parameters

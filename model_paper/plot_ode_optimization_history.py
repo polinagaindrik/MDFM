@@ -1,14 +1,16 @@
 import os
 import sys
 sys.path.append(os.getcwd())
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
+import paper_paths as pp
 
 import numpy as np
 import pandas as pd
 
 
 if __name__ == "__main__":
-    # 'paper'   : model_complexity calibration (n_cl species, set below)
+    # 'paper'   : calibration of one study (STUDY and n_cl etc. set below, folders see paper_paths.py)
     # 'test_2sp': 2-species test of model_paper/test_2sp.py
     CASE = 'test_2sp'
 
@@ -17,17 +19,20 @@ if __name__ == "__main__":
     if CASE == 'test_2sp':
         n_cl = 2
         n_media = 2
-        path = 'model_paper/out/test_2sp/' if DESIGN == 'base' else f'model_paper/out/test_2sp_{DESIGN}/'
+        relnoise = 0.1
+        path = pp.test_2sp_path(DESIGN, relnoise)
         add_name = f'_{int(n_cl)}dim_{int(n_media)}media_test'
         real_file = f'Result_real{add_name}.json'
     else:
+        STUDY = 'model_complexity'  # 'model_complexity', 'noise_vs_nspecies' or 'media_influence'
         n_cl = 4
         n_media = 2
         relnoise = 0.1
-        #path = 'model_paper/out/'#f'model_paper/out/{int(n_cl)}_dim/calibration/'#
-        #path2 = path+f'noise_vs_nspecies/{int(relnoise*100)}noise/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
-        path = f'model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/'
-        add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
+        MEDIA = None  # media_influence only, e.g. 'gen2+sel2' (sets n_media)
+        if MEDIA is not None:
+            n_media = pp.media_n(MEDIA)
+        path = pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=MEDIA)
+        add_name = pp.add_name(n_cl, n_media, media=MEDIA)
         real_file = 'Result_temp_together_real.json'
     path2 = path
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']

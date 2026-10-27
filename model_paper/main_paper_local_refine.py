@@ -25,16 +25,22 @@ import fusion_model as fm
 from profile_likelihood_model_paper import (load_calibration, s_x_predefined_from_maldi, exp_temps_from_columns,
                                             make_param_names, resolve_fixed_values, print_parameter_table,
                                             copy_result_to_all_profiles)
+import paper_paths as pp
 
 import numpy as np
 import time
 
 if __name__ == "__main__":
+    # Folder (see paper_paths.py): STUDY = "model_complexity", "noise_vs_nspecies" or "media_influence" (MEDIA)
+    STUDY = "model_complexity"
     n_cl = 4
     n_media = 2
     relnoise = 0.1
-    add_name = f"_{n_cl}dim_{n_media}media"
-    path = f"model_paper/out/model_complexity/{n_cl}_dim_{n_media}media_exp_{int(relnoise*100)}noise/calibration/"
+    MEDIA = None  # media_influence only, e.g. "gen2+sel2" (sets n_media)
+    if MEDIA is not None:
+        n_media = pp.media_n(MEDIA)
+    add_name = pp.add_name(n_cl, n_media, media=MEDIA)
+    path = pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=MEDIA)
 
     MAXITER = 1000
     N_RESTARTS = 3  # start 0 = global result, others = random perturbations of it

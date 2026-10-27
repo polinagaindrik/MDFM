@@ -25,7 +25,9 @@ Re-plot afterwards (without recomputing):
 import os
 import sys
 sys.path.append(os.getcwd())
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
+import paper_paths as pp
 from fusion_model.parameter_estimation import profile_likelihood as pl
 
 import numpy as np
@@ -221,11 +223,16 @@ if __name__ == "__main__":
     # --------------------------------------------------------------
     # Settings
     # --------------------------------------------------------------
+    # Folder (see paper_paths.py): STUDY = "model_complexity", "noise_vs_nspecies" or "media_influence" (MEDIA)
+    STUDY = "model_complexity"
     n_cl = 4
     n_media = 2
     relnoise = 0.1
-    add_name = f"_{int(n_cl)}dim_{int(n_media)}media"
-    path2 = f"model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_{int(relnoise*100)}noise/calibration/"
+    MEDIA = None  # media_influence only, e.g. "gen2+sel2" (sets n_media)
+    if MEDIA is not None:
+        n_media = pp.media_n(MEDIA)
+    add_name = pp.add_name(n_cl, n_media, media=MEDIA)
+    path2 = pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=MEDIA)
     out_path = path2 + "profile_likelihood/"
 
     PROFILE = "all"       # 'x0', 'ode', 'ode+S' or 'all' (= x0 + ode + S)

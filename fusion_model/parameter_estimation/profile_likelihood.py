@@ -1268,6 +1268,11 @@ def extend_profile_likelihood(
                               bound (use stop_factor to stop once the threshold is crossed).
                               In a dict, the key 'auto' (value: anything, e.g. True) does the same
                               for all parameters not listed explicitly.
+                              extend='ci' (or the key 'ci' in a dict, applied after the other
+                              entries): automatic CI densification, see densify_profiles_ci; every
+                              profile with fewer than min_points points inside its CI gets denser,
+                              in rounds. Value True (defaults) or a dict with any of n_points (10),
+                              margin (0.3), min_points (5), max_rounds (3).
     fixed_indices           : as in the original run (None: read from the run files, else ())
     stop_factor             : stop a walk once Delta > stop_factor * threshold (None: all points)
     other arguments         : as in run_profile_likelihood_all
@@ -1279,6 +1284,19 @@ def extend_profile_likelihood(
         n_restarts - 1 random jitters (a single bad neighbour cannot pass on a worse local minimum)
     Returns the updated profile DataFrame.
     """
+    if extend == "ci" or (isinstance(extend, dict) and "ci" in extend):  # automatic CI densification
+        args = dict(locals())
+        rest = {} if extend == "ci" else {k: v for k, v in extend.items() if k != "ci"}
+        ci_opts = {} if extend == "ci" or extend["ci"] is True else dict(extend["ci"])
+        unknown = set(ci_opts) - {"n_points", "margin", "min_points", "max_rounds"}
+        if unknown:
+            raise ValueError(f"unknown 'ci' options {unknown} (allowed: n_points, margin, min_points, max_rounds)")
+        args.pop("extend")
+        if rest:
+            extend_profile_likelihood(extend=rest, **{**args, "plot": False})
+        args.pop("auto_n_points")
+        return densify_profiles_ci(**args, **ci_opts)
+
     cost_func = _cost_for_backend(cost_func, minimize_options)
     base = os.path.splitext(out_csv)[0]
     partial_csv = base + "_partial.csv"
@@ -1446,6 +1464,72 @@ def _ci_point_counts(out_csv, indices, confidence_level):
     return n_in, names
 
 
+def densify_profiles_ci(
+    cost_func,
+    calibr_setup,
+    out_csv,
+    n_points=10,
+    margin=0.3,
+    min_points=5,
+    max_rounds=3,
+    profile_indices=None,
+    all_first=False,
+    plot=True,
+    plot_path=None,
+    ncols=4,
+    true_params=None,
+    **extend_kwargs,
+):
+    """
+    Denser profiles inside and slightly outside the CIs of an existing run, with the profiles
+    chosen automatically: every profile with fewer than min_points points inside its
+    (interpolated) CI, incl. the estimate, gets n_points evenly spaced values over the CI widened
+    by margin x (distance of each CI bound to the estimate) (spec 'ci' of extend_profile_likelihood).
+    Repeated for the profiles still below min_points, with twice as many values per round so that
+    the new values fall between the existing ones, at most max_rounds rounds.
+
+    profile_indices : profiles to check (default: all in the CSV)
+    all_first       : True: round 1 densifies all profiles (smoother curves), not only the sparse ones
+    extend_kwargs   : other arguments of extend_profile_likelihood (n_jobs, n_restarts, fixed_indices,
+                      minimize_options, ...); stop_factor is not used (all values are computed)
+    Returns the updated profile DataFrame.
+    """
+    base = os.path.splitext(out_csv)[0]
+    confidence_level = 0.95
+    for p in (base + "_summary.json", base + "_run.json"):
+        if os.path.exists(p):
+            with open(p) as f:
+                confidence_level = float(json.load(f).get("confidence_level", 0.95))
+            break
+    extend_kwargs.pop("stop_factor", None)
+    if profile_indices is None:
+        profile_indices = sorted(int(i) for i in _read_csv_and_summary(out_csv, "auto")[0]["param_index"].unique())
+    n_in, names = _ci_point_counts(out_csv, profile_indices, confidence_level)
+    todo = [i for i in profile_indices if all_first or n_in[i] < min_points]
+    for rnd in range(1, max(max_rounds, 1) + 1):
+        if not todo:
+            break
+        n_ci = n_points * 2 ** (rnd - 1)
+        print(f"\n--- CI round {rnd}/{max_rounds}: {n_ci} values over the CI region of {len(todo)} profiles: "
+              + ", ".join(f"{names[i]} ({n_in[i]} in CI)" for i in todo), flush=True)
+        extend_profile_likelihood(cost_func, calibr_setup, out_csv,
+                                  {i: {"ci": n_ci, "margin": margin} for i in todo},
+                                  stop_factor=None, plot=False, ncols=ncols, true_params=true_params,
+                                  **extend_kwargs)
+        n_in, names = _ci_point_counts(out_csv, profile_indices, confidence_level)
+        todo = [i for i in profile_indices if n_in[i] < min_points]
+    if todo:
+        print(f"WARNING: fewer than min_points={min_points} points inside the CI after {max_rounds} rounds: "
+              + ", ".join(f"param[{i}] {names[i]} ({n_in[i]})" for i in todo), flush=True)
+    else:
+        print(f"All checked profiles have at least {min_points} points inside the CI.", flush=True)
+    if plot:
+        plt.close(plot_profile_likelihood_from_csv(out_csv, confidence_level=confidence_level,
+                                                   save_path=plot_path or base + "_plot.png", ncols=ncols,
+                                                   true_params=true_params))
+    return _read_csv_and_summary(out_csv, "auto")[0]
+
+
 def run_profile_likelihood_adaptive(
     cost_func,
     param_opt,
@@ -1554,23 +1638,9 @@ def run_profile_likelihood_adaptive(
     if ci_n_points:
         print(f"\n[{time.strftime('%H:%M:%S')}] Stage {n_stages}/{n_stages}: denser profiles inside and around "
               f"the CIs", flush=True)
-        todo = list(profile_indices)  # round 1: all profiles (smoother curves)
-        for rnd in range(1, max(max_ci_rounds, 1) + 1):
-            n_ci = ci_n_points * 2 ** (rnd - 1)
-            print(f"\n--- CI round {rnd}/{max_ci_rounds}: {n_ci} values over the CI region of {len(todo)} "
-                  f"profiles ---", flush=True)
-            extend_profile_likelihood(cost_func, calibr_setup, out_csv,
-                                      {i: {"ci": n_ci, "margin": ci_margin} for i in todo},
-                                      stop_factor=None, plot=False, **ext_args)
-            n_in, names = _ci_point_counts(out_csv, profile_indices, confidence_level)
-            todo = [i for i in profile_indices if n_in[i] < min_ci_points]
-            if not todo:
-                break
-        if todo:
-            print(f"WARNING: fewer than min_ci_points={min_ci_points} points inside the CI after the CI rounds: "
-                  + ", ".join(f"param[{i}] {names[i]} ({n_in[i]})" for i in todo), flush=True)
-        else:
-            print(f"All profiles have at least {min_ci_points} points inside the CI.", flush=True)
+        densify_profiles_ci(cost_func, calibr_setup, out_csv, n_points=ci_n_points, margin=ci_margin,
+                            min_points=min_ci_points, max_rounds=max_ci_rounds, profile_indices=profile_indices,
+                            all_first=True, plot=False, **ext_args)  # round 1: all profiles (smoother curves)
         plot_step(3)
     if plot:  # final profiles also under plot_path itself
         plt.close(plot_profile_likelihood_from_csv(out_csv, confidence_level=confidence_level, save_path=plot_path,

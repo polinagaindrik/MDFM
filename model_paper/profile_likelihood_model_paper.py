@@ -261,6 +261,9 @@ if __name__ == "__main__":
     #            the current CI, widened by m (default 0.3) x CI half-width on each side (denser
     #            profile inside and slightly outside the CI; combinable with the other keys).
     #            Indices are printed as "Parameter indices" when EXTEND is set.
+    #   'ci'   : profiles with fewer than min_points points inside the CI are densified automatically
+    #            (in rounds); as a dict key: {'auto': True, 'ci': {'n_points': 10, 'margin': 0.3,
+    #            'min_points': 5, 'max_rounds': 3}} ('ci': True = these defaults)
     EXTEND = None
     EXTEND_N_POINTS = 6
     # Normal profile run (EXTEND = None) in three stages (run_profile_likelihood_adaptive):

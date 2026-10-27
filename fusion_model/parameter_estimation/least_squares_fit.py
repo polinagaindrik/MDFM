@@ -30,9 +30,10 @@ import numpy as np
 from scipy.optimize import least_squares
 
 from .optimization import die_with_parent
-from .cost_function import cost_withS, residuals_withS, TotalCostFromResiduals
+from .cost_function import cost_withS, residuals_withS, TotalCostFromResiduals, cost_direct, residuals_direct
 
-RESIDUAL_FUNCS = {cost_withS: residuals_withS}  # cost function -> matching residual function
+RESIDUAL_FUNCS = {cost_withS: residuals_withS,   # cost function -> matching residual function
+                  cost_direct: residuals_direct}
 PENALTY_RESIDUAL = 1e3  # residual value used when the ODE solve fails
 
 

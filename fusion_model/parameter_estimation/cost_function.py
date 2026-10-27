@@ -162,6 +162,12 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
     return res, owner
 
 
+def residuals_direct(param, calibr_setup, jac_spasity=None):
+    """Signed residuals of cost_direct (S fixed at calibr_setup['s_x'], param = [x0 | ODE]), see residuals_withS."""
+    return residuals_withS(np.concatenate([np.asarray(param, dtype=float), np.ravel(calibr_setup['s_x'])]),
+                           calibr_setup, jac_spasity)
+
+
 class TotalCostFromResiduals:
     """
     cost_withS from the residual groups of residuals_withS: aggregation_func of the squared data

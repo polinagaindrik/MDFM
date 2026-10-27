@@ -320,10 +320,12 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     """
     param_init = np.asarray(param_init, dtype=float)
     if backend == 'jax':  # same (more accurate) solver for start cost, fits and result
-        from .cost_function import cost_withS
-        from .jax_backend import cost_withS_jax
+        from .cost_function import cost_withS, cost_direct
+        from .jax_backend import cost_withS_jax, cost_direct_jax
         if cost_func is cost_withS:
             cost_func = cost_withS_jax
+        elif cost_func is cost_direct:
+            cost_func = cost_direct_jax
     if fixed_values:
         calibr_setup = apply_fixed_values(calibr_setup, fixed_values)
     bnds = calibr_setup['param_bnds']

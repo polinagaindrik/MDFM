@@ -170,12 +170,40 @@ if __name__ == "__main__":
     PROFILE = 'all'                # 'x0', 'ode' or 'all' (= x0 + ode)
     FIX_X0 = False                 # True: x0 held at the estimate
     SHOW_TRUE_VALUE = True
+    # Profile runs (S profiles in step 3, x0 + ODE in step 5) in three steps (run_profile_likelihood_adaptive),
+    # grid plot after each step (<plot>_1step.png, _2step, _3step):
+    #   1. profiles on the initial grid (span, n_points of each run)
+    #   2. sides that do not cross the threshold get EXTEND_N_POINTS new points per round, each round
+    #      doubling the distance of the side's end to the estimate (EXTEND_FACTOR=1; None: up to the bound),
+    #      at most MAX_EXTEND_ROUNDS rounds (0: no extension)
+    #   3. CI_N_POINTS points over each CI, widened by CI_MARGIN x CI half-width on each side (0: skip);
+    #      repeated with twice as many values for the profiles with fewer than MIN_CI_POINTS points inside
+    #      the CI, at most MAX_CI_ROUNDS rounds in total
+    # False: only step 1 (run_profile_likelihood_all, as before)
+    ADAPTIVE = True
+    MAX_EXTEND_ROUNDS = 5
+    EXTEND_FACTOR = 1.0
+    CI_N_POINTS = 10
+    CI_MARGIN = 0.3
+    MIN_CI_POINTS = 5
+    MAX_CI_ROUNDS = 3
     # tools for existing profiles (step 5), as in test_2sp.py
-    EXTEND = None                  # None, 'auto' or {parameter: spec}
+    EXTEND = None                  # None, 'auto', 'ci' or {parameter: spec} (see test_2sp.py)
     EXTEND_N_POINTS = 6
     UPDATE_OPTIMUM = False         # new Result_calibration as optimum of the existing profiles
     POLISH_PROFILES = False        # False, True or a list of parameters
     # ================================================================
+    run_profiles = pl.run_profile_likelihood_adaptive if ADAPTIVE else pl.run_profile_likelihood_all
+
+    def adaptive_options(stop_factor):
+        """Extra arguments of run_profile_likelihood_adaptive; extension walks stop as the main walks do."""
+        if not ADAPTIVE:
+            return {}
+        return dict(max_extend_rounds=MAX_EXTEND_ROUNDS, extend_factor=EXTEND_FACTOR,
+                    extend_n_points=EXTEND_N_POINTS, extend_stop_factor=stop_factor,
+                    ci_n_points=CI_N_POINTS, ci_margin=CI_MARGIN,
+                    min_ci_points=MIN_CI_POINTS, max_ci_rounds=MAX_CI_ROUNDS,
+                    extend_n_restarts=3)  # multistart per new point (steps 2 and 3)
 
     os.makedirs(path, exist_ok=True)
     start = time.time()
@@ -266,8 +294,9 @@ if __name__ == "__main__":
                                           'geomean': pl.GeometricMeanNeg2LogLik}[S_OBJECTIVE](S_n_data(S_setup, param_S))
         tag_S = f'{add_name}_S_{S_OBJECTIVE}'
         out_csv_S = out_path_S + f'profile_likelihood_results{tag_S}.csv'
-        pl.run_profile_likelihood_all(
+        run_profiles(
             cost_S, param_S, pl_setup_S,
+            **adaptive_options(stop_factor=None),
             span=S_SPAN, n_points=S_N_POINTS, method='local',
             n_jobs=n_jobs,
             out_csv=out_csv_S,
@@ -430,8 +459,9 @@ if __name__ == "__main__":
                 verbose=1,
             )
         else:
-            pl.run_profile_likelihood_all(
+            run_profiles(
                 fm.pest.cost_direct, param_opt, pl_setup,
+                **adaptive_options(stop_factor=3),
                 span=3, n_points=12, method='local',
                 n_jobs=n_jobs,
                 out_csv=out_csv,

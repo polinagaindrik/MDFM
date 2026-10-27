@@ -38,6 +38,28 @@ N_CL = 2
 PARAM_ODE_TRUE = fm.data.read_true_parameters(N_CL)['param_ode']
 GEN_MEDIA = ['sel1', 'gen1']  # media order of fm.data.model_2media_expgensel (S rows in the true file)
 
+# Experimental designs of the in-silico data (each design has its own output folder, so that the designs can
+# be compared; 'base' = model_paper/out/test_2sp/ as before). Replicates = repeated temperatures, each
+# experiment with its own initial values (max. 15 experiments). 'days': measurement days (whole days),
+# default 0, 1, ..., 17. Also used by test_2sp_sepS.py.
+DESIGNS = {
+    'base':        {'temps': [2., 6., 10.]},                                         # 3 experiments
+    'rep3':        {'temps': [2., 2., 2., 6., 6., 6., 10., 10., 10.]},                # 3 replicates each
+    'temps6':      {'temps': [2., 4., 6., 8., 10., 14.]},                            # more temperatures
+    'temps6_rep2': {'temps': [2., 2., 4., 4., 6., 6., 8., 8., 10., 10., 14., 14.]},  # both
+    'long':        {'temps': [2., 6., 10.], 'days': list(range(0, 31))},             # 30 days
+}
+
+
+def data_folder(design, relnoise, normalize_true_s=False):
+    """Output / data folder of test_2sp.py for a design and noise level (10 %: the existing folders)."""
+    path = 'model_paper/out/test_2sp/' if design == 'base' else f'model_paper/out/test_2sp_{design}/'
+    if relnoise != 0.1:
+        path = path.rstrip('/') + f'_noise{int(round(relnoise * 100))}/'
+    if normalize_true_s:
+        path = path.rstrip('/') + '_normS/'
+    return path
+
 
 def true_parameter_vector(path, add_name, media_sorted, n_cl):
     """True parameters in the layout of the calibration vector [x0 | ODE | S (media sorted)]."""
@@ -101,21 +123,11 @@ if __name__ == "__main__":
     # ================================================================
     # Settings
     # ================================================================
-    # Experimental design of the in-silico data (each design has its own output folder, so that the
-    # designs can be compared; 'base' = model_paper/out/test_2sp/ as before). Replicates = repeated
-    # temperatures, each experiment with its own initial values (max. 15 experiments). 'days': measurement
-    # days (whole days), default 0, 1, ..., 17. After switching to a new design: RUN_DATA = True.
-    DESIGNS = {
-        'base':        {'temps': [2., 6., 10.]},                                         # 3 experiments
-        'rep3':        {'temps': [2., 2., 2., 6., 6., 6., 10., 10., 10.]},                # 3 replicates each
-        'temps6':      {'temps': [2., 4., 6., 8., 10., 14.]},                            # more temperatures
-        'temps6_rep2': {'temps': [2., 2., 4., 4., 6., 6., 8., 8., 10., 10., 14., 14.]},  # both
-        'long':        {'temps': [2., 6., 10.], 'days': list(range(0, 31))},             # 30 days
-    }
+    # experimental design of the in-silico data: a key of DESIGNS (top of this file); each design (and noise
+    # level other than 10 %) has its own output folder. The first run in a new folder generates the data.
     DESIGN = 'base'
     temps = DESIGNS[DESIGN]['temps']
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
-    path = 'model_paper/out/test_2sp/' if DESIGN == 'base' else f'model_paper/out/test_2sp_{DESIGN}/'
     n_cl = N_CL
     n_media = 2
     relnoise = 0.1
@@ -215,10 +227,7 @@ if __name__ == "__main__":
     POLISH_PROFILES = False
     # ================================================================
 
-    if relnoise != 0.1:  # other noise levels in their own folder (0.1: the existing folders)
-        path = path.rstrip('/') + f'_noise{int(round(relnoise * 100))}/'
-    if NORMALIZE_TRUE_S:
-        path = path.rstrip('/') + '_normS/'
+    path = data_folder(DESIGN, relnoise, NORMALIZE_TRUE_S)
     os.makedirs(path, exist_ok=True)
     start = time.time()
 

@@ -28,6 +28,8 @@ projects:
 Extra (model_paper only): extend_profile_likelihood(cost_func, calibr_setup, out_csv, extend, ...)
 adds points to the profiles of an existing run (explicit values, up to a new end
 value, or extend='auto' for every side that does not reach the threshold).
+run_profile_likelihood_adaptive(cost_func, param_opt, calibr_setup, ...) does all in one call:
+initial grid -> extend until the threshold is crossed -> denser points in and around the CIs.
 
 Grid (as in pool_paper): ``n_points`` values in [p - span*|p|, p + span*|p|],
 clipped to the bounds, plus the optimum itself (full bound range if p == 0).
@@ -1135,19 +1137,50 @@ def _resolve_param_index(key, names):
     return hits[0]
 
 
-def _extension_values(spec, existing, lo_b, hi_b):
+def _ci_region(existing, costs, p_hat, cost_opt, scale, confidence_level, margin):
+    """
+    Meaningful region of a profile: the CI (an open side ends at the outermost existing point),
+    widened on each side by margin x the distance of that CI bound to p_hat. The threshold
+    crossings are interpolated linearly in sqrt(Delta), which is exact for a parabolic profile;
+    linear interpolation in Delta puts them far too close to p_hat on coarse, steep profiles.
+    """
+    order = np.argsort(existing)
+    g = np.asarray(existing, dtype=float)[order]
+    r = np.sqrt(np.maximum((np.asarray(costs, dtype=float)[order] - cost_opt) / scale, 0.))
+    thr = np.sqrt(chi2.ppf(confidence_level, 1))
+    below = np.where(r <= thr)[0]
+    if len(below) == 0:  # all points above the threshold: only the optimum is meaningful
+        return p_hat, p_hat
+    i_lo, i_hi = below[0], below[-1]
+    lo, hi = g[i_lo], g[i_hi]
+    if i_lo > 0 and np.isfinite(r[i_lo - 1]):
+        lo = g[i_lo] + (thr - r[i_lo]) * (g[i_lo - 1] - g[i_lo]) / (r[i_lo - 1] - r[i_lo])
+    if i_hi < len(g) - 1 and np.isfinite(r[i_hi + 1]):
+        hi = g[i_hi] + (thr - r[i_hi]) * (g[i_hi + 1] - g[i_hi]) / (r[i_hi + 1] - r[i_hi])
+    return lo - margin * (p_hat - lo), hi + margin * (hi - p_hat)
+
+
+def _extension_values(spec, existing, lo_b, hi_b, ci_region=None):
     """New values for one parameter from an EXTEND spec (see extend_profile_likelihood)."""
     cur_lo, cur_hi = float(np.min(existing)), float(np.max(existing))
     if isinstance(spec, dict):
-        unknown = set(spec) - {"lower", "upper", "n_points", "values"}
+        unknown = set(spec) - {"lower", "upper", "n_points", "values", "ci", "margin"}
         if unknown:
-            raise ValueError(f"unknown keys {unknown} (allowed: lower, upper, n_points, values)")
+            raise ValueError(f"unknown keys {unknown} (allowed: lower, upper, n_points, values, ci, margin)")
         n = int(spec.get("n_points", 5))
         vals = list(np.ravel(spec.get("values", [])))
         if spec.get("upper") is not None:
             vals += list(np.linspace(cur_hi, min(float(spec["upper"]), hi_b), n + 1)[1:])
         if spec.get("lower") is not None:
             vals += list(np.linspace(cur_lo, max(float(spec["lower"]), lo_b), n + 1)[1:])
+        if spec.get("ci"):
+            r_lo, r_hi = max(ci_region[0], lo_b), min(ci_region[1], hi_b)
+            n_ci = max(int(spec["ci"]), 2)
+            ci_vals = np.linspace(r_lo, r_hi, n_ci)
+            # an evenly spaced grid over the region; skip values next to an existing point
+            min_dist = 0.5 * (r_hi - r_lo) / (n_ci - 1)
+            ci_vals = [v for v in ci_vals if not np.any(np.abs(np.asarray(existing) - v) < min_dist)]
+            vals += ci_vals
     else:
         vals = list(np.ravel(spec))
     vals = np.unique(np.clip(np.asarray(vals, dtype=float), lo_b, hi_b))
@@ -1218,6 +1251,17 @@ def extend_profile_likelihood(
                                 {'lower': value, 'n_points': n}  ... down to `value`
                                 (both keys may be given; n_points per side, default 5)
                                 {'values': [...]} or a plain list: arbitrary new values
+                                {'ci': n, 'margin': m}           denser profile in the meaningful
+                                                                 region: n evenly spaced values over
+                                                                 the current (interpolated) CI, widened
+                                                                 on each side by m x (distance of that
+                                                                 CI bound to the estimate), default
+                                                                 m = 0.3; values closer than half the
+                                                                 spacing to an existing point are
+                                                                 skipped. An open side uses the
+                                                                 outermost existing point. 'ci' alone
+                                                                 = {'ci': 10}. Can be combined with
+                                                                 the other keys.
                               Values are clipped to the bounds; values already present are skipped.
                               extend='auto': every profile side that does not reach the threshold
                               and does not end at the bound gets auto_n_points new points up to the
@@ -1293,7 +1337,17 @@ def extend_profile_likelihood(
         pts += [(float(r["param_value"]), r[names].to_numpy(dtype=float)) for _, r in sub.iterrows()]
         existing = np.array([v for v, _ in pts])
         lo_b, hi_b = bnds[idx]
-        new = _extension_values(spec, existing, lo_b, hi_b)
+        if isinstance(spec, str):
+            if spec != "ci":
+                raise ValueError(f"param[{idx}]: spec {spec!r} must be a dict, a list of values or 'ci'")
+            spec = {"ci": 10}
+        ci_region = None
+        if isinstance(spec, dict) and spec.get("ci"):
+            costs = np.concatenate([[cost_opt], sub["cost"].to_numpy(dtype=float)])
+            ci_region = _ci_region(existing, costs, float(param_opt[idx]), cost_opt, scale, confidence_level,
+                                   float(spec.get("margin", 0.3)))
+            print(f"param[{idx}] {names[idx]}: CI region incl. margin [{ci_region[0]:.6g}, {ci_region[1]:.6g}]")
+        new = _extension_values(spec, existing, lo_b, hi_b, ci_region)
         if len(new) == 0:
             print(f"param[{idx}] {names[idx]}: no new values (already computed or outside the bounds "
                   f"[{lo_b:g}, {hi_b:g}]).")
@@ -1376,6 +1430,158 @@ def extend_profile_likelihood(
         plt.close(df_plot)
     df, *_ = _read_csv_and_summary(out_csv, scale)
     return df
+
+
+def _ci_point_counts(out_csv, indices, confidence_level):
+    """({idx: points inside the CI incl. the estimate}, names) of a run."""
+    df, names, scale, cost_opt, p_opt = _read_csv_and_summary(out_csv, "auto")
+    n_in = {}
+    for idx in indices:
+        sub = df[df["param_index"] == idx]
+        g = np.concatenate([[p_opt[idx]], sub["param_value"].to_numpy(dtype=float)])
+        c = np.concatenate([[cost_opt], sub["cost"].to_numpy(dtype=float)])
+        g, keep = np.unique(g, return_index=True)  # the estimate is usually also a row of the CSV
+        lo, hi = _ci_region(g, c[keep], p_opt[idx], cost_opt, scale, confidence_level, margin=0.)
+        n_in[idx] = int(np.sum((g >= lo) & (g <= hi)))
+    return n_in, names
+
+
+def run_profile_likelihood_adaptive(
+    cost_func,
+    param_opt,
+    calibr_setup,
+    jac_spasity=None,
+    out_csv="profile_likelihood_results.csv",
+    extend_to_ci=True,
+    max_extend_rounds=5,
+    extend_factor=1.0,
+    extend_n_points=6,
+    extend_stop_factor=2.0,
+    ci_n_points=10,
+    ci_margin=0.3,
+    min_ci_points=5,
+    max_ci_rounds=3,
+    extend_n_restarts=3,
+    plot=True,
+    plot_path="profile_likelihood.png",
+    ncols=4,
+    **run_kwargs,
+):
+    """
+    Profile likelihood in three stages, each stored in out_csv as it finishes (an
+    interrupted call can be repeated: stage 1 resumes, stages 2/3 skip computed values):
+
+      1. run_profile_likelihood_all on the usual grid (span, n_points, ... in run_kwargs)
+      2. extend_to_ci=True: at most max_extend_rounds rounds; in each, every profile side that
+         does not cross the threshold and does not end at the bound gets extend_n_points new
+         points from its current end e up to e + extend_factor x (e - estimate), clipped to the
+         bound (extend_factor=1: the distance to the estimate doubles per round; None: straight
+         to the bound). A walk stops once Delta > extend_stop_factor x threshold (None: all
+         points). Sides still open after the last round are listed and stay open.
+      3. ci_n_points > 0: ci_n_points evenly spaced points over the (interpolated) CI of every
+         profile, widened on each side by ci_margin x (distance of that CI bound to the
+         estimate), i.e. a denser profile inside and slightly outside the CI (spec 'ci' of
+         extend_profile_likelihood). Values next to an existing point are skipped.
+         Repeated (at most max_ci_rounds rounds in total) for the profiles that still have fewer
+         than min_ci_points points inside the CI (incl. the estimate), with twice as many values
+         per round (ci_n_points x 2^(round-1)), so that the new values fall between the existing
+         ones.
+
+    run_kwargs        : all other arguments of run_profile_likelihood_all (span, n_points,
+                         method, confidence_level, scale, n_jobs, n_restarts, fixed_indices,
+                         profile_indices, minimize_options, solve_timeout, true_params, ...);
+                         the shared ones are also used in stages 2 and 3
+    extend_n_restarts  : n_restarts of the new points in stages 2 and 3
+    plot, plot_path, ncols : grid plot of the profiles after each step (<plot_path>_1step.png,
+                         _2step, _3step; skipped steps have no plot) and of the final profiles
+                         (plot_path)
+    Returns (df, ci_results) as run_profile_likelihood_all, for the final profiles.
+    """
+    shared = {k: run_kwargs[k] for k in ("n_jobs", "jitter_frac", "fixed_indices", "anchor_start",
+                                         "minimize_options", "solve_timeout", "verbose", "true_params")
+              if k in run_kwargs}
+    do_extend = extend_to_ci and max_extend_rounds > 0
+    n_stages = 1 + bool(do_extend) + bool(ci_n_points)
+    confidence_level = run_kwargs.get("confidence_level", 0.95)
+    bnds = calibr_setup["param_bnds"]
+    ext_args = dict(jac_spasity=jac_spasity, n_restarts=extend_n_restarts, ncols=ncols, **shared)
+    plot_base, plot_ext = os.path.splitext(plot_path)
+    step_path = lambda k: f"{plot_base}_{k}step{plot_ext}"  # noqa: E731
+
+    def plot_step(k):
+        """Grid plot of the profiles after step k (<plot_path>_<k>step.png)."""
+        if plot:
+            plt.close(plot_profile_likelihood_from_csv(out_csv, confidence_level=confidence_level,
+                                                       save_path=step_path(k), ncols=ncols,
+                                                       true_params=shared.get("true_params")))
+
+    print(f"[{time.strftime('%H:%M:%S')}] Stage 1/{n_stages}: profile likelihood on the initial grid", flush=True)
+    df, ci_results = run_profile_likelihood_all(cost_func, param_opt, calibr_setup, jac_spasity=jac_spasity,
+                                                out_csv=out_csv, plot=plot, plot_path=step_path(1),
+                                                ncols=ncols, **run_kwargs)
+    profile_indices = sorted(int(i) for i in df["param_index"].unique())
+
+    if do_extend:
+        print(f"\n[{time.strftime('%H:%M:%S')}] Stage 2/{n_stages}: extend profiles until the threshold is "
+              f"crossed (at most {max_extend_rounds} rounds)", flush=True)
+        for rnd in range(1, max_extend_rounds + 1):
+            df, names, scale, cost_opt, p_opt = _read_csv_and_summary(out_csv, "auto")
+            specs = _auto_extend_specs(df, names, p_opt, cost_opt, scale, confidence_level, bnds,
+                                       profile_indices, extend_n_points)
+            if not specs:
+                print(f"All profiles cross the threshold or end at the bound (after {rnd - 1} rounds).")
+                break
+            if extend_factor is not None:  # limited step instead of straight to the bound
+                for idx, spec in specs.items():
+                    vals = df.loc[df["param_index"] == idx, "param_value"].to_numpy()
+                    for key, edge, bound in (("upper", vals.max(), bnds[idx][1]), ("lower", vals.min(), bnds[idx][0])):
+                        if key in spec and edge != p_opt[idx]:
+                            target = edge + extend_factor * (edge - p_opt[idx])
+                            spec[key] = min(target, bound) if key == "upper" else max(target, bound)
+            print(f"\n--- extension round {rnd}/{max_extend_rounds} ---", flush=True)
+            extend_profile_likelihood(cost_func, calibr_setup, out_csv, specs, stop_factor=extend_stop_factor,
+                                      plot=False, **ext_args)
+        else:
+            df, names, scale, cost_opt, p_opt = _read_csv_and_summary(out_csv, "auto")
+            still_open = _auto_extend_specs(df, names, p_opt, cost_opt, scale, confidence_level, bnds,
+                                            profile_indices, extend_n_points)
+            if still_open:
+                print(f"WARNING: max_extend_rounds={max_extend_rounds} reached; threshold still not crossed for: "
+                      + ", ".join(f"param[{i}] {names[i]} ({'/'.join(k for k in ('lower', 'upper') if k in sp)})"
+                                  for i, sp in still_open.items()), flush=True)
+        plot_step(2)
+
+    if ci_n_points:
+        print(f"\n[{time.strftime('%H:%M:%S')}] Stage {n_stages}/{n_stages}: denser profiles inside and around "
+              f"the CIs", flush=True)
+        todo = list(profile_indices)  # round 1: all profiles (smoother curves)
+        for rnd in range(1, max(max_ci_rounds, 1) + 1):
+            n_ci = ci_n_points * 2 ** (rnd - 1)
+            print(f"\n--- CI round {rnd}/{max_ci_rounds}: {n_ci} values over the CI region of {len(todo)} "
+                  f"profiles ---", flush=True)
+            extend_profile_likelihood(cost_func, calibr_setup, out_csv,
+                                      {i: {"ci": n_ci, "margin": ci_margin} for i in todo},
+                                      stop_factor=None, plot=False, **ext_args)
+            n_in, names = _ci_point_counts(out_csv, profile_indices, confidence_level)
+            todo = [i for i in profile_indices if n_in[i] < min_ci_points]
+            if not todo:
+                break
+        if todo:
+            print(f"WARNING: fewer than min_ci_points={min_ci_points} points inside the CI after the CI rounds: "
+                  + ", ".join(f"param[{i}] {names[i]} ({n_in[i]})" for i in todo), flush=True)
+        else:
+            print(f"All profiles have at least {min_ci_points} points inside the CI.", flush=True)
+        plot_step(3)
+    if plot:  # final profiles also under plot_path itself
+        plt.close(plot_profile_likelihood_from_csv(out_csv, confidence_level=confidence_level, save_path=plot_path,
+                                                   ncols=ncols, true_params=shared.get("true_params")))
+
+    if n_stages > 1:
+        df, names, scale, cost_opt, _ = _read_csv_and_summary(out_csv, "auto")
+        ci_results = {idx: confidence_interval_from_profile(sub["param_value"].to_numpy(), sub["cost"].to_numpy(),
+                                                            cost_opt, confidence_level, scale=scale)
+                      for idx, sub in df.sort_values("param_value").groupby("param_index")}
+    return df, ci_results
 
 
 # ----------------------------------------------------------------------

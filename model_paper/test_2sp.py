@@ -209,12 +209,23 @@ if __name__ == "__main__":
     #   None   : normal profile run
     #   'auto' : every profile side that does not reach the threshold (and does not end at the bound)
     #            gets EXTEND_N_POINTS new points up to the bound; a side stops once Delta > 3 x threshold
-    #   dict   : {index: spec} with spec = {'upper': value, 'lower': value, 'n_points': n} (new points from
+    #   dict   : {index or name: spec} (name as in the CSV columns, without $ \ { }, e.g. 'x_0,00^V01') with spec = {'upper': value, 'lower': value, 'n_points': n} (new points from
     #            the current end of the profile to value) or a list of values (anywhere, also to fill gaps);
     #            add 'auto': True to also extend all other parameters automatically.
+    #            spec = {'ci': n, 'margin': m} (or just 'ci' = 10 points): n evenly spaced points over
+    #            the current CI, widened by m (default 0.3) x CI half-width on each side (denser
+    #            profile inside and slightly outside the CI; combinable with the other keys).
     #            Indices are printed as "Parameter indices" when EXTEND is set.
     #   e.g. EXTEND = {2: {'upper': 5.0, 'n_points': 6}, 12: [0.01, 0.03, 0.1, 0.3, 0.6], 'auto': True}
-    EXTEND = None
+    #        EXTEND = {3: 'ci', 'k_01,00': {'ci': 15, 'margin': 0.5}}
+    # rep3 (profile_likelihood_2dim_2media_test_all_neg2logL), after the first extension ({'ci': 5} + 'auto'):
+    # all CIs closed (S_sel1,01 ends at its bound 1), but these profiles still have only 3-7 points in the
+    # CI region (CI + 30 % margin) -> 10 points over the region (existing neighbours are kept, not recomputed)
+    EXTEND = {name: {'ci': 7, 'margin': 0.1} for name in [
+        'x_0,00^V01', 'x_0,01^V01', 'x_0,00^V02', 'x_0,01^V02', 'x_0,01^V03', 'x_0,00^V04', 'x_0,01^V04',
+        'x_0,00^V05', 'x_0,01^V05', 'x_0,00^V06', 'x_0,01^V06', 'x_0,00^V07', 'x_0,01^V08', 'x_0,01^V09',
+        'lambda_1,00', 'alpha_0,00', 'alpha_0,01', 'alpha_exp,00', 'alpha_exp,01', 'N_1',
+        'S_gen1,01']}
     EXTEND_N_POINTS = 6
     # True: use the current Result_calibration*.json (e.g. a new, better local minimization) as the optimum of
     # the existing profiles (same PROFILE / FIX_* / OBJECTIVE -> same CSV) instead of computing profiles:

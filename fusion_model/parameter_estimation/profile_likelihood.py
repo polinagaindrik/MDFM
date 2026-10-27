@@ -274,10 +274,12 @@ def _is_jax(minimize_options):
 def _cost_for_backend(cost_func, minimize_options):
     """cost_withS -> cost_withS_jax when the fits use the JAX backend (same solver for optimum and profiles)."""
     if _is_jax(minimize_options):
-        from .cost_function import cost_withS
-        from .jax_backend import cost_withS_jax
+        from .cost_function import cost_withS, cost_direct
+        from .jax_backend import cost_withS_jax, cost_direct_jax
         if cost_func is cost_withS:
             return cost_withS_jax
+        if cost_func is cost_direct:
+            return cost_direct_jax
     return cost_func
 
 
@@ -813,9 +815,9 @@ def estimate_profile_scale(cost_func, param_opt, calibr_setup, cost_opt, n_free_
     agg = calibr_setup.get("aggregation_func")
     if isinstance(agg, GaussianNeg2LogLik):  # already -2 log L, no counting needed
         return 1.0, int(sum(agg.n_data)), None
-    if getattr(cost_func, "__name__", "") == "cost_withS_jax":  # counting needs the numpy cost function
-        from .cost_function import cost_withS
-        cost_func = cost_withS
+    if getattr(cost_func, "__name__", "") in ("cost_withS_jax", "cost_direct_jax"):  # counting: numpy cost
+        from .cost_function import cost_withS, cost_direct
+        cost_func = cost_withS if cost_func.__name__ == "cost_withS_jax" else cost_direct
     n_data = count_data_points(cost_func, param_opt, calibr_setup, jac_spasity)
     if agg is cost_sum_and_geometric_mean:
         if n_data <= 0:

@@ -101,6 +101,10 @@ class JaxCost:
         self.solver = {"Tsit5": diffrax.Tsit5, "Kvaerno5": diffrax.Kvaerno5, "Dopri8": diffrax.Dopri8}[solver]()
         n_x0 = self.n_cl * self.n_exps
         self.slices = (slice(0, n_x0), slice(n_x0, -self.n_cl * self.n_media))
+        # S fixed (cost_direct): parameter vectors without S get calibr_setup['s_x'] appended
+        self.n_without_S = n_x0 + 4 * self.n_cl + 2 + self.n_cl * self.n_cl
+        s_fixed = calibr_setup.get("s_x")
+        self.s_fixed = None if s_fixed is None else np.ravel(np.asarray(s_fixed, dtype=float))
 
         self._cost = jax.jit(self._cost_fn)
         self._vg = jax.jit(jax.value_and_grad(self._cost_fn))
@@ -191,27 +195,37 @@ class JaxCost:
         return c
 
     # --- public API (numpy in, numpy out) -----------------------------------
+    # p is either the full vector [x0 | ODE | S] (cost_withS) or [x0 | ODE] with S fixed at
+    # calibr_setup['s_x'] (cost_direct); derivatives are returned for the entries of p only.
+    def _full(self, p):
+        p = np.asarray(p, dtype=float)
+        if self.s_fixed is not None and len(p) == self.n_without_S:
+            return jnp.asarray(np.concatenate([p, self.s_fixed])), len(p)
+        return jnp.asarray(p), len(p)
+
     def cost(self, p):
-        c = float(self._cost(jnp.asarray(p, dtype=float)))
+        c = float(self._cost(self._full(p)[0]))
         return c if np.isfinite(c) else 1e10
 
     def value_and_grad(self, p):
-        c, g = self._vg(jnp.asarray(p, dtype=float))
-        c, g = float(c), np.asarray(g, dtype=float)
+        pf, n = self._full(p)
+        c, g = self._vg(pf)
+        c, g = float(c), np.asarray(g, dtype=float)[:n]
         if not np.isfinite(c) or not np.all(np.isfinite(g)):
             return 1e10, np.zeros_like(g)
         return c, g
 
     def residuals(self, p):
         """Residual groups as residuals_withS (incl. the penalty group): (list of arrays, owners=None)."""
-        return [np.asarray(r) for r in self._res(jnp.asarray(p, dtype=float))]
+        return [np.asarray(r) for r in self._res(self._full(p)[0])]
 
     def residual_vector(self, p):
-        return np.asarray(self._res_vec(jnp.asarray(p, dtype=float)))
+        return np.asarray(self._res_vec(self._full(p)[0]))
 
     def residual_jacobian(self, p):
-        """d residual_vector / d p, shape (n_residuals, n_params), exact (forward mode)."""
-        return np.asarray(self._jac(jnp.asarray(p, dtype=float)))
+        """d residual_vector / d p, shape (n_residuals, len(p)), exact (forward mode)."""
+        pf, n = self._full(p)
+        return np.asarray(self._jac(pf))[:, :n]
 
     def group_sizes(self):
         return [int(m.sum()) for m in self.masks] + ([1] if self.penalty_w else [])
@@ -227,10 +241,16 @@ def cost_withS_jax(param, calibr_setup, jac_spasity=None):
     return jax_cost_for(calibr_setup).cost(param)
 
 
+def cost_direct_jax(param, calibr_setup, jac_spasity=None):
+    """cost_direct (S fixed at calibr_setup['s_x'], param = [x0 | ODE]) with the JAX backend."""
+    return jax_cost_for(calibr_setup).cost(param)
+
+
 def _register():
     from . import least_squares_fit as lsf
     from .cost_function import residuals_withS
     lsf.RESIDUAL_FUNCS[cost_withS_jax] = residuals_withS
+    lsf.RESIDUAL_FUNCS[cost_direct_jax] = lsf.residuals_direct
 
 
 _register()
@@ -238,7 +258,9 @@ _register()
 
 def jax_cost_for(calibr_setup, **kwargs):
     """JaxCost cached per calibr_setup object and its bounds / objective / noise model / penalty."""
+    s_x = calibr_setup.get("s_x")
     key = (id(calibr_setup), id(calibr_setup.get("aggregation_func")), calibr_setup.get("noise_model"),
+           None if s_x is None else tuple(np.ravel(np.asarray(s_x, dtype=float))),
            calibr_setup.get("s_max_penalty"), tuple(map(tuple, calibr_setup["param_bnds"])),
            tuple(sorted(kwargs.items())))
     if key not in _CACHE:

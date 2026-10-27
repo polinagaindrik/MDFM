@@ -69,6 +69,11 @@ def extend_profile_likelihood(calibr_setup, out_csv, extend, *args, **kwargs):
     return pl.extend_profile_likelihood(cost, calibr_setup, out_csv, extend, *args, **kwargs)
 
 
+def run_profile_likelihood_adaptive(param_opt, calibr_setup, *args, **kwargs):
+    """See `profile_likelihood.run_profile_likelihood_adaptive` (this case study's `cost` is used)."""
+    return pl.run_profile_likelihood_adaptive(cost, param_opt, calibr_setup, *args, **kwargs)
+
+
 # ----------------------------------------------------------------------
 # Loading the model_paper calibration
 # ----------------------------------------------------------------------
@@ -252,9 +257,28 @@ if __name__ == "__main__":
     #   dict   : {index: spec} with spec = {'upper': value, 'lower': value, 'n_points': n} (new points from
     #            the current end of the profile to value) or a list of values (anywhere, also to fill gaps);
     #            add 'auto': True to also extend all other parameters automatically.
+    #            spec = {'ci': n, 'margin': m} (or just 'ci' = 10 points): n evenly spaced points over
+    #            the current CI, widened by m (default 0.3) x CI half-width on each side (denser
+    #            profile inside and slightly outside the CI; combinable with the other keys).
     #            Indices are printed as "Parameter indices" when EXTEND is set.
     EXTEND = None
     EXTEND_N_POINTS = 6
+    # Normal profile run (EXTEND = None) in three stages (run_profile_likelihood_adaptive):
+    #   1. profiles on the initial grid (span, n_points below)
+    #   2. sides that do not cross the threshold get EXTEND_N_POINTS new points per round, each round
+    #      doubling the distance of the side's end to the estimate (EXTEND_FACTOR=1; None: up to the
+    #      bound), at most MAX_EXTEND_ROUNDS rounds (0: no extension)
+    #   3. CI_N_POINTS points over each CI, widened by CI_MARGIN x CI half-width on each side (0: skip);
+    #      repeated with twice as many values per round for the profiles with fewer than MIN_CI_POINTS
+    #      points inside the CI, at most MAX_CI_ROUNDS rounds in total
+    # False: only stage 1 (run_profile_likelihood_all, as before)
+    ADAPTIVE = True
+    MAX_EXTEND_ROUNDS = 5
+    EXTEND_FACTOR = 1.0
+    CI_N_POINTS = 10
+    CI_MARGIN = 0.3
+    MIN_CI_POINTS = 5
+    MAX_CI_ROUNDS = 3
     # True: use the current Result_calibration*.json (e.g. a new, better local minimization) as the optimum of
     # the existing profiles (same PROFILE / FIX_* / OBJECTIVE -> same CSV); profile points are kept.
     UPDATE_OPTIMUM = False
@@ -337,8 +361,15 @@ if __name__ == "__main__":
         )
         sys.exit(0)
 
-    df, cis = run_profile_likelihood_all(
+    adaptive_options = dict(
+        max_extend_rounds=MAX_EXTEND_ROUNDS, extend_factor=EXTEND_FACTOR, extend_n_points=EXTEND_N_POINTS,
+        extend_stop_factor=1.5, ci_n_points=CI_N_POINTS, ci_margin=CI_MARGIN,
+        min_ci_points=MIN_CI_POINTS, max_ci_rounds=MAX_CI_ROUNDS,
+        extend_n_restarts=3,    # multistart per new point (stages 2 and 3)
+    ) if ADAPTIVE else {}
+    df, cis = (run_profile_likelihood_adaptive if ADAPTIVE else run_profile_likelihood_all)(
         param_opt, calibr_setup,
+        **adaptive_options,
         span=1., n_points=15, method="local",
         n_jobs=20,              # <-- parallelize across (parameter, direction) walks
         per_point_workers=1,    # <-- irrelevant for method="local", leave at 1

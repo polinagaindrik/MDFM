@@ -21,6 +21,7 @@ import time
 sys.path.append(os.getcwd())
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
+import paper_paths as pp
 from fusion_model.parameter_estimation import profile_likelihood as pl
 from profile_likelihood_model_paper import (make_param_names, exp_temps_from_columns, resolve_fixed_values,
                                             fixed_values_from_result, print_parameter_table,
@@ -39,7 +40,7 @@ PARAM_ODE_TRUE = fm.data.read_true_parameters(N_CL)['param_ode']
 GEN_MEDIA = ['sel1', 'gen1']  # media order of fm.data.model_2media_expgensel (S rows in the true file)
 
 # Experimental designs of the in-silico data (each design has its own output folder, so that the designs can
-# be compared; 'base' = model_paper/out/test_2sp/ as before). Replicates = repeated temperatures, each
+# be compared; 'base' = model_paper/out/test_2sp_<noise>noise/). Replicates = repeated temperatures, each
 # experiment with its own initial values (max. 15 experiments). 'days': measurement days (whole days),
 # default 0, 1, ..., 17. Also used by test_2sp_sepS.py.
 DESIGNS = {
@@ -52,13 +53,8 @@ DESIGNS = {
 
 
 def data_folder(design, relnoise, normalize_true_s=False):
-    """Output / data folder of test_2sp.py for a design and noise level (10 %: the existing folders)."""
-    path = 'model_paper/out/test_2sp/' if design == 'base' else f'model_paper/out/test_2sp_{design}/'
-    if relnoise != 0.1:
-        path = path.rstrip('/') + f'_noise{int(round(relnoise * 100))}/'
-    if normalize_true_s:
-        path = path.rstrip('/') + '_normS/'
-    return path
+    """Output / data folder of test_2sp.py for a design and noise level (see paper_paths.test_2sp_path)."""
+    return pp.test_2sp_path(design, relnoise, normalize_true_s)
 
 
 def true_parameter_vector(path, add_name, media_sorted, n_cl):
@@ -131,7 +127,6 @@ if __name__ == "__main__":
     DESIGN = 'rep3'
     temps = DESIGNS[DESIGN]['temps']
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
-    path = f'model_paper/out/test_2sp_10noise/' if DESIGN == 'base' else f'model_paper/out/test_2sp_{DESIGN}/'
     n_cl = N_CL
     n_media = 2
     relnoise = 0.1

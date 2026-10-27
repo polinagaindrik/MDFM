@@ -1,7 +1,9 @@
 import os
 import sys
 sys.path.append(os.getcwd())
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
+import paper_paths as pp
 
 import numpy as np
 import pandas as pd
@@ -107,10 +109,10 @@ if __name__ == "__main__":
     rms_param = np.zeros((3, len(n_cl))) # 3: param_ode, x0, s_x
     rms_per_species = []
     L_0_real = np.array(fm.data.read_from_json(fm.data.SETUP_DIR + 'Initial_values_x0_paper.json')['x0'])
-    path_base = 'model_paper/out/model_complexity/'
+    path_base = pp.study_dir('model_complexity')
     for i, n in enumerate(n_cl):
-        path = path_base+f'{int(n)}_dim_{n_media}media_exp_{int(relnoise*100)}noise/calibration/'
-        add_name = f'_{int(n)}dim_{int(n_media)}media'
+        path = pp.study_path('model_complexity', n_cl=n, n_media=n_media, relnoise=relnoise)
+        add_name = pp.add_name(n, n_media)
         data, rms[i], rms_mibi[i], rms_maldi[i], rms_ngs[i], rms_per_species0, cost[i], rms_param[:, i] = calculate_rmse(n, relnoise, path, add_name)
         rms_per_species.append(rms_per_species0)
 
@@ -147,7 +149,7 @@ if __name__ == "__main__":
     ax.set_xlim(np.min(n_cl)-0.2, np.max(n_cl)+0.2)
     ax.set_yscale('log')
     #ax.set_ylim(-0.02, 2.)
-    plt.savefig('model_paper/out/model_complexity/plot_rmse.pdf', bbox_inches='tight')
+    plt.savefig(path_base+'plot_rmse.pdf', bbox_inches='tight')
     plt.close()
 
     fig, ax = plt.subplots()
@@ -163,7 +165,7 @@ if __name__ == "__main__":
     coord_text = (0.07, 0.92)
     #ax.text(*coord_text, '(a)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     ax.legend(bbox_to_anchor=(0.45, 0.98), ncol=2)
-    plt.savefig('model_paper/out/model_complexity/plot_rmse_param.pdf', bbox_inches='tight')
+    plt.savefig(path_base+'plot_rmse_param.pdf', bbox_inches='tight')
     plt.close()
 
     fig, ax = plt.subplots()
@@ -177,19 +179,19 @@ if __name__ == "__main__":
     ax.text(*coord_text, '(b)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     ax.legend(bbox_to_anchor=(0.43, 0.52), ncol=2)
     ax.set_xlim(np.min(n_cl)-0.2, np.max(n_cl)+0.2)
-    plt.savefig('model_paper/out/model_complexity/plot_rmse_per_species.pdf', bbox_inches='tight')
+    plt.savefig(path_base+'plot_rmse_per_species.pdf', bbox_inches='tight')
     plt.close()
 
     # RMSE for noise vs. n_species analysis
     n_cl = [4, 6, 8, 10, 12]
     relnoise = [0., 0.1, 0.2, 0.3]
     n_media = 2
-    path_base = 'model_paper/out/noise_vs_nspecies/'
+    path_base = pp.study_dir('noise_vs_nspecies')
     rms, rms_mibi, rms_maldi, rms_ngs, cost = [np.zeros((len(n_cl), len(relnoise))) for _ in range(5)]
     for j, rn in enumerate(relnoise):
         for i, n in enumerate(n_cl):
-            path = path_base+f'{int(rn*100)}noise/{int(n)}_dim_{n_media}media_exp_{int(rn*100)}noise/calibration/'
-            add_name = f'_{int(n)}dim_{int(n_media)}media'
+            path = pp.study_path('noise_vs_nspecies', n_cl=n, n_media=n_media, relnoise=rn)
+            add_name = pp.add_name(n, n_media)
             data, rms[i, j], rms_mibi[i, j], rms_maldi[i, j], rms_ngs[i, j], rms_per_species0, cost[i, j], _ = calculate_rmse(n, rn, path, add_name)
 
     addn = ['_x', '_pc', '_maldi', '_ngs', '_cost']
@@ -209,15 +211,13 @@ if __name__ == "__main__":
 
     # RMSE for different media
     media = ['gen1','gen2', 'gen3', 'sel1', 'sel2', 'sel3', 'gen1+sel1', 'gen2+sel2', 'gen3+sel3', 'sel1+sel2', 'sel1+sel3', 'sel2+sel3']
-    addn = ['_gen', '_gen2', '_gen3', '_sel', '_sel2', '_sel3', '', '_gen2sel2', '_gen3sel3', '_sel1sel2', '_sel1sel3', '_sel2sel3']
     n = 6
     rn = 0.1
-    n_media = [1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2]
-    path_base = 'model_paper/out/media_influence/'
+    path_base = pp.study_dir('media_influence')
     rms, rms_mibi, rms_maldi, rms_ngs, cost = [np.zeros((len(media))) for _ in range(5)]
     for i, med in enumerate(media):
-        path = path_base+f'{med}_media/calibration/'
-        add_name = f'_{int(n)}dim_{int(n_media[i])}media'+addn[i]
+        path = pp.study_path('media_influence', media=med)
+        add_name = pp.add_name(n, media=med)
         data, rms[i], rms_mibi[i], rms_maldi[i], rms_ngs[i], rms_per_species0, cost[i], _ = calculate_rmse(n, rn, path, add_name)
     
     addn = ['_x', '_pc', '_maldi', '_ngs', '_cost']

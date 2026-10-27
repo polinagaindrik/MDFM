@@ -1,19 +1,28 @@
 import os
 import sys
 sys.path.append(os.getcwd())
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
+import paper_paths as pp
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     plt.rcParams['figure.dpi'] = 500
+    # Folder (see paper_paths.py): STUDY = 'model_complexity', 'noise_vs_nspecies' or 'media_influence' (MEDIA)
+    STUDY = 'model_complexity'
     n_cl = 6
     n_media = 2
-    path = f'model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_10noise/calibration/'
+    relnoise = 0.1
+    MEDIA = None  # media_influence only, e.g. 'gen2+sel2' (sets n_media)
+    if MEDIA is not None:
+        n_media = pp.media_n(MEDIA)
+    path = pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=MEDIA)
     path2 = path
-    path_datagen = f'model_paper/out/model_complexity/{int(n_cl)}_dim_{int(n_media)}media_exp_10noise/data_generation/'
-    add_name = f'_{int(n_cl)}dim_{int(n_media)}media'
+    path_datagen = pp.ensure_dir(pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=MEDIA,
+                                               sub='data_generation'))
+    add_name = pp.add_name(n_cl, n_media, media=MEDIA)
 
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]

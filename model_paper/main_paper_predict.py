@@ -1,7 +1,9 @@
 import os
 import sys
 sys.path.append(os.getcwd())
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
+import paper_paths as pp
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -12,11 +14,15 @@ import time
 
 if __name__ == "__main__":
     plt.rcParams['figure.dpi'] = 500
-    path = 'model_paper/out/10_dim/'
+    # Run folder (see paper_paths.py): reads <run>/calibration/, writes <run>/prediction/
+    STUDY = 'model_complexity'  # 'model_complexity', 'noise_vs_nspecies' or 'media_influence' (MEDIA)
+    n_cl_run, n_media_run, relnoise = 10, 2, 0.1
+    MEDIA = None  # media_influence only, e.g. 'gen2+sel2'
+    path = pp.run_dir(STUDY, n_cl=n_cl_run, n_media=n_media_run, relnoise=relnoise, media=MEDIA)
     workers = -1
 
     # Load calibration result:
-    add_name_calibr = ''
+    add_name_calibr = pp.add_name(n_cl_run, n_media_run, media=MEDIA)
     df_names = [f'dataframe_mibi{add_name_calibr}.pkl', f'dataframe_maldi{add_name_calibr}.pkl', f'dataframe_ngs{add_name_calibr}.pkl']
     dfs_calibr = [pd.read_pickle(path+'calibration/'+df_name) for df_name in df_names]
     dfs_calibr = fm.dtf.filter_dataframe_regex('V.._', dfs_calibr)

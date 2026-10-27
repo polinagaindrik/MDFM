@@ -15,7 +15,7 @@ For each scenario:
   2) local refinement (L-BFGS-B multistart)              -> <scenario>/Result_calibration<add_name>.json
   3) profile likelihood (local fits; objective see OBJECTIVE) -> <scenario>/profile_likelihood/...
 
-The in-silico data are those of test_2sp.py (model_paper/out/test_2sp/, generated if missing).
+The in-silico data are those of test_2sp.py (model_paper/out/test_2sp_<noise>noise/, generated if missing).
 The omitted data type is still simulated but has no weight in the cost / profile objective.
 Each stage can be switched off (RUN_*) and is then read from its saved result. Run from the
 repository root:
@@ -29,7 +29,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
 from fusion_model.parameter_estimation import profile_likelihood as pl
 from profile_likelihood_model_paper import make_param_names, exp_temps_from_columns
-from test_2sp import N_CL, PARAM_ODE_TRUE, true_parameter_vector, print_comparison
+from test_2sp import N_CL, PARAM_ODE_TRUE, true_parameter_vector, print_comparison, data_folder
 
 import numpy as np
 
@@ -52,12 +52,12 @@ if __name__ == "__main__":
     # ================================================================
     # Settings
     # ================================================================
-    data_path = 'model_paper/out/test_2sp/'            # in-silico data (shared with test_2sp.py)
     out_root = 'model_paper/out/test_2sp_datatypes/'   # one subfolder per scenario
     SCENARIOS = ['ngs_maldi', 'ngs_mibi', 'maldi_mibi']  # subset of SCENARIOS_ALL, run one after the other
     n_cl = N_CL
     n_media = 2
     relnoise = 0.1
+    data_path = data_folder('base', relnoise)            # in-silico data (shared with test_2sp.py)
     temps = [2., 6., 10.]          # 3 experiments, 3 temperatures
     ntr = 1
     add_name = f'_{n_cl}dim_{n_media}media_test'

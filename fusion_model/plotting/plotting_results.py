@@ -4,7 +4,7 @@ from matplotlib import rcParams
 import numpy as np
 
 from . import plotting_templates as plt_templ
-from ..parameter_estimation.media_matrix import Scost_ngsterm, Scost_s0term
+from ..parameter_estimation.media_matrix import Scost_ngsterm, Scost_mediarelation
 import fusion_model.tools.dataframe_functions as dtf
 import fusion_model.model as mdl
 
@@ -47,7 +47,7 @@ def plot_filteringS2(dfs, opt_param, T_x, exps, path='', clrs=None):
     mibi_max = np.nanmax(obs_mibi, axis=(0, 1))
     for k, exp in enumerate(exps):
         rhs1, lhs1 = Scost_ngsterm(days_total, obs_maldi[k], obs_ngs[k], opt_param, T_x)
-        rhs2, lhs2 = Scost_s0term(days_total, obs_mibi[k]/mibi_max, obs_maldi[k], opt_param, 1.)
+        rhs2, lhs2 = Scost_mediarelation(days_total, obs_mibi[k]/mibi_max, obs_maldi[k], opt_param)
         for i, med in enumerate (media):
             fig, ax = plt.subplots(figsize=(5, 5))
             for j, bact in enumerate(df_maldi.T.columns):

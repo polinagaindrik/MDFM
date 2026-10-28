@@ -4,6 +4,7 @@ model_paper/out/
     model_complexity/   <n>_dim_<m>media_exp_<noise>noise/calibration/            (n_cl varied, 10 % noise)
     noise_vs_nspecies/  <noise>noise/<n>_dim_<m>media_exp_<noise>noise/calibration/  (n_cl x noise level)
     media_influence/    <media>_media/calibration/                                (media varied, 6 species)
+    (run folders of designs other than PAPER_DESIGN = 'rep3' end in _<design>)
     test_2sp_<noise>noise/, test_2sp_<design>/                                    (2-species tests, test_2sp.py)
 
 Usage:  path = study_path('model_complexity', n_cl=4, n_media=2, relnoise=0.1)
@@ -14,6 +15,8 @@ import os
 
 OUT_DIR = 'model_paper/out/'
 STUDIES = ('model_complexity', 'noise_vs_nspecies', 'media_influence')
+# experimental design of the paper runs (test_2sp.DESIGNS); other designs get the folder suffix _<design>
+PAPER_DESIGN = 'rep3'
 
 # media whose file suffix differs from the joined media names (first runs: gen1 -> '_gen', gen1+sel1 -> '')
 _MEDIA_SUFFIX = {'gen1': 'gen', 'sel1': 'sel', 'gen1+sel1': ''}
@@ -31,22 +34,25 @@ def study_dir(study):
     return OUT_DIR + study + '/'
 
 
-def run_dir(study, n_cl=None, n_media=2, relnoise=0.1, media=None):
-    """Folder of one run (contains calibration/, data_generation/, ...)."""
+def run_dir(study, n_cl=None, n_media=2, relnoise=0.1, media=None, design=None):
+    """Folder of one run (contains calibration/, data_generation/, ...); design other than PAPER_DESIGN
+    (None = PAPER_DESIGN): suffix _<design>, e.g. 4_dim_2media_exp_10noise_temps6/."""
+    suffix = f'_{design}' if design not in (None, PAPER_DESIGN) else ''
     if study == 'model_complexity':
-        return study_dir(study) + f'{int(n_cl)}_dim_{int(n_media)}media_exp_{noise_tag(relnoise)}/'
+        return study_dir(study) + f'{int(n_cl)}_dim_{int(n_media)}media_exp_{noise_tag(relnoise)}{suffix}/'
     if study == 'noise_vs_nspecies':
-        return study_dir(study) + f'{noise_tag(relnoise)}/{int(n_cl)}_dim_{int(n_media)}media_exp_{noise_tag(relnoise)}/'
+        return (study_dir(study) + f'{noise_tag(relnoise)}/'
+                f'{int(n_cl)}_dim_{int(n_media)}media_exp_{noise_tag(relnoise)}{suffix}/')
     if study == 'media_influence':
         if media is None:
             raise ValueError("study 'media_influence' needs media, e.g. 'gen1' or 'gen2+sel2'")
-        return study_dir(study) + f'{media}_media/'
+        return study_dir(study) + f'{media}_media{suffix}/'
     raise ValueError(f'unknown study {study!r}, expected one of {STUDIES}')
 
 
-def study_path(study, n_cl=None, n_media=2, relnoise=0.1, media=None, sub='calibration'):
+def study_path(study, n_cl=None, n_media=2, relnoise=0.1, media=None, sub='calibration', design=None):
     """Calibration folder of one run (sub='' for the run folder itself, e.g. sub='data_generation')."""
-    path = run_dir(study, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=media)
+    path = run_dir(study, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=media, design=design)
     return path + sub + '/' if sub else path
 
 

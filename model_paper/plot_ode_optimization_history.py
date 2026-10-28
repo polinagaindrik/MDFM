@@ -116,4 +116,5 @@ if __name__ == "__main__":
                                 path=path2+'optimization/')
     calibr_setup['dfs'] = data+[df_x]
     fm.plotting.plot_optimization_result(np.array(param_ode), calibr_setup, np.linspace(0, 17, 100),
-                                         path=path2, clrs=clrs1, add_name=add_name+'_calibration')
+                                         path=path2, clrs=clrs1, add_name=add_name+'_calibration',
+                                         relnoise=relnoise)

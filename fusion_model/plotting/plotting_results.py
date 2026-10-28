@@ -98,8 +98,10 @@ def plot_prediction_result_x0lambda(param, lambda_dict, x0_dict, prediction_setu
         plot_one_exp_model(exp, param_opt, L0_arr[i], prediction_setup, t_model, media=prediction_setup['media'], **kwargs)
 
 
-def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=[''], clrs=None, path='', add_name=''):
-    """Plot one experiment's predicted bacterial counts and observation types."""
+def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=[''], clrs=None, path='', add_name='',
+                       relnoise=0.1):
+    """Plot one experiment's predicted bacterial counts and observation types
+    (error bars: relnoise * data of MiBi, MALDI and NGS)."""
     data = prediction_setup['dfs']
     n_cl = np.shape(data[1])[0]
 
@@ -128,13 +130,17 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
     plot_opt_res_realx(df_x0, t_model, n_C, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
     for i in range (len(media)):
         plot_opt_res_realx(df_x0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name, plot_meas=False)
-    plot_opt_res_ngs(df_ngs0, days_ngs, obs_ngs, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
-    plot_opt_res_maldi(df_maldi0, days_maldi, obs_maldi, exp, media=media, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
-    plot_opt_res_mibi(df_mibi0, days_mibi, obs_mibi, exp, media=media, path=path+'Param_estim_', add_name=add_name)
+    plot_opt_res_ngs(df_ngs0, days_ngs, obs_ngs, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name,
+                     relnoise=relnoise)
+    plot_opt_res_maldi(df_maldi0, days_maldi, obs_maldi, exp, media=media, path=path+'Param_estim_', clrs=clrs,
+                       add_name=add_name, relnoise=relnoise)
+    plot_opt_res_mibi(df_mibi0, days_mibi, obs_mibi, exp, media=media, path=path+'Param_estim_', add_name=add_name,
+                      relnoise=relnoise)
 
 
-def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None):
-    """Plot modeled NGS proportions against measurements for one experiment."""
+def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None, relnoise=0.1):
+    """Plot modeled NGS proportions against measurements for one experiment
+    (error bars std, if None relnoise * data)."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     days_meas = [float(f.split('_')[3]) for f in df_ngs0.columns]
@@ -142,13 +148,12 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
     days_meas, obs_meas = zip(*sorted(zip(days_meas, obs_meas)))
     lines = []
     for k, (o_n, o_meas, bact) in enumerate(zip(np.array(obs_model), np.array(obs_meas).T, df_ngs0.T.columns)):
-        if std is None:
-            std = o_meas*.1
+        err = relnoise*o_meas if std is None else std
         if clrs is not None:
             clr = clrs[bact]
         else:
             clr = plt_templ.colors_ngs[4*k]
-        ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, label=f'{bact}') # , label=f'Data Cl. {k}'
+        ax.errorbar(days_meas, o_meas, yerr=err, fmt='o', capsize=3, color=clr, label=f'{bact}') # , label=f'Data Cl. {k}'
         #ax.scatter(days_model, o_n,label=f'{bact}', color='w', marker='o', s=40, edgecolors=clr)
         ax.plot(days_model, o_n, color=clr)
         lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'Species {int(bact.split("_")[-1])+1}'))
@@ -165,8 +170,10 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
     plt.close(fig)
 
 
-def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=[' '], path='', add_name='', clrs=None):
-    """Plot modeled MALDI proportions against measurements for one experiment."""
+def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=[' '], path='', add_name='', clrs=None,
+                       relnoise=0.1):
+    """Plot modeled MALDI proportions against measurements for one experiment
+    (error bars std, if None relnoise * data)."""
     for j, med in enumerate(media):
         fig, ax = plt.subplots()
         fig.subplots_adjust()
@@ -180,9 +187,8 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
                 clr = clrs[bact]
             else:
                 clr = plt_templ.colors_ngs[4*k]
-            if std is None:
-                std = o_meas*0.1
-            ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=clr, label=f'{bact}')
+            err = relnoise*o_meas if std is None else std
+            ax.errorbar(days_meas, o_meas, yerr=err, fmt='o', capsize=3, color=clr, label=f'{bact}')
             ax.plot(days_model, o_m, color=clr)
             lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'Species {int(bact.split("_")[-1])+1}'))
         ax.set_ylim(-0.05, np.max([np.max(obs_meas), np.max(o_model)])*1.1)#+0.1)
@@ -204,8 +210,9 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
         plt.close(fig)
     
 
-def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=[''], path='', add_name='', clrs=None):
-    """Plot modeled MiBi counts against measurements for one experiment."""
+def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=[''], path='', add_name='', clrs=None,
+                      relnoise=0.1):
+    """Plot modeled MiBi counts against measurements for one experiment (error bars relnoise * data)."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     lines = []
@@ -217,11 +224,11 @@ def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=['']
         days_meas = [float(f.split('_')[3]) for f in df_mibi0.filter(like=med).columns]
         obs_meas = np.array([df_mibi0.filter(like=med)[f]['Average'] for f in df_mibi0.filter(like=med).columns])
         stds = np.array([df_mibi0.filter(like=med)[f]['Standard deviation'] for f in df_mibi0.filter(like=med).columns])
-        stds = 0.1*obs_meas
+        stds = relnoise*obs_meas
         days_meas, obs_meas, stds = zip(*sorted(zip(days_meas, obs_meas, stds)))
         o_model = obs_model[j]
         ax.plot(days_model, o_model, color=plt_templ.colors_ngs[2*j], label=med_label+' media (model)')
-        ax.errorbar(days_meas, obs_meas, yerr=stds, fmt='o', color=plt_templ.colors_ngs[2*j], label=med_label+' media (data)')
+        ax.errorbar(days_meas, obs_meas, yerr=stds, fmt='o', capsize=3, color=plt_templ.colors_ngs[2*j], label=med_label+' media (data)')
         lines.append(mlines.Line2D([], [], color=plt_templ.colors_ngs[2*j], marker='o', label=med_label+' media'))
     coord_text = (0.06, 0.92)
     ax.text(*coord_text, '(a)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)

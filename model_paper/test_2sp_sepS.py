@@ -10,22 +10,23 @@ with a profile likelihood after each step:
   2) S estimation from the data alone (media_matrix.S_squared_difference, objective of
      calc_Smatrix = S_cost_func2): differential evolution   -> S_matrix<add_name>_global.json
      + local refinement (L-BFGS-B multistart)               -> S_matrix<add_name>.json
-  3) profile likelihood of the S-step parameters [S (media sorted) | s0]
+  3) profile likelihood of the S-step parameters S (media sorted)
                                                             -> profile_likelihood_S/...
   4) estimation of x0 + ODE parameters with S fixed at the step-2 estimate (cost_direct):
      global (differential evolution) + local refinement     -> Result_calibration<add_name>.json
   5) profile likelihood of x0 + ODE parameters (S fixed)    -> profile_likelihood/...
 
-S-step parameters: S_squared_difference uses the raw vector [S | s0]; calc_Smatrix then
-multiplies one S row by s0 (row 'sel1' if s0 <= 1, else row 'gen1'). The profiles are taken
-in the raw parameters (that is what the cost sees); the true raw vector is [S_true | 1].
+S-step parameters: S_squared_difference uses the raw vector S; calc_Smatrix then divides S by its maximum,
+so that max(S) = 1 (the cost does not fix the scale of S). The profiles are taken in the raw parameters
+(that is what the cost sees); the true raw vector is S_true. The relation between the media (ratio of the
+S rows) comes from the second cost term, media_matrix.Scost_mediarelation.
 The S step only uses ratios (MALDI fractions, NGS, MiBi relation between the media), so S is
 determined up to a common factor c. The model has the approximate symmetry (S, x0, N_1, k_ij) ->
 (c S, x0 - log10 c, N_1 - log10 c, c k_ij) (not exact: the active compartment always starts at 1 cell),
 so steps 4-5 are compared with the truth rescaled to the S scale of the estimate (rescale_truth) as a
 reference; the printed costs show how close that reference is to the optimum.
 The S cost is no likelihood: S_OBJECTIVE turns its two residual groups (NGS/MALDI relation,
-MiBi/MALDI media scaling) into a Gaussian -2 log L, so the chi2 threshold is approximate.
+MiBi/MALDI media relation) into a Gaussian -2 log L, so the chi2 threshold is approximate.
 
 Steps 4-5 have the settings of test_2sp.py: NOISE_MODEL, OBJECTIVE (incl. 'known_noise' for noise-free
 data), BACKEND ('jax': exact derivatives), FIX_PARAMS, and EXTEND / UPDATE_OPTIMUM / POLISH_PROFILES
@@ -54,10 +55,10 @@ import pandas as pd
 # ----------------------------------------------------------------------
 
 def cost_S(param, calibr_setup, jac_spasity=None):
-    """S-matrix cost for param = [S (media sorted, flattened) | s0]; residual groups [ngs term, s0 term]."""
-    sq_ngs, sq_s0 = fm.pest.S_squared_difference(np.asarray(param, dtype=float), calibr_setup['dfs'],
-                                                 calibr_setup['data_array'], calibr_setup['T_x'])
-    return calibr_setup['aggregation_func']([sq_ngs, sq_s0])
+    """S-matrix cost for param = S (media sorted, flattened); residual groups [ngs term, media relation term]."""
+    sq_ngs, sq_media = fm.pest.S_squared_difference(np.asarray(param, dtype=float), calibr_setup['dfs'],
+                                                    calibr_setup['data_array'], calibr_setup['T_x'])
+    return calibr_setup['aggregation_func']([sq_ngs, sq_media])
 
 
 def S_logsumexp(J_vect):
@@ -67,15 +68,10 @@ def S_logsumexp(J_vect):
     return np.log(np.nansum([np.nansum(np.exp(a*J)) for J in J_vect])/num_meas)/a
 
 
-def S_from_raw(param_S, n_cl):
-    """Final S matrix from the raw vector [S | s0], as in fm.pest.calc_Smatrix."""
-    s0 = param_S[-1]
-    s_x = np.array(param_S[:-1], dtype=float).reshape(-1, n_cl)
-    if s0 <= 1:
-        s_x[1] = s0*s_x[1]
-    else:
-        s_x[0] = s0*s_x[0]
-    return s_x
+def S_normalized(param_S, n_cl):
+    """Final S matrix from the raw vector S, as in fm.pest.calc_Smatrix (normalized to max(S) = 1)."""
+    s_x = np.array(param_S, dtype=float).reshape(-1, n_cl)
+    return s_x/np.max(s_x)
 
 
 def S_n_data(S_setup, param_S):
@@ -123,7 +119,7 @@ if __name__ == "__main__":
     # ================================================================
     # in-silico data: the same design and noise level as in test_2sp.py -> same data folder (shared), the
     # results of this script go to <data folder>_sepS/ (base design, 10 % noise: model_paper/out/test_2sp_sepS/)
-    DESIGN = 'base'                # key of DESIGNS in test_2sp.py ('base', 'rep3', 'temps6', ...)
+    DESIGN = 'rep3'                # key of DESIGNS in test_2sp.py ('base', 'rep3', 'temps6', ...)
     relnoise = 0.1                 # 0: noise-free data (use OBJECTIVE = 'known_noise')
     temps = DESIGNS[DESIGN]['temps']
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
@@ -133,8 +129,8 @@ if __name__ == "__main__":
     n_media = 2
     ntr = 1
     add_name = f'_{n_cl}dim_{n_media}media_test'
-    workers = 20                   # differential evolution
-    n_jobs = 20                    # local multistart / profile likelihood processes
+    workers = 22                   # differential evolution
+    n_jobs = 22                    # local multistart / profile likelihood processes
 
     RUN_DATA = False               # 1) generate the in-silico data (also done if no data in data_path)
     RUN_S = True                   # 2a) S estimation, differential evolution
@@ -149,13 +145,13 @@ if __name__ == "__main__":
     # so the S optimum is re-fitted with the profile objective first
     S_OBJECTIVE = 'neg2logL'
     S_SPAN, S_N_POINTS = 1., 30    # cheap cost (no ODE): whole grid, no early stop
-    S_LOCAL_RESTARTS = 8           # local S fits: start 0 = DE result, the others jittered around it
+    S_LOCAL_RESTARTS = 10           # local S fits: start 0 = DE result, the others jittered around it
 
     # steps 4-5 (x0 + ODE parameters, S fixed): settings as in test_2sp.py
     GLOBAL_METHOD = 'de'           # 'de', 'multistart' or 'de+multistart'
     N_STARTS = 20
     LOCAL_METHOD = 'least_squares' # 'L-BFGS-B' or 'least_squares'
-    BACKEND = 'numpy'              # 'numpy' or 'jax' (exact derivatives); not for differential evolution
+    BACKEND = 'jax'              # 'numpy' or 'jax' (exact derivatives); not for differential evolution
     # parameters held at a fixed value in step 4 (index or name, e.g. {'k_00,01': 0.}); stored as
     # 'fixed_params' and kept fixed in the profiles. FIX_IN_GLOBAL: also in the global search
     FIX_PARAMS = {}
@@ -183,7 +179,7 @@ if __name__ == "__main__":
     ADAPTIVE = True
     MAX_EXTEND_ROUNDS = 5
     EXTEND_FACTOR = 1.0
-    CI_N_POINTS = 10
+    CI_N_POINTS = 2
     CI_MARGIN = 0.3
     MIN_CI_POINTS = 5
     MAX_CI_ROUNDS = 3
@@ -233,14 +229,14 @@ if __name__ == "__main__":
 
     names_all = make_param_names(exps, bact, media)
     s_true, param_true = load_true(data_path, add_name, media, n_cl)
-    names_S = names_all[-n_media*n_cl:] + [r'$s_0$']
+    names_S = names_all[-n_media*n_cl:]
     names = names_all[:-n_media*n_cl]
-    S_raw_true = np.concatenate([s_true.ravel(), [1.]])
+    S_raw_true = s_true.ravel()
 
     # 2) S estimation (calc_Smatrix) -------------------------------------
     S_bnds = [(0.05, 1.) if np.isnan(s) else (float(s), float(s)) for s in np.ravel(s_x_predefined)]
     S_setup = {
-        'param_bnds': tuple(S_bnds + [(0.2, 5.)]),
+        'param_bnds': tuple(S_bnds),
         'dfs': dfs,
         'data_array': data_array,
         'T_x': T_x,
@@ -253,32 +249,33 @@ if __name__ == "__main__":
         res_S = fm.pest.optimization_func_Smatrix(cost_S, S_setup['param_bnds'], args=(S_setup, None), workers=workers)
         param_S_glob, cost_S_glob = np.array(res_S.x), float(res_S.fun)
         print(f'{(time.time() - start) / 60.:.1f} min (S differential evolution), cost = {cost_S_glob:.6g}')
-        fm.output.json_dump({'s_x': S_from_raw(param_S_glob, n_cl).astype(list), 'T_x': T_x,
-                             'param_S_raw': param_S_glob.astype(list), 'cost': cost_S_glob, 'media': media},
+        fm.output.json_dump({'s_x': S_normalized(param_S_glob, n_cl).astype(list), 'T_x': T_x,
+                             'param_S': param_S_glob.astype(list), 'cost': cost_S_glob, 'media': media},
                             f'S_matrix{add_name}_global.json', dir=path)
     else:
-        param_S_glob = np.array(fm.output.read_from_json(f'S_matrix{add_name}_global.json', dir=path)['param_S_raw'])
-    print_comparison(names_S, param_S_glob, S_raw_true, S_setup['param_bnds'], 'S differential evolution (raw [S | s0]) vs. truth:')
+        param_S_glob = np.array(fm.output.read_from_json(f'S_matrix{add_name}_global.json', dir=path)['param_S'])
+    print_comparison(names_S, param_S_glob, S_raw_true, S_setup['param_bnds'], 'S differential evolution (raw S) vs. truth:')
 
     # local refinement of S (L-BFGS-B, same objective S_cost_func2); the cost is cheap (no ODE),
     # so the starts run in parallel, one per process, instead of a parallel gradient
     if RUN_S_LOCAL:
         param_S, cost_S_opt = fm.pest.local_optimization(cost_S, param_S_glob, S_setup, maxiter=2000, gtol=1e-12,
-                                                         n_restarts=S_LOCAL_RESTARTS, jitter_frac=0.05,
+                                                         n_restarts=S_LOCAL_RESTARTS, jitter_frac=0.1,
                                                          n_jobs=min(n_jobs, S_LOCAL_RESTARTS), print_every=0,
                                                          history_file=path + 'optimization_history_Smatrix_local.csv')
-        s_x = S_from_raw(param_S, n_cl)
+        s_x = S_normalized(param_S, n_cl)
         print(f'{(time.time() - start) / 60.:.1f} min (S estimation, global + local), cost = {cost_S_opt:.6g}')
-        fm.output.json_dump({'s_x': s_x.astype(list), 'T_x': T_x, 'param_S_raw': param_S.astype(list),
+        fm.output.json_dump({'s_x': s_x.astype(list), 'T_x': T_x, 'param_S': param_S.astype(list),
                              'cost': cost_S_opt, 'media': media}, f'S_matrix{add_name}.json', dir=path)
     else:
         res = fm.output.read_from_json(f'S_matrix{add_name}.json', dir=path)
-        param_S, s_x = np.array(res['param_S_raw']), np.array(res['s_x'])
+        param_S = np.array(res['param_S'])
+        s_x = S_normalized(param_S, n_cl)
     print(f'S cost (S_cost_func2) at the truth: {cost_S(S_raw_true, S_setup):.6g}, '
           f'at the estimate: {cost_S(param_S, S_setup):.6g}')
-    print_comparison(names_S, param_S, S_raw_true, S_setup['param_bnds'], 'S step (raw [S | s0]) vs. truth:')
+    print_comparison(names_S, param_S, S_raw_true, S_setup['param_bnds'], 'S step (raw S) vs. truth:')
     print_comparison(names_all[-n_media*n_cl:], s_x.ravel(), s_true.ravel(),
-                     [(0., np.inf)]*(n_media*n_cl), 'Final S (s0 applied) vs. truth:')
+                     [(0., np.inf)]*(n_media*n_cl), 'Final S (normalized to max(S) = 1) vs. truth:')
     c_S = S_scale_factor(s_x, s_true)
     print_comparison(names_all[-n_media*n_cl:], s_x.ravel() / c_S, s_true.ravel(), [(0., np.inf)]*(n_media*n_cl),
                      f'Final S / c vs. truth (S is determined up to a factor only; c = {c_S:.4g}):')
@@ -352,7 +349,7 @@ if __name__ == "__main__":
           f'(c = {c_S:.4g}): {fm.pest.cost_direct(param_true_c, dict(calibr_setup, s_x=c_S*s_true), None):.6g}, '
           f'with the estimated S: {fm.pest.cost_direct(param_true_c, calibr_setup, None):.6g}')
 
-    local_kw = dict(maxiter=200 if LOCAL_METHOD == 'least_squares' else 1000, method=LOCAL_METHOD, backend=BACKEND)
+    local_kw = dict(maxiter=1000 if LOCAL_METHOD == 'least_squares' else 1000, method=LOCAL_METHOD, backend=BACKEND)
     fm.pest.optimization.output_file = path + 'optimization_history1.csv'
     fixed_glob = resolve_fixed_values(FIX_PARAMS, names) if FIX_IN_GLOBAL else {}
     if RUN_GLOBAL:
@@ -383,7 +380,7 @@ if __name__ == "__main__":
         fixed = resolve_fixed_values(FIX_PARAMS, names)
         print_parameter_table(names, param_glob, calibr_setup['param_bnds'], fixed)
         param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_direct, param_glob, calibr_setup, fixed_values=fixed,
-                                                         n_restarts=3, jitter_frac=0.05, n_jobs=n_jobs,
+                                                         n_restarts=7, jitter_frac=0.1, n_jobs=n_jobs,
                                                          history_file=path + 'optimization_history_local.csv',
                                                          **local_kw)
         print(f'{(time.time() - start) / 60.:.1f} min (S + global + local), cost = {cost_opt:.6g}')
@@ -391,11 +388,15 @@ if __name__ == "__main__":
                     {'param_ode': param_opt.astype(list), 's_x': s_x, 'T_x': T_x, 'cost': cost_opt,
                      'fixed_params': fm.pest.fixed_values_record(fixed, names)})
         copy_result_to_all_profiles(path, add_name)  # new optimum into existing profile JSON files
-        fm.plotting.plot_optimization_result(np.array(param_opt), calibr_setup, np.linspace(0, 17, 100),
-                                             path=path, add_name=f'{add_name}_calibration')
     else:
         param_opt = np.array(fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path)['param_ode'])
     result_local = fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path)
+    # final fit (x0 + ODE parameters with the estimated S) against the data, also for a result read from file;
+    # with the true x(t) as 4th data frame (without it the realx plot falls back to the NGS fractions and
+    # gets their y-range, which hides the model counts)
+    df_x = pd.read_pickle(data_path + f'dataframe_x{add_name}.pkl')
+    fm.plotting.plot_optimization_result(np.array(param_opt), dict(calibr_setup, dfs=list(dfs) + [df_x]),
+                                         np.linspace(0, 17, 100), path=path, add_name=f'{add_name}_calibration')
     fixed = fixed_values_from_result(result_local)
     result_objective = result_local.get('objective', 'calibration')
     result_noise_model = result_local.get('noise_model', 'absolute')

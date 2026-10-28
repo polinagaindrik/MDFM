@@ -263,7 +263,7 @@ def cost_withS(param, calibr_setup, jac_spasity):
     s_x = np.array(param)[-n_cl*n_media:].reshape((n_media, n_cl))
     x0_vals = param[:n_cl*len(exps)]
     ll_ngs, ll_maldi, ll_mibi = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
-    #ll_s1, ll_s2 = S_squared_difference(np.concatenate((param[-n_cl*n_media:], [1.])), calibr_setup['dfs'], calibr_setup['data_array'], calibr_setup['T_x'])
+    #ll_s1, ll_s2 = S_squared_difference(param[-n_cl*n_media:], calibr_setup['dfs'], calibr_setup['data_array'], calibr_setup['T_x'])
     cost = calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])#, ll_s1, ll_s2])
     # optional penalty so that the largest media coefficient is 1 (calibr_setup['s_max_penalty'] = weight)
     return apply_s_max_penalty(cost, calibr_setup, s_max_penalty_sq(s_x))

@@ -21,7 +21,7 @@ def calc_Smatrix(dfs, T_x, s_x_predefined=None, path='', workers=1, add_name='')
     
     # Now estimate S matrix by building cost func
     calibr_setup={
-        'param_bnds': tuple(S_bnds+[(0.2, 5.)]),
+        'param_bnds': tuple(S_bnds),
         'T_x_ngs': T_x,
         'cost_func': S_cost_func2, #S_cost_func
         'workers': workers, # number of threads for multiprocessing
@@ -36,13 +36,9 @@ def calc_Smatrix(dfs, T_x, s_x_predefined=None, path='', workers=1, add_name='')
                                      args=(dfs, data_arr, calibr_setup['T_x_ngs']), workers=calibr_setup['workers'])
     print(optim_output.fun)
     # From y_mibi, y_ngs and S_filt calculate \sum x_j for each time point and then real trajectories x_j:
-    s0 = optim_output.x[-1]
-    print('s0 = ', s0)
-    s_x = optim_output.x[:-1].reshape(-1, np.shape(df_maldi)[0])
-    if s0 <=1:
-        s_x[1] = s0*s_x[1]
-    else:
-        s_x[0] = s0*s_x[0]
+    s_x = optim_output.x.reshape(-1, np.shape(df_maldi)[0])
+    # The cost does not fix the scale of S: normalize to max(S) = 1
+    s_x = s_x/np.max(s_x)
 
     print('S_filt = ', s_x)
     json_dump({'s_x': s_x.astype(list), 'T_x': T_x}, f'S_matrix{add_name}.json', dir=path)
@@ -92,35 +88,36 @@ def Scost_ngsterm(days, obs_maldi, obs_ngs, s_x, T_x):
     return rhs, lhs
 
 
-# Cost function term for scaling between S for diff media s0
-def Scost_s0term(days, obs_mibi, obs_maldi, s_x, s0):
-    """Construct the log-scaled MiBi/MALDI arrays used to compare media weights."""
+# Cost function term for the relation between the S rows of different media: MiBi_m * MALDI_mj ~ S_mj x_j with the
+# same x_j on all media, so S_gen,j * MiBi_sel * MALDI_sel,j = S_sel,j * MiBi_gen * MALDI_gen,j
+def Scost_mediarelation(days, obs_mibi, obs_maldi, s_x):
+    """Construct the log-scaled MiBi/MALDI arrays that relate the media weights of different media."""
     # Leave only data that present in both maldi and ngs
     s1 = s_x[0].reshape((len(s_x[0]), 1))
     s2 = s_x[1].reshape((len(s_x[1]), 1))
     mibi1 = obs_mibi[0].reshape((1, len(obs_mibi[0])))
     mibi2 = obs_mibi[1].reshape((1, len(obs_mibi[1])))
     rhs = np.log(s1*obs_maldi[1]*mibi2+1.) ## ???
-    lhs = np.log(s0*s2*obs_maldi[0]*mibi1+1.)
+    lhs = np.log(s2*obs_maldi[0]*mibi1+1.)
     # TODO to implement more general case of 3 and more media
     return rhs, lhs
 
 
-# Cost function for S matrix estimation with missing ngs data and scaling between S for different media
+# Cost function for S matrix estimation with missing ngs data and the relation between different media
 def S_squared_difference(params, dfs, data_array, T_x):
-    """Compute normalized squared residuals for NGS/MALDI agreement and media scaling."""
+    """Compute normalized squared residuals for NGS/MALDI agreement and the media relation;
+    params = S (media sorted, flattened)."""
     (df_mibi, df_maldi, df_ngs) = dfs
     days_total, [obs_mibi_meas, obs_maldi_meas, obs_ngs_meas] = data_array
     mibi_max = np.nanmax(obs_mibi_meas, axis=(0, 1))
     exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
-    s_x = np.array(params[:-1]).reshape(len(media), -1)
-    s0 = params[-1]
+    s_x = np.array(params).reshape(len(media), -1)
     sq_diff1 = np.zeros((len(exps), len(media), np.shape(s_x)[-1], len(days_total)))
     sq_diff2 = np.zeros((len(exps), np.shape(s_x)[-1], len(days_total)))
     for i, exp in enumerate(exps):
         rhs1, lhs1 = Scost_ngsterm(days_total, obs_maldi_meas[i], obs_ngs_meas[i], s_x, T_x)
-        rhs2, lhs2 = Scost_s0term(days_total, obs_mibi_meas[i]/mibi_max, obs_maldi_meas[i], s_x, s0)
+        rhs2, lhs2 = Scost_mediarelation(days_total, obs_mibi_meas[i]/mibi_max, obs_maldi_meas[i], s_x)
         sq_diff1[i] = (rhs1-lhs1)**2
         sq_diff2[i] = (rhs2-lhs2)**2
     return sq_diff1/np.nansum(s_x**2), sq_diff2/np.nansum(s_x**2)

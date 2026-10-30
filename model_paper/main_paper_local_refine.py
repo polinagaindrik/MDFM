@@ -15,7 +15,9 @@ Reads   <path>/Result_calibration<add_name>_global.json  (start; created from
         Result_calibration<add_name>.json if missing) + data frames
 Writes  <path>/Result_calibration<add_name>.json         (refined optimum; an existing
         result with another objective is kept as Result_calibration<add_name>_<objective>.json)
-        <path>/optimization_history_local.csv
+        <path>/optimization_history_local.csv, optimization_history_local_start<r>.csv (written live; the
+        files of an earlier refinement are moved to optimization_history_local_prev/)
+        <path>/Result_calibration<add_name>_partial.json  (best finished start so far, while the run is going)
 
 Run from the repository root:
     python model_paper/main_paper_local_refine.py
@@ -26,6 +28,7 @@ import sys
 import glob
 import shutil
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 sys.path.append(os.getcwd())
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
@@ -81,14 +84,30 @@ if __name__ == "__main__":
     NOISE_LIST = None            # e.g. [0.0, 0.2]: only these noise levels (None: all)
     # True: skip runs whose Result_calibration*.json already has this objective / noise model / backend
     SKIP_DONE = True
-    n_jobs = 22  # local multistart processes
+    n_jobs = 22  # local multistart processes per run (at most N_RESTARTS are used)
+    # runs refined at the same time; N_PARALLEL_RUNS * min(n_jobs, N_RESTARTS) a bit above the number of cores
+    # keeps all cores busy while runs wait for their slowest starts (output of the runs is interleaved)
+    N_PARALLEL_RUNS = 3
+    # Every start writes its history live to optimization_history_local_start<r>.csv and the best finished start
+    # is saved at once to Result_calibration<add_name>_partial.json (removed when the run is complete).
+    # True: a run that was interrupted (its _partial.json with the same settings exists) restarts from the best
+    # point of its saved histories instead of the global result
+    RESUME_INTERRUPTED = True
+    # Ending slow runs early (the best points so far are always kept and saved):
+    # N_AGREE: stop the remaining starts of a run as soon as N_AGREE finished starts reach the best cost within
+    # AGREE_RTOL (relative); None: wait for all starts
+    N_AGREE = 3
+    AGREE_RTOL = 1e-5
+    MAX_MINUTES_PER_START = None  # time limit per start, e.g. 600; None: no limit
+    # by hand while it runs: touch <path>/optimization_history_local.stop -> all starts of that run stop at their
+    # next Jacobian and the run is saved as usual
 
     # local step as in test_2sp.py
     # 'L-BFGS-B' or 'least_squares' (trust-region least squares on the residuals, parameters scaled, much faster
     # convergence for ill-conditioned problems)
     LOCAL_METHOD = 'least_squares'
-    MAXITER = 400 if LOCAL_METHOD == 'least_squares' else 1000
-    N_RESTARTS = 5      # start 0 = global result, others = random perturbations of it
+    MAXITER = 500 if LOCAL_METHOD == 'least_squares' else 1000
+    N_RESTARTS = 10      # start 0 = global result, others = random perturbations of it
     JITTER_FRAC = 0.1   # size of the perturbations (fraction of the bound width)
     # derivatives of the fits: 'numpy' (finite differences) or 'jax' (exact derivatives by automatic
     # differentiation; needs: pip install jax diffrax). Don't mix backends within one profile run.
@@ -116,8 +135,8 @@ if __name__ == "__main__":
     for r in runs:
         print(f"  {r['path']}  ({r['n_cl']} species, {r['n_media']} media, noise {r['relnoise']:g})")
 
-    summary = []
-    for r in runs:
+    def refine(r):
+        """Refine one run; returns its summary line (path, status, cost_start, cost_opt, minutes)."""
         path, add_name, n_cl, n_media = r['path'], r['add_name'], r['n_cl'], r['n_media']
         objective = OBJECTIVE_NOISE_FREE if r['relnoise'] == 0 else OBJECTIVE
         print(f"\n{'=' * 70}\n{path}  (objective {objective}, noise model {NOISE_MODEL})\n{'=' * 70}")
@@ -128,8 +147,7 @@ if __name__ == "__main__":
             if (old.get('objective') == objective and old.get('noise_model') == NOISE_MODEL
                     and old.get('backend') == BACKEND):
                 print('Already refined with these settings, skipped (SKIP_DONE)')
-                summary.append((path, 'skipped', None, None, None))
-                continue
+                return path, 'skipped', None, None, None
         try:
             # start: Result_calibration<add_name>_global.json if present, otherwise the saved
             # Result_calibration<add_name>.json, kept as _global.json (it is overwritten by the refined optimum)
@@ -179,15 +197,45 @@ if __name__ == "__main__":
             fixed = resolve_fixed_values(FIX_PARAMS, names)
             if fixed:
                 print_parameter_table(names, param_glob, calibr_setup["param_bnds"], fixed)
+            hist = path + "optimization_history_local.csv"
+            partial = f"Result_calibration{add_name}_partial.json"
+            settings = {"objective": objective, "noise_model": NOISE_MODEL, "backend": BACKEND,
+                        "s_max_penalty": S_MAX_PENALTY, "fixed_params": fm.pest.fixed_values_record(fixed, names)}
+            if RESUME_INTERRUPTED and os.path.exists(path + partial):
+                old = fm.output.read_from_json(partial, dir=path)
+                rec = fm.pest.best_from_history(hist)
+                if all(old.get(k) == v for k, v in settings.items()) and rec is not None:
+                    print(f'Interrupted run found: resuming from start {rec[2]} of its history (cost {rec[1]:.6g})')
+                    param_glob = np.array(rec[0], dtype=float)
+            # keep the histories of an earlier refinement; the new starts overwrite these files live
+            old_hist = glob.glob(path + "optimization_history_local*.csv")
+            if old_hist:
+                prev = path + "optimization_history_local_prev/"
+                os.makedirs(prev, exist_ok=True)
+                for f in old_hist:
+                    shutil.move(f, prev + os.path.basename(f))
+                print(f'Previous histories moved to {prev}')
             cost_start = fm.pest.cost_withS(param_glob, calibr_setup, None)
             print(f'Cost ({objective}) at the start: {cost_start:.6g}')
+
+            def checkpoint(param, cost, r, n_done, n_total):
+                """Save the best finished start so far, so it is kept if the run is interrupted."""
+                fm.output.json_dump({"param_ode": np.asarray(param).astype(list), "T_x": T_x, "cost": cost,
+                                     "start": r, "starts_done": f"{n_done}/{n_total}", **settings},
+                                    partial, dir=path)
+                print(f'[{os.path.basename(os.path.dirname(os.path.dirname(path)))}] start {r} done '
+                      f'({n_done}/{n_total}), new best cost {cost:.6g} saved to {path + partial}', flush=True)
+            fm.output.json_dump({"param_ode": param_glob.astype(list), "T_x": T_x, "cost": cost_start,
+                                 "start": None, "starts_done": "0", **settings}, partial, dir=path)
 
             start = time.time()
             param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup,
                                                              fixed_values=fixed, maxiter=MAXITER,
                                                              n_restarts=N_RESTARTS, jitter_frac=JITTER_FRAC,
                                                              n_jobs=n_jobs, method=LOCAL_METHOD, backend=BACKEND,
-                                                             history_file=path + "optimization_history_local.csv")
+                                                             history_file=hist, checkpoint_func=checkpoint,
+                                                             n_agree=N_AGREE, agree_rtol=AGREE_RTOL,
+                                                             max_minutes=MAX_MINUTES_PER_START)
             minutes = (time.time() - start) / 60.
             print(f'{minutes:.1f} min, cost = {cost_opt:.6g}')
 
@@ -209,11 +257,18 @@ if __name__ == "__main__":
                                 f"Result_calibration{add_name}.json", dir=path)
             print(f"Saved refined optimum to {src}")
             copy_result_to_all_profiles(path, add_name)  # new optimum into existing profile JSON files
-            summary.append((path, 'refined', cost_start, cost_opt, minutes))
+            os.remove(path + partial)  # run complete
+            return path, 'refined', cost_start, cost_opt, minutes
         except Exception:
             traceback.print_exc()
             print(f'Refinement of {path} failed, continuing with the next run')
-            summary.append((path, 'failed', None, None, None))
+            return path, 'failed', None, None, None
+
+    # Several runs at once (threads; each run starts its own pool of min(n_jobs, N_RESTARTS) processes), so
+    # cores left idle while one run waits for its slowest starts are used by the starts of other runs
+    print(f'{N_PARALLEL_RUNS} runs in parallel, up to {N_PARALLEL_RUNS * min(n_jobs, N_RESTARTS)} processes')
+    with ThreadPoolExecutor(max_workers=N_PARALLEL_RUNS) as ex:
+        summary = list(ex.map(refine, runs))
 
     print(f"\n{'=' * 70}\nSummary\n{'=' * 70}")
     for path, status, c0, c1, minutes in summary:

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 
 import os
+import glob
+import json
+import time
 import multiprocessing as mp
 import numpy as np
 from scipy.optimize import differential_evolution, minimize
@@ -193,13 +196,77 @@ class _LocalObjective:
         return c if np.isfinite(c) else 1e10
 
 
+def _history_header(n_param):
+    """Header line of an optimization history CSV (columns as in optimization_history1.csv)."""
+    return 'iteration,' + ''.join(f'p{i},' for i in range(n_param)) + 'cost\n'
+
+
+class _LiveHistory(list):
+    """History list [(full parameter vector, cost), ...] that also appends every entry to a CSV file
+    as soon as it is recorded, so the progress of a start survives an interrupted run."""
+    def __init__(self, fname, n_param):
+        """Start the CSV file fname (None: plain list) with its header."""
+        super().__init__()
+        self.fname = fname
+        if fname:
+            with open(fname, 'w') as fh:
+                fh.write(_history_header(n_param))
+
+    def append(self, item):
+        """Store (x, cost) and write it as the next CSV row."""
+        super().append(item)
+        if self.fname:
+            x, c = item
+            with open(self.fname, 'a') as fh:
+                fh.write(f'{len(self)},' + ''.join(f'{p},' for p in x) + f'{c}\n')
+
+
+def best_from_history(history_file):
+    """
+    Best (lowest-cost) point in the per-start histories <history_file>_start<r>.csv of a local
+    optimization, e.g. to recover the progress of an interrupted run (the files are written live).
+    Returns (param, cost, start) or None if no history exists.
+    """
+    base, ext = os.path.splitext(history_file)
+    best = None
+    for f in glob.glob(f'{base}_start*{ext}'):
+        # invalid_raise=False: skip a last line cut off when the run was killed while writing it
+        data = np.atleast_2d(np.genfromtxt(f, delimiter=',', skip_header=1, invalid_raise=False))
+        data = data[np.all(np.isfinite(data), axis=1)] if data.size else data
+        if data.size == 0:
+            continue
+        i = int(np.argmin(data[:, -1]))
+        if best is None or data[i, -1] < best[1]:
+            best = (data[i, 1:-1], float(data[i, -1]), int(f[len(base) + 6:-len(ext)]))
+    return best
+
+
+class _StopCheck:
+    """Stop criterion of one start (picklable): returns a reason once max_minutes have passed since the
+    start began or once stop_file exists, otherwise None."""
+    def __init__(self, max_minutes=None, stop_file=None):
+        """Start the clock now (in the worker process)."""
+        self.deadline = None if max_minutes is None else time.time() + 60. * max_minutes
+        self.stop_file = stop_file
+
+    def __call__(self):
+        """Reason to stop (str) or None."""
+        if self.deadline is not None and time.time() > self.deadline:
+            return 'time limit reached'
+        if self.stop_file and os.path.exists(self.stop_file):
+            return f'stop file {self.stop_file} found'
+        return None
+
+
 def _local_run(task):
     """One L-BFGS-B run (one start of the multistart).
     grad_jobs > 1: the finite-difference gradient is evaluated in a pool of grad_jobs
-    processes (only possible in the main process, i.e. when the starts run sequentially)."""
-    r, objective, z0, bounds, options, print_every, grad_jobs = task
-    history = []
+    processes (only possible in the main process, i.e. when the starts run sequentially).
+    live_file: CSV to which every history entry is appended immediately (None: off)."""
+    r, objective, z0, bounds, options, print_every, grad_jobs, live_file = task
+    history = _LiveHistory(live_file, len(objective.param_init))
     backend = options.get('backend', 'numpy')
+    stop_check = _StopCheck(options.get('max_minutes'), options.get('stop_file'))
     if options.get('method') == 'least_squares':
         from .least_squares_fit import least_squares_fit
         x_start = objective.full(z0)
@@ -208,17 +275,21 @@ def _local_run(task):
             residual_func=options.get('residual_func'), jac_spasity=objective.jac_spasity, n_jobs=grad_jobs,
             log_scale=options.get('log_scale', 'auto'), maxiter=options['maxiter'],
             max_outer=options.get('max_outer', 8), label=f'[start {r}]', print_every=print_every,
-            history=history, backend=backend)
+            history=history, backend=backend, stop_check=stop_check)
         print(f'  [start {r}] cost = {c:.10g}, Jacobians = {njev}, success = {ok} (least_squares)', flush=True)
-        return r, np.array(x)[objective.free], float(c), bool(ok), history
+        return r, np.array(x)[objective.free], float(c), bool(ok), list(history)
 
     def callback(intermediate_result):
         """Record the current full parameter vector and cost during a local run."""
         history.append((objective.full(intermediate_result.x), float(intermediate_result.fun)))
+        reason = stop_check()
+        if reason:
+            print(f'  [start {r}] stopped ({reason}), cost = {intermediate_result.fun:.10g}', flush=True)
+            raise StopIteration  # minimize returns the current point
         if print_every and len(history) % print_every == 0:
             print(f'  [start {r}] iteration {len(history)}: cost = {intermediate_result.fun:.10g}', flush=True)
 
-    lbfgs_options = {k: v for k, v in options.items() if k != 'backend'}
+    lbfgs_options = {k: v for k, v in options.items() if k not in ('backend', 'max_minutes', 'stop_file')}
     if backend == 'jax':  # exact gradient by automatic differentiation
         from .jax_backend import jax_cost_for
         jc = jax_cost_for(objective.calibr_setup)
@@ -238,7 +309,7 @@ def _local_run(task):
         res = minimize(objective, z0, method='L-BFGS-B', bounds=bounds, callback=callback, options=lbfgs_options)
     print(f'  [start {r}] cost = {res.fun:.10g}, iterations = {res.nit}, success = {res.success} ({res.message})',
           flush=True)
-    return r, np.array(res.x), float(res.fun), bool(res.success), history
+    return r, np.array(res.x), float(res.fun), bool(res.success), list(history)
 
 
 def apply_fixed_values(calibr_setup, fixed_values, param=None, names=None, verbose=True):
@@ -278,7 +349,8 @@ def fixed_values_record(fixed_values, names=None):
 def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, maxiter=500, ftol=1e-12, gtol=1e-8,
                        n_restarts=1, jitter_frac=0.02, seed=0, history_file=output_file_local, print_every=10,
                        n_jobs=1, maxfun=None, method='L-BFGS-B', residual_func=None, log_scale='auto',
-                       start_points=None, max_outer=8, fixed_values=None, backend='numpy'):
+                       start_points=None, max_outer=8, fixed_values=None, backend='numpy',
+                       checkpoint_func=None, max_minutes=None, stop_file='auto', n_agree=None, agree_rtol=1e-6):
     """
     L-BFGS-B minimization of cost_func starting from param_init (e.g. the result of
     differential_evolution) to reach the exact local optimum.
@@ -298,6 +370,21 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     fixed_values: {index: value}: these parameters are held at value (also outside their bounds,
                   e.g. 0 for a non-identifiable k_ij) and only the others are refined; the returned
                   vector contains the fixed values. See apply_fixed_values.
+    checkpoint_func: called as checkpoint_func(param, cost, start, n_done, n_total) whenever a finished
+                  start is better than the start cost and all starts finished before, e.g. to save the best
+                  result before the slowest starts are done. Default (with history_file and several starts):
+                  writes <history_file>_best.json (param_ode, cost, start, starts_done). Together with the
+                  per-start histories, which are written live, nothing is lost if the run is interrupted
+                  (best_from_history).
+    Stopping long runs early (the best point found so far is always kept):
+    max_minutes : time limit per start; a start that reaches it stops and returns its best point.
+    stop_file   : if this file exists, every running start stops at its next iteration (Jacobian) and the
+                  run finishes normally with the best points so far; e.g. touch <history_file>.stop while it
+                  runs. 'auto' (default): <history_file without .csv>.stop (None without history_file).
+                  The file is removed at the beginning of the next run.
+    n_agree     : stop the remaining starts as soon as n_agree finished starts reach the best cost within
+                  agree_rtol (relative); the starts still running are dropped (their histories are in
+                  <history_file>_start<r>.csv). None: wait for all starts.
 
     Only free parameters (lower bound < upper bound) are optimized; fixed ones (e.g. the
     diagonal k_ii = 0 or predefined S entries) stay at their value.
@@ -363,7 +450,45 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     if n_jobs < 0:
         n_jobs = os.cpu_count() or 1
     grad_jobs = n_jobs if n_jobs > len(starts) and backend != 'jax' else 1
-    tasks = [(r, objective, z0, bounds, options, print_every, grad_jobs) for r, z0 in enumerate(starts)]
+    if history_file:
+        os.makedirs(os.path.dirname(history_file) or '.', exist_ok=True)
+    base, ext = os.path.splitext(history_file) if history_file else (None, None)
+    live = (lambda r: f'{base}_start{r}{ext}') if history_file and len(starts) > 1 else (lambda r: None)
+    if stop_file == 'auto':
+        stop_file = f'{base}.stop' if history_file else None
+    if stop_file and os.path.exists(stop_file):
+        os.remove(stop_file)  # left over from an earlier run
+    options = dict(options, max_minutes=max_minutes, stop_file=stop_file)
+    if stop_file:
+        print(f'To stop all starts (keeping their best points): touch {stop_file}', flush=True)
+    tasks = [(r, objective, z0, bounds, options, print_every, grad_jobs, live(r)) for r, z0 in enumerate(starts)]
+    if checkpoint_func is None and history_file and len(starts) > 1:
+        def checkpoint_func(param, cost, r, n_done, n_total):
+            """Default: best finished start so far into <history_file>_best.json."""
+            with open(f'{base}_best.json', 'w') as fh:
+                json.dump({'param_ode': [float(p) for p in param], 'cost': float(cost), 'start': int(r),
+                           'starts_done': f'{n_done}/{n_total}'}, fh, indent=1)
+            print(f'  start {r} done ({n_done}/{n_total}): new best cost {cost:.10g} saved to {base}_best.json',
+                  flush=True)
+
+    best = [cost_init, None]
+    results = []
+
+    def _collect(it):
+        """Gather the results as the starts finish; checkpoint every new best."""
+        for res in it:
+            results.append(res)
+            r, z, c = res[0], res[1], res[2]
+            if c < best[0]:
+                best[:] = [c, r]
+                if checkpoint_func is not None:
+                    checkpoint_func(objective.full(z), c, r, len(results), len(tasks))
+            if n_agree and len(results) < len(tasks):
+                n_ok = sum(res_[2] - best[0] <= agree_rtol * max(1., abs(best[0])) for res_ in results)
+                if n_ok >= n_agree:
+                    print(f'{n_ok} starts agree on the best cost {best[0]:.10g} (n_agree = {n_agree}): '
+                          f'the {len(tasks) - len(results)} remaining starts are stopped', flush=True)
+                    break
 
     n_proc = 1 if grad_jobs > 1 else min(n_jobs, len(tasks))
     if n_proc > 1:
@@ -371,31 +496,23 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
         if backend == 'jax':  # JAX does not survive fork: fresh single-threaded processes
             ctx = mp.get_context('spawn')
             with ctx.Pool(processes=n_proc, initializer=jax_worker_init) as pool:
-                results = list(pool.imap_unordered(_local_run, tasks))
+                _collect(pool.imap_unordered(_local_run, tasks))
         else:
             with mp.Pool(processes=n_proc, initializer=die_with_parent) as pool:
-                results = list(pool.imap_unordered(_local_run, tasks))
+                _collect(pool.imap_unordered(_local_run, tasks))
     else:
         if grad_jobs > 1:
             print(f'Running {len(tasks)} local optimization(s) one after another, each with a parallel '
                   f'gradient in {grad_jobs} processes', flush=True)
-        results = [_local_run(t) for t in tasks]
+        _collect(_local_run(t) for t in tasks)
     results.sort(key=lambda res: res[0])
 
-    if history_file:
-        os.makedirs(os.path.dirname(history_file) or '.', exist_ok=True)
-
-        def _write_history(fname, history):
-            """Write a local optimization run's parameter and cost history to CSV."""
-            with open(fname, 'w') as fh:
-                fh.write('iteration,' + ''.join(f'p{i},' for i in range(len(param_init))) + 'cost\n')
-                for it, (x, c) in enumerate(history, 1):
-                    fh.write(f'{it},' + ''.join(f'{p},' for p in x) + f'{c}\n')
-
-        if len(results) > 1:
-            base, ext = os.path.splitext(history_file)
-            for r, _, _, _, history in results:
-                _write_history(f'{base}_start{r}{ext}', history)
+    def _write_history(fname, history):
+        """Write a local optimization run's parameter and cost history to CSV."""
+        with open(fname, 'w') as fh:
+            fh.write(_history_header(len(param_init)))
+            for it, (x, c) in enumerate(history, 1):
+                fh.write(f'{it},' + ''.join(f'{p},' for p in x) + f'{c}\n')
 
     if len(results) > 1:
         print('Local optimization summary (sorted by cost):', flush=True)

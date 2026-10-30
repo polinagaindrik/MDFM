@@ -185,10 +185,14 @@ def aggregation_weights(aggregation_func, residuals, rel_eps=1e-6):
 # ----------------------------------------------------------------------
 # The fit
 # ----------------------------------------------------------------------
+class StopFit(Exception):
+    """Raised by the stop_check of least_squares_fit to end a fit early (the best point so far is kept)."""
+
+
 def least_squares_fit(cost_func, x_start, free_idx, calibr_setup, residual_func=None, jac_spasity=None,
                       n_jobs=1, evaluator=None, log_scale="auto", group_x0=True, maxiter=200, max_outer=8,
                       outer_rtol=1e-9, ftol=1e-12, xtol=1e-12, gtol=1e-10, fd_step=1e-7, solve_timeout=None,
-                      label=None, print_every=10, history=None, backend="numpy"):
+                      label=None, print_every=10, history=None, backend="numpy", stop_check=None):
     """
     Minimize calibr_setup['aggregation_func'] of the residuals over the parameters free_idx
     (all others held at x_start) with scipy.optimize.least_squares (trf) and reweighting.
@@ -202,6 +206,8 @@ def least_squares_fit(cost_func, x_start, free_idx, calibr_setup, residual_func=
     history        : list; (full parameter vector, cost) is appended at every Jacobian evaluation
     backend        : 'numpy' (finite-difference Jacobian, n_jobs processes) or 'jax' (exact Jacobian by
                      automatic differentiation, jax_backend.JaxCost; n_jobs and evaluator are not used)
+    stop_check     : callable without arguments, checked after every Jacobian; if it returns a reason
+                     (str), the fit stops and returns the best point so far (success False)
     Returns (cost, full parameter vector, success, number of Jacobian evaluations).
     """
     residual_func = residual_func_for(cost_func, residual_func)
@@ -317,33 +323,41 @@ def least_squares_fit(cost_func, x_start, free_idx, calibr_setup, residual_func=
                 if print_every and state["njev"] % print_every == 0:
                     print(f"    {tag}: Jacobian {state['njev']}, cost = {c_now:.10g}, "
                           f"{time.time() - t0:.0f} s", flush=True)
+            reason = stop_check() if stop_check is not None else None
+            if reason:
+                raise StopFit(reason)
             return J
 
         u = tr.to_u(x_start[free_idx])
         r_list = base[0]
         cost, success = np.inf, False
-        for it in range(max_outer):
-            if r_list is None:
-                break
-            c_cur, w = aggregation_weights(agg, r_list)
-            state["w"] = w / np.max(w)  # only the ratios matter
-            if c_cur < state["best"][0]:
-                state["best"] = (c_cur, full(u))
-            sol = least_squares(fun, u, jac=jac, bounds=(0., 1.), method="trf", x_scale="jac",
-                                ftol=ftol, xtol=xtol, gtol=gtol, max_nfev=maxiter)
-            r_new = raw(sol.x)
-            c_new = np.inf if r_new is None else float(agg([r ** 2 for r in r_new]))
-            if print_every:
-                print(f"    {tag}: reweighting step {it + 1}: cost {c_cur:.10g} -> {c_new:.10g} "
-                      f"({sol.nfev} evaluations, {state['njev']} Jacobians so far; {sol.message})", flush=True)
-            success = bool(sol.success)
-            if not c_new < c_cur:
-                break
-            u, r_list = sol.x, r_new
-            if c_new < state["best"][0]:
-                state["best"] = (c_new, full(u))
-            if abs(c_cur - c_new) <= outer_rtol * max(1., abs(c_new)):
-                break
+        try:
+            for it in range(max_outer):
+                if r_list is None:
+                    break
+                c_cur, w = aggregation_weights(agg, r_list)
+                state["w"] = w / np.max(w)  # only the ratios matter
+                if c_cur < state["best"][0]:
+                    state["best"] = (c_cur, full(u))
+                sol = least_squares(fun, u, jac=jac, bounds=(0., 1.), method="trf", x_scale="jac",
+                                    ftol=ftol, xtol=xtol, gtol=gtol, max_nfev=maxiter)
+                r_new = raw(sol.x)
+                c_new = np.inf if r_new is None else float(agg([r ** 2 for r in r_new]))
+                if print_every:
+                    print(f"    {tag}: reweighting step {it + 1}: cost {c_cur:.10g} -> {c_new:.10g} "
+                          f"({sol.nfev} evaluations, {state['njev']} Jacobians so far; {sol.message})", flush=True)
+                success = bool(sol.success)
+                if not c_new < c_cur:
+                    break
+                u, r_list = sol.x, r_new
+                if c_new < state["best"][0]:
+                    state["best"] = (c_new, full(u))
+                if abs(c_cur - c_new) <= outer_rtol * max(1., abs(c_new)):
+                    break
+        except StopFit as e:
+            success = False
+            print(f"    {tag}: stopped ({e}) after {state['njev']} Jacobians, best cost {state['best'][0]:.10g}",
+                  flush=True)
         cost, x_best = state["best"]
     finally:
         if own_eval and hasattr(ev, "close"):

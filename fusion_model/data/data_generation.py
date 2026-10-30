@@ -15,10 +15,8 @@ def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, jac_func=None,
         df_mibi0, df_maldi0, df_ngs0, df_realx0, df_fullx0 = generate_insilico_df(model, t, param, x0[j], [[temp], n_cl, media], n_traj=n_traj,
                                                                                   exp_start_num=exp_start, jac=jac, **kwargs)
         df_mibi.append(df_mibi0)
-        df_maldi0[df_maldi0<0] = 0
-        df_ngs0[df_ngs0<0] = 0
-        df_maldi.append(df_maldi0.apply(dtf.calc_proportion))
-        df_ngs.append(df_ngs0.apply(dtf.calc_proportion))
+        df_maldi.append(df_maldi0)
+        df_ngs.append(df_ngs0)
         df_real.append(df_realx0)
         df_fullx.append(df_fullx0)
     df_mibi, df_maldi, df_ngs, df_real, df_fullx = [dtf.merge_dfs(df) for df in [df_mibi, df_maldi, df_ngs, df_real, df_fullx]]
@@ -54,7 +52,8 @@ def insilico_traj_dataframe(t, n, param, x0, const, create_df_func, bact_name, n
                             noise=.0, rel_noise=.0): 
     """Generate one synthetic observation table, optionally applying an observation model and noise."""
     if obs_func is None:
-        observables = n + np.random.normal(0., rel_noise*n+noise, size=np.shape(n))
+        stds = rel_noise*n+noise
+        observables = n + np.random.normal(0., stds, size=np.shape(n))
     else:
         if obs_func == mdl.observable_NGS:
             t_x =  param[-1*const[1]:]
@@ -63,10 +62,13 @@ def insilico_traj_dataframe(t, n, param, x0, const, create_df_func, bact_name, n
             n_media = len(const[2])
             s_x = param[-(1+n_media)*const[1]:-1*const[1]]
             filt = s_x
-        stds = rel_noise*n+noise
-        t, observables = obs_func(t, n, filt, x0, const, t, std=stds)
+        # Noise-free observables; the noise is applied once below, relative to the observables themselves.
+        t, observables = obs_func(t, n, filt, x0, const, t, std=0.)
         if obs_func != mdl.observable_x:
-            observables = observables + np.random.normal(0., rel_noise*observables+noise, size=np.shape(observables))
+            stds = rel_noise*observables+noise
+            observables = observables + np.random.normal(0., stds, size=np.shape(observables))
+        else:
+            stds = 0.
         observables[observables<0.00] = 0
     return create_df_func(t, observables, name_part, bact_name, stds=stds, media=const[2])
 

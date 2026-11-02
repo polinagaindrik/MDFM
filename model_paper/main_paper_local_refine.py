@@ -12,7 +12,8 @@ and refines only the others.
 
 Per run (<path> = .../calibration/):
 Reads   <path>/Result_calibration<add_name>_global.json  (start; created from
-        Result_calibration<add_name>.json if missing) + data frames
+        Result_calibration<add_name>.json if missing, or, for runs without any result JSON (global
+        optimization stopped before saving), from the best row of optimization_history1.csv) + data frames
 Writes  <path>/Result_calibration<add_name>.json         (refined optimum; an existing
         result with another objective is kept as Result_calibration<add_name>_<objective>.json)
         <path>/optimization_history_local.csv, optimization_history_local_start<r>.csv (written live; the
@@ -33,31 +34,54 @@ sys.path.append(os.getcwd())
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
 from fusion_model.parameter_estimation import profile_likelihood as pl
-from profile_likelihood_model_paper import (load_calibration, s_x_predefined_from_maldi, exp_temps_from_columns,
+from profile_likelihood_model_paper import (s_x_predefined_from_maldi, exp_temps_from_columns,
                                             make_param_names, resolve_fixed_values, print_parameter_table,
                                             copy_result_to_all_profiles)
 from test_2sp import rescale_truth_max_s
 import paper_paths as pp
 
 import numpy as np
+import pandas as pd
 import time
 
 # standard run folders of paper_paths.run_dir, e.g. '4_dim_2media_exp_10noise'
 _STANDARD_RUN = re.compile(r'^\d+_dim_\d+media_exp_\d+noise$')
 _RESULT_FILE = re.compile(r'^Result_calibration(_(\d+)dim_(\d+)media)(?:_global)?\.json$')
+_DATA_FILE = re.compile(r'^dataframe_mibi(_(\d+)dim_(\d+)media)_preprocessed\.pkl$')
+DE_HISTORY = 'optimization_history1.csv'
+
+
+def global_from_history(path, add_name, n_cl, n_media):
+    """
+    Result_calibration<add_name>_global.json from the best row of the differential evolution history
+    (for runs stopped before the result was saved); T_x from Result_temp_together_real.json.
+    """
+    hist = pd.read_csv(path + DE_HISTORY)
+    best = hist.loc[hist['cost'].idxmin()]
+    param = best[[c for c in hist.columns if c.startswith('p')]].to_numpy(dtype=float)
+    T_x = fm.output.read_from_json('Result_temp_together_real.json', dir=path)['T_x']
+    fm.output.json_dump({'param_ode': param.astype(list), 's_x': param[-n_cl*n_media:].reshape((n_media, n_cl)),
+                         'T_x': T_x, 'cost': float(best['cost']),
+                         'source': f"{DE_HISTORY}, iteration {int(best['iteration'])} of {int(hist['iteration'].iloc[-1])}"},
+                        f'Result_calibration{add_name}_global.json', dir=path)
+    print(f"Start: best row of {path}{DE_HISTORY} (iteration {int(best['iteration'])} of "
+          f"{int(hist['iteration'].iloc[-1])}, cost {best['cost']:.6g}), saved as Result_calibration{add_name}_global.json")
 
 
 def find_runs(study, include_nonstandard=False, n_cl_list=None, noise_list=None):
     """
-    Calibration folders of a study with a global result: list of dicts (path, add_name, n_cl, n_media,
-    relnoise), sorted by noise level and number of species. include_nonstandard: also folders such as
+    Calibration folders of a study with a global result (result JSON, or only the DE history
+    optimization_history1.csv): list of dicts (path, add_name, n_cl, n_media, relnoise), sorted by noise level
+    and number of species. include_nonstandard: also folders such as
     '10_dim_additional' or '8_dim_2media_exp_0noise_old'. n_cl_list / noise_list: only these values (None: all).
     """
     runs = {}
-    for f in glob.glob(os.path.join(pp.study_dir(study), '**', 'calibration', 'Result_calibration*.json'),
-                       recursive=True):
-        m = _RESULT_FILE.match(os.path.basename(f))
+    files = glob.glob(os.path.join(pp.study_dir(study), '**', 'calibration', '*'), recursive=True)
+    for f in files:
+        m = _RESULT_FILE.match(os.path.basename(f)) or _DATA_FILE.match(os.path.basename(f))
         if m is None:
+            continue
+        if m.re is _DATA_FILE and not os.path.exists(os.path.join(os.path.dirname(f), DE_HISTORY)):
             continue
         path = os.path.dirname(f) + '/'
         run_name = os.path.basename(os.path.dirname(os.path.dirname(f)))
@@ -73,64 +97,65 @@ def find_runs(study, include_nonstandard=False, n_cl_list=None, noise_list=None)
     return sorted(runs.values(), key=lambda r: (r['relnoise'], r['n_cl'], r['path']))
 
 
-if __name__ == "__main__":
-    # ================================================================
-    # Settings
-    # ================================================================
-    # Studies to refine, in this order (see paper_paths.py), e.g. ['model_complexity', 'noise_vs_nspecies']
-    STUDIES = ['model_complexity']
-    INCLUDE_NONSTANDARD = False  # True: also folders like '10_dim_additional', '..._old'
-    N_CL_LIST = None             # e.g. [4, 8]: only these numbers of species (None: all)
-    NOISE_LIST = None            # e.g. [0.0, 0.2]: only these noise levels (None: all)
-    # True: skip runs whose Result_calibration*.json already has this objective / noise model / backend
-    SKIP_DONE = True
-    n_jobs = 22  # local multistart processes per run (at most N_RESTARTS are used)
-    # runs refined at the same time; N_PARALLEL_RUNS * min(n_jobs, N_RESTARTS) a bit above the number of cores
-    # keeps all cores busy while runs wait for their slowest starts (output of the runs is interleaved)
-    N_PARALLEL_RUNS = 3
-    # Every start writes its history live to optimization_history_local_start<r>.csv and the best finished start
-    # is saved at once to Result_calibration<add_name>_partial.json (removed when the run is complete).
-    # True: a run that was interrupted (its _partial.json with the same settings exists) restarts from the best
-    # point of its saved histories instead of the global result
-    RESUME_INTERRUPTED = True
-    # Ending slow runs early (the best points so far are always kept and saved):
-    # N_AGREE: stop the remaining starts of a run as soon as N_AGREE finished starts reach the best cost within
-    # AGREE_RTOL (relative); None: wait for all starts
-    N_AGREE = 3
-    AGREE_RTOL = 1e-5
-    MAX_MINUTES_PER_START = None  # time limit per start, e.g. 600; None: no limit
-    # by hand while it runs: touch <path>/optimization_history_local.stop -> all starts of that run stop at their
-    # next Jacobian and the run is saved as usual
+# ================================================================
+# Settings (module level, so that other scripts, e.g. main_paper_local_refine_6dim.py, use the same ones)
+# ================================================================
+# Studies to refine, in this order (see paper_paths.py), e.g. ['model_complexity', 'noise_vs_nspecies']
+STUDIES = ['model_complexity']
+INCLUDE_NONSTANDARD = False  # True: also folders like '10_dim_additional', '..._old'
+N_CL_LIST = None             # e.g. [4, 8]: only these numbers of species (None: all)
+NOISE_LIST = None            # e.g. [0.0, 0.2]: only these noise levels (None: all)
+# True: skip runs whose Result_calibration*.json already has this objective / noise model / backend
+SKIP_DONE = True
+n_jobs = 22  # local multistart processes per run (at most N_RESTARTS are used)
+# runs refined at the same time; N_PARALLEL_RUNS * min(n_jobs, N_RESTARTS) a bit above the number of cores
+# keeps all cores busy while runs wait for their slowest starts (output of the runs is interleaved)
+N_PARALLEL_RUNS = 3
+# Every start writes its history live to optimization_history_local_start<r>.csv and the best finished start
+# is saved at once to Result_calibration<add_name>_partial.json (removed when the run is complete).
+# True: a run that was interrupted (its _partial.json with the same settings exists) restarts from the best
+# point of its saved histories instead of the global result
+RESUME_INTERRUPTED = True
+# Ending slow runs early (the best points so far are always kept and saved):
+# N_AGREE: stop the remaining starts of a run as soon as N_AGREE finished starts reach the best cost within
+# AGREE_RTOL (relative); None: wait for all starts
+N_AGREE = 3
+AGREE_RTOL = 1e-5
+MAX_MINUTES_PER_START = None  # time limit per start, e.g. 600; None: no limit
+# by hand while it runs: touch <path>/optimization_history_local.stop -> all starts of that run stop at their
+# next Jacobian and the run is saved as usual
 
-    # local step as in test_2sp.py
-    # 'L-BFGS-B' or 'least_squares' (trust-region least squares on the residuals, parameters scaled, much faster
-    # convergence for ill-conditioned problems)
-    LOCAL_METHOD = 'least_squares'
-    MAXITER = 500 if LOCAL_METHOD == 'least_squares' else 1000
-    N_RESTARTS = 10      # start 0 = global result, others = random perturbations of it
-    JITTER_FRAC = 0.1   # size of the perturbations (fraction of the bound width)
-    # derivatives of the fits: 'numpy' (finite differences) or 'jax' (exact derivatives by automatic
-    # differentiation; needs: pip install jax diffrax). Don't mix backends within one profile run.
-    BACKEND = 'jax'
-    # Parameters held at a fixed value (same in every run), e.g. {'k_00,01': 0.}; stored as 'fixed_params'
-    FIX_PARAMS = {}
-    # Penalty so that the largest media coefficient S is 1 (fixes the x0/S scale trade-off): weight w, the cost
-    # rises by the factor exp(w * (max S - 1)^2). None: off.
-    S_MAX_PENALTY = 100
-    # True (with S_MAX_PENALTY): rescale the global result to max(S) = 1 before the refinement (S / m, x0 and
-    # N_1 + log10(m), k / m; same observables), so that the penalty does not start far from its minimum
-    RESCALE_START_MAX_S = True
-    # Noise model of the residuals: 'absolute' or 'relative' (multiplicative noise, log residuals)
-    NOISE_MODEL = 'relative'
-    # Objective: 'neg2logL', 'geomean', 'calibration' or 'known_noise' (see test_2sp.py)
-    OBJECTIVE = 'neg2logL'
-    # noise-free data (relnoise = 0): neg2logL estimates the noise from the residuals and diverges, so these
-    # runs use -2 log L with the known noise level KNOWN_SIGMA instead
-    OBJECTIVE_NOISE_FREE = 'known_noise'
-    KNOWN_SIGMA = 0.1
-    # ================================================================
+# local step as in test_2sp.py
+# 'L-BFGS-B' or 'least_squares' (trust-region least squares on the residuals, parameters scaled, much faster
+# convergence for ill-conditioned problems)
+LOCAL_METHOD = 'least_squares'
+MAXITER = 500 if LOCAL_METHOD == 'least_squares' else 1000
+N_RESTARTS = 10      # start 0 = global result, others = random perturbations of it
+JITTER_FRAC = 0.1   # size of the perturbations (fraction of the bound width)
+# derivatives of the fits: 'numpy' (finite differences) or 'jax' (exact derivatives by automatic
+# differentiation; needs: pip install jax diffrax). Don't mix backends within one profile run.
+BACKEND = 'jax'
+# Parameters held at a fixed value (same in every run), e.g. {'k_00,01': 0.}; stored as 'fixed_params'
+FIX_PARAMS = {}
+# Penalty so that the largest media coefficient S is 1 (fixes the x0/S scale trade-off): weight w, the cost
+# rises by the factor exp(w * (max S - 1)^2). None: off.
+S_MAX_PENALTY = 100
+# True (with S_MAX_PENALTY): rescale the global result to max(S) = 1 before the refinement (S / m, x0 and
+# N_1 + log10(m), k / m; same observables), so that the penalty does not start far from its minimum
+RESCALE_START_MAX_S = True
+# Noise model of the residuals: 'absolute' or 'relative' (multiplicative noise, log residuals)
+NOISE_MODEL = 'relative'
+# Objective: 'neg2logL', 'geomean', 'calibration' or 'known_noise' (see test_2sp.py)
+OBJECTIVE = 'neg2logL'
+# noise-free data (relnoise = 0): neg2logL estimates the noise from the residuals and diverges, so these
+# runs use -2 log L with the known noise level KNOWN_SIGMA instead
+OBJECTIVE_NOISE_FREE = 'known_noise'
+KNOWN_SIGMA = 0.1
+# ================================================================
 
-    runs = [r for study in STUDIES for r in find_runs(study, INCLUDE_NONSTANDARD, N_CL_LIST, NOISE_LIST)]
+
+def refine_runs(runs):
+    """Refine the runs (list of dicts from find_runs) with the settings above; prints a summary."""
     print(f'{len(runs)} runs to refine:')
     for r in runs:
         print(f"  {r['path']}  ({r['n_cl']} species, {r['n_media']} media, noise {r['relnoise']:g})")
@@ -150,18 +175,21 @@ if __name__ == "__main__":
                 return path, 'skipped', None, None, None
         try:
             # start: Result_calibration<add_name>_global.json if present, otherwise the saved
-            # Result_calibration<add_name>.json, kept as _global.json (it is overwritten by the refined optimum)
+            # Result_calibration<add_name>.json, kept as _global.json (it is overwritten by the refined optimum),
+            # otherwise the best point of the DE history (run stopped before saving)
             if os.path.exists(dst):
                 print(f'Start: {dst}')
-            else:
+            elif os.path.exists(src):
                 shutil.copy(src, dst)
                 print(f'Start: {src} (no _global.json; copied to {dst})')
-            dfs, result, _ = load_calibration(path, add_name)
+            else:
+                global_from_history(path, add_name, n_cl, n_media)
+            dfs = [pd.read_pickle(path + f"dataframe_{k}{add_name}_preprocessed.pkl") for k in ["mibi", "maldi", "ngs"]]
             df_mibi, df_maldi, df_ngs = dfs
             exps = sorted(list(set([s.split("_")[0] for s in df_mibi.columns])))
             media = sorted(list(set([s.split("_")[-1].split("-")[0] for s in df_maldi.columns])))
             result_glob = fm.output.read_from_json(f"Result_calibration{add_name}_global.json", dir=path)
-            T_x = result_glob.get("T_x", result.get("T_x"))
+            T_x = result_glob["T_x"]
 
             calibr_presetup = {
                 "model": fm.mdl.fusion_model2,
@@ -274,3 +302,8 @@ if __name__ == "__main__":
     for path, status, c0, c1, minutes in summary:
         costs = f'cost {c0:.6g} -> {c1:.6g}, {minutes:.1f} min' if status == 'refined' else ''
         print(f'  {status:8s} {path}  {costs}')
+
+
+
+if __name__ == "__main__":
+    refine_runs([r for study in STUDIES for r in find_runs(study, INCLUDE_NONSTANDARD, N_CL_LIST, NOISE_LIST)])

@@ -40,6 +40,9 @@ rcParams['axes.labelsize'] = 15
 rcParams['legend.fontsize'] = 13#15#
 rcParams['figure.dpi'] = 500
 
+# 'json': final result Result_calibration<add_name>.json (after local refinement)
+# 'history': last step of the global optimization history (optimization_history1.csv)
+RESULT_SOURCE = 'json'
 
 def calculate_rmse(n, rn, path, add_name):
     df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
@@ -64,11 +67,15 @@ def calculate_rmse(n, rn, path, add_name):
     x_real2, obs_mibi_real, obs_maldi_real, obs_ngs_real, temps_real = fm.mdl.calc_obs_model(data, param_ode_real, calibr_setup_real, t_model)
 
     # Calculate optimized x values
-    optim_file2 = "optimization_history1.csv"
-    df_optim2 = pd.read_csv(path+optim_file2)
     T_x = [1. for _ in range (n)]
-    param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
-    cost = df_optim2['cost'].values[-1]
+    if RESULT_SOURCE == 'json':
+        result = fm.output.read_from_json(f'Result_calibration{add_name}.json', dir=path)
+        param_opt = np.array(result['param_ode'], dtype=float)
+        cost = float(result['cost'])
+    else:
+        df_optim2 = pd.read_csv(path+"optimization_history1.csv")
+        param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
+        cost = df_optim2['cost'].values[-1]
     s_x = np.array(param_opt)[-n*n_media:].reshape((n_media, n))
     param_ode = param_opt[:-n*n_media]
     calibr_setup={

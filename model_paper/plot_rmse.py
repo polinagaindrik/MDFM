@@ -115,7 +115,7 @@ if __name__ == "__main__":
     rms, rms_mibi, rms_maldi, rms_ngs, cost = [np.zeros((len(n_cl))) for _ in range(5)]
     rms_param = np.zeros((3, len(n_cl))) # 3: param_ode, x0, s_x
     rms_per_species = []
-    L_0_real = np.array(fm.data.read_from_json(fm.data.SETUP_DIR + 'Initial_values_x0_paper.json')['x0'])
+    L_0_real = fm.data.read_initial_values(pp.X0_DISTRIBUTION)  # initial values of the runs (paper_paths)
     path_base = pp.study_dir('model_complexity')
     for i, n in enumerate(n_cl):
         path = pp.study_path('model_complexity', n_cl=n, n_media=n_media, relnoise=relnoise)
@@ -188,6 +188,7 @@ if __name__ == "__main__":
     ax.set_xlim(np.min(n_cl)-0.2, np.max(n_cl)+0.2)
     plt.savefig(path_base+'plot_rmse_per_species.pdf', bbox_inches='tight')
     plt.close()
+    exit()
 
     # RMSE for noise vs. n_species analysis
     n_cl = [4, 6, 8, 10, 12]
@@ -197,7 +198,9 @@ if __name__ == "__main__":
     rms, rms_mibi, rms_maldi, rms_ngs, cost = [np.zeros((len(n_cl), len(relnoise))) for _ in range(5)]
     for j, rn in enumerate(relnoise):
         for i, n in enumerate(n_cl):
-            path = pp.study_path('noise_vs_nspecies', n_cl=n, n_media=n_media, relnoise=rn)
+            # the 10 % noise runs are the model_complexity runs (noise_vs_nspecies/10noise/ is empty)
+            study = 'model_complexity' if rn == 0.1 else 'noise_vs_nspecies'
+            path = pp.study_path(study, n_cl=n, n_media=n_media, relnoise=rn)
             add_name = pp.add_name(n, n_media)
             data, rms[i, j], rms_mibi[i, j], rms_maldi[i, j], rms_ngs[i, j], rms_per_species0, cost[i, j], _ = calculate_rmse(n, rn, path, add_name)
 
@@ -223,8 +226,13 @@ if __name__ == "__main__":
     path_base = pp.study_dir('media_influence')
     rms, rms_mibi, rms_maldi, rms_ngs, cost = [np.zeros((len(media))) for _ in range(5)]
     for i, med in enumerate(media):
-        path = pp.study_path('media_influence', media=med)
-        add_name = pp.add_name(n, media=med)
+        if med == 'gen1+sel1':
+            # gen1+sel1 is the 6 species model_complexity run
+            path = pp.study_path('model_complexity', n_cl=n, n_media=2, relnoise=rn)
+            add_name = pp.add_name(n, 2)
+        else:
+            path = pp.study_path('media_influence', media=med)
+            add_name = pp.add_name(n, media=med)
         data, rms[i], rms_mibi[i], rms_maldi[i], rms_ngs[i], rms_per_species0, cost[i], _ = calculate_rmse(n, rn, path, add_name)
     
     addn = ['_x', '_pc', '_maldi', '_ngs', '_cost']

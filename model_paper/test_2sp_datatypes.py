@@ -30,6 +30,7 @@ import fusion_model as fm
 from fusion_model.parameter_estimation import profile_likelihood as pl
 from profile_likelihood_model_paper import make_param_names, exp_temps_from_columns
 from test_2sp import N_CL, PARAM_ODE_TRUE, true_parameter_vector, print_comparison, data_folder
+import paper_paths as pp
 
 import numpy as np
 
@@ -52,12 +53,18 @@ if __name__ == "__main__":
     # ================================================================
     # Settings
     # ================================================================
-    out_root = 'model_paper/out/test_2sp_datatypes/'   # one subfolder per scenario
     SCENARIOS = ['ngs_maldi', 'ngs_mibi', 'maldi_mibi']  # subset of SCENARIOS_ALL, run one after the other
     n_cl = N_CL
     n_media = 2
     relnoise = 0.1
-    data_path = data_folder('base', relnoise)            # in-silico data (shared with test_2sp.py)
+    # initial values of the in-silico data: setup/Initial_values_x0_paper_<X0_DISTRIBUTION>.json ('uniform' or
+    # 'lognormal', see main_insilicomodel_generation.py); other than 'uniform': folder suffix _x0<distribution>
+    X0_DISTRIBUTION = 'lognormal'
+    # MALDI noise of the in-silico data: None = relative Gaussian noise (relnoise), N = identification of N colonies
+    # per plate (multinomial sampling, rare species can be missed; ZL2030: up to 48, median 46); N: suffix _maldi<N>
+    MALDI_N = 48
+    out_root = f'model_paper/out/test_2sp_datatypes{pp.x0_suffix(X0_DISTRIBUTION)}{pp.maldi_suffix(MALDI_N)}/'  # one subfolder per scenario
+    data_path = data_folder('base', relnoise, x0=X0_DISTRIBUTION, maldi_n=MALDI_N)  # in-silico data (shared with test_2sp.py)
     temps = [2., 6., 10.]          # 3 experiments, 3 temperatures
     ntr = 1
     add_name = f'_{n_cl}dim_{n_media}media_test'
@@ -95,12 +102,12 @@ if __name__ == "__main__":
 
     # in-silico data (as in test_2sp.py) ---------------------------------
     S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=fm.data.SETUP_DIR)
-    x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=fm.data.SETUP_DIR)['x0'])[:len(temps), :n_cl]
+    x10 = fm.data.read_initial_values(X0_DISTRIBUTION, len(temps), n_cl)
     if RUN_DATA or not os.path.exists(data_path + f'dataframe_mibi{add_name}_preprocessed.pkl'):
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
             fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=PARAM_ODE_TRUE.copy(),
             x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=data_path,
-            add_name=add_name)
+            add_name=add_name, maldi_n=MALDI_N)
     else:
         import pandas as pd
         dfs = [pd.read_pickle(data_path + f'dataframe_{k}{add_name}_preprocessed.pkl') for k in ['mibi', 'maldi', 'ngs']]

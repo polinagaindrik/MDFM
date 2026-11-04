@@ -36,6 +36,12 @@ if __name__ == "__main__":
     # Experimental design of the in-silico data (test_2sp.DESIGNS). The paper runs use 'rep3' (pp.PAPER_DESIGN,
     # usual folders); other designs get their own run folder <run>_<design>/. After switching: RUN_DATA = True.
     DESIGN = 'rep3'
+    # initial values of the in-silico data: setup/Initial_values_x0_paper_<X0_DISTRIBUTION>.json ('uniform' or
+    # 'lognormal', see main_insilicomodel_generation.py); other than 'uniform': folder suffix _x0<distribution>
+    X0_DISTRIBUTION = 'lognormal'
+    # MALDI noise of the in-silico data: None = relative Gaussian noise (relnoise), N = identification of N colonies
+    # per plate (multinomial sampling, rare species can be missed); N: folder suffix _maldi<N>
+    MALDI_N = 48
     temps = DESIGNS[DESIGN]['temps']
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
     n_cl = 6
@@ -98,7 +104,7 @@ if __name__ == "__main__":
         n_media = pp.media_n(media_run)
     add_name = pp.add_name(n_cl, n_media, media=media_run)
     path = pp.ensure_dir(pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=media_run,
-                                       design=DESIGN))
+                                       design=DESIGN, x0=X0_DISTRIBUTION, maldi_n=MALDI_N))
     print(f'Design {DESIGN!r}: temperatures {temps}, days {days_meas if days_meas is not None else "0..17"}, '
           f'output {path} (files *{add_name}*)')
     start = time.time()
@@ -112,18 +118,17 @@ if __name__ == "__main__":
     if media_run is not None:
         GEN_MODEL = getattr(fm.data, pp.generator_name(media_run))
     # setup files in model_paper/setup/: initial values, media matrix and true parameters
-    # (True_parameters_paper.json, created from the ZL2030 estimates by main_true_parameters.py)
+    # (True_parameters_paper_<X0_DISTRIBUTION>.json, created from the ZL2030 estimates by main_true_parameters.py)
     S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=fm.data.SETUP_DIR)
-    x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=fm.data.SETUP_DIR)['x0'])[:len(temps), :n_cl]
-    if len(x10) < len(temps):
-        raise ValueError(f'design {DESIGN!r} has {len(temps)} experiments, the setup has initial values for {len(x10)}')
-    param_ode_true = fm.data.read_true_parameters(n_cl)['param_ode']
-    print(f'True ODE parameters ({n_cl} species) from {fm.data.SETUP_DIR}{fm.data.TRUE_PARAMETERS_FILE}:', param_ode_true)
+    x10 = fm.data.read_initial_values(X0_DISTRIBUTION, len(temps), n_cl)
+    param_ode_true = fm.data.read_true_parameters(n_cl, distribution=X0_DISTRIBUTION)['param_ode']
+    print(f'True ODE parameters ({n_cl} species) from {fm.data.SETUP_DIR}{fm.data.true_parameters_file(X0_DISTRIBUTION)}:',
+          param_ode_true)
     if RUN_DATA or not os.path.exists(path + f'dataframe_mibi{add_name}_preprocessed.pkl'):
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
             GEN_MODEL, n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode_true.copy(),
             x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name,
-            t_meas=days_meas)
+            t_meas=days_meas, maldi_n=MALDI_N)
     else:
         import pandas as pd
         dfs = [pd.read_pickle(path + f'dataframe_{k}{add_name}_preprocessed.pkl') for k in ['mibi', 'maldi', 'ngs']]

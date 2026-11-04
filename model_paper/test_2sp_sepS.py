@@ -121,9 +121,15 @@ if __name__ == "__main__":
     # results of this script go to <data folder>_sepS/ (base design, 10 % noise: model_paper/out/test_2sp_sepS/)
     DESIGN = 'rep3'                # key of DESIGNS in test_2sp.py ('base', 'rep3', 'temps6', ...)
     relnoise = 0.1                 # 0: noise-free data (use OBJECTIVE = 'known_noise')
+    # initial values of the in-silico data: setup/Initial_values_x0_paper_<X0_DISTRIBUTION>.json ('uniform' or
+    # 'lognormal', see main_insilicomodel_generation.py); other than 'uniform': folder suffix _x0<distribution>
+    X0_DISTRIBUTION = 'lognormal'
+    # MALDI noise of the in-silico data: None = relative Gaussian noise (relnoise), N = identification of N colonies
+    # per plate (multinomial sampling, rare species can be missed; ZL2030: up to 48, median 46); N: suffix _maldi<N>
+    MALDI_N = 48
     temps = DESIGNS[DESIGN]['temps']
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
-    data_path = data_folder(DESIGN, relnoise)
+    data_path = data_folder(DESIGN, relnoise, x0=X0_DISTRIBUTION, maldi_n=MALDI_N)
     path = data_path.rstrip('/') + '_sepS/'
     n_cl = N_CL
     n_media = 2
@@ -209,13 +215,11 @@ if __name__ == "__main__":
     if RUN_DATA or not os.path.exists(data_path + f'dataframe_mibi{add_name}_preprocessed.pkl'):
         os.makedirs(data_path, exist_ok=True)
         S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=fm.data.SETUP_DIR)
-        x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=fm.data.SETUP_DIR)['x0'])[:len(temps), :n_cl]
-        if len(x10) < len(temps):
-            raise ValueError(f'design {DESIGN!r} has {len(temps)} experiments, the setup has initial values for {len(x10)}')
+        x10 = fm.data.read_initial_values(X0_DISTRIBUTION, len(temps), n_cl)
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
             fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=PARAM_ODE_TRUE.copy(),
             x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=data_path,
-            add_name=add_name, t_meas=days_meas)
+            add_name=add_name, t_meas=days_meas, maldi_n=MALDI_N)
     else:
         dfs = [pd.read_pickle(data_path + f'dataframe_{k}{add_name}_preprocessed.pkl') for k in ['mibi', 'maldi', 'ngs']]
         _, _, T_x, s_x_predefined = fm.dtf.make_df_maldi_ngs_compatible(

@@ -53,9 +53,10 @@ DESIGNS = {
 }
 
 
-def data_folder(design, relnoise, normalize_true_s=False):
-    """Output / data folder of test_2sp.py for a design and noise level (see paper_paths.test_2sp_path)."""
-    return pp.test_2sp_path(design, relnoise, normalize_true_s)
+def data_folder(design, relnoise, normalize_true_s=False, x0=None, maldi_n=pp._DEFAULT):
+    """Output / data folder of test_2sp.py for a design, noise level, initial-value distribution x0 and MALDI
+    noise maldi_n (see paper_paths.test_2sp_path)."""
+    return pp.test_2sp_path(design, relnoise, normalize_true_s, x0=x0, maldi_n=maldi_n)
 
 
 def true_parameter_vector(path, add_name, media_sorted, n_cl):
@@ -126,6 +127,12 @@ if __name__ == "__main__":
     # days (whole days), default 0, 1, ..., 17. After switching to a new design: RUN_DATA = True.
 
     DESIGN = 'rep3'
+    # initial values of the in-silico data: setup/Initial_values_x0_paper_<X0_DISTRIBUTION>.json ('uniform' or
+    # 'lognormal', see main_insilicomodel_generation.py); other than 'uniform': folder suffix _x0<distribution>
+    X0_DISTRIBUTION = 'lognormal'
+    # MALDI noise of the in-silico data: None = 10 % relative Gaussian noise (relnoise), N = identification of N colonies
+    # per plate (multinomial sampling, rare species can be missed); N: folder suffix _maldi<N>
+    MALDI_N = 48
     temps = DESIGNS[DESIGN]['temps']
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
     n_cl = N_CL
@@ -248,18 +255,16 @@ if __name__ == "__main__":
     # Refit the points of the existing profiles from their neighbours (removes jumps where points ended in a
     # worse local minimum; no new values): False, True (all profiles) or a list of indices / names, e.g.
     # ['k_01,00']. Runs after the profile run / EXTEND / UPDATE_OPTIMUM. Backup: <csv>_before_polish.csv
-    POLISH_PROFILES = True
+    POLISH_PROFILES = False
     # ================================================================
 
-    path = data_folder(DESIGN, relnoise, NORMALIZE_TRUE_S)
+    path = data_folder(DESIGN, relnoise, NORMALIZE_TRUE_S, x0=X0_DISTRIBUTION, maldi_n=MALDI_N)
     os.makedirs(path, exist_ok=True)
     start = time.time()
 
     # 1) in-silico data -------------------------------------------------
     S_matrix_setup = fm.output.read_from_json('Media_matrix_S_paper.json', dir=fm.data.SETUP_DIR)
-    x10 = np.array(fm.output.read_from_json('Initial_values_x0_paper.json', dir=fm.data.SETUP_DIR)['x0'])[:len(temps), :n_cl]
-    if len(x10) < len(temps):
-        raise ValueError(f'design {DESIGN!r} has {len(temps)} experiments, the setup has initial values for {len(x10)}')
+    x10 = fm.data.read_initial_values(X0_DISTRIBUTION, len(temps), n_cl)
     print(f'Design {DESIGN!r}: temperatures {temps}, days {days_meas if days_meas is not None else "0..17"}, output {path}')
     param_ode_gen = PARAM_ODE_TRUE.copy()
     if NORMALIZE_TRUE_S:
@@ -269,7 +274,7 @@ if __name__ == "__main__":
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
             fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode_gen,
             x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name,
-            t_meas=days_meas)
+            t_meas=days_meas, maldi_n=MALDI_N)
     else:
         import pandas as pd
         dfs = [pd.read_pickle(path + f'dataframe_{k}{add_name}_preprocessed.pkl') for k in ['mibi', 'maldi', 'ngs']]
@@ -474,7 +479,7 @@ if __name__ == "__main__":
                 true_params=param_true if SHOW_TRUE_VALUE else None,
                 verbose=1,
                 restart_on_better=False,
-                resume=False,
+                resume=True,
             )
         if POLISH_PROFILES:
             polish_idx = (None if POLISH_PROFILES is True

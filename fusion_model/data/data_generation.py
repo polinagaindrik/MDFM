@@ -49,11 +49,13 @@ def generate_insilico_df(model, t, param, x0, const,  n_traj=1, exp_start_num=1,
 
 
 def insilico_traj_dataframe(t, n, param, x0, const, create_df_func, bact_name, name_part=[''], obs_func=None,
-                            noise=.0, rel_noise=.0, maldi_n=None):
+                            noise=.0, rel_noise=.0, maldi_n=None, mibi_log10_sd=None):
     """Generate one synthetic observation table, optionally applying an observation model and noise.
     maldi_n: None: MALDI proportions with Gaussian noise (rel_noise * p + noise) like the other observables;
     integer N: MALDI as identification of N colonies per plate (medium and time point), species counts
-    ~ Multinomial(N, p), proportions = counts / N (rare species are often missed, as in real MALDI data)."""
+    ~ Multinomial(N, p), proportions = counts / N (rare species are often missed, as in real MALDI data).
+    mibi_log10_sd: None: MiBi (plate counts) with Gaussian noise (rel_noise * y + noise); value sigma: Gaussian
+    noise on log10 of the plate counts, log10(y_meas) = log10(y) + N(0, sigma^2) (e.g. 0.1 or 0.3 log10 units)."""
     if obs_func is None:
         stds = rel_noise*n+noise
         observables = n + np.random.normal(0., stds, size=np.shape(n))
@@ -76,6 +78,9 @@ def insilico_traj_dataframe(t, n, param, x0, const, create_df_func, bact_name, n
                         counts[m, :, k] = np.random.multinomial(int(maldi_n), p[m, :, k] / p[m, :, k].sum())
             stds = np.sqrt(p * (1 - p) / maldi_n)
             observables = counts / maldi_n
+        elif obs_func == mdl.observable_MiBi and mibi_log10_sd is not None:
+            stds = observables * np.log(10.) * mibi_log10_sd  # in counts (error bars), from sigma on the log10 scale
+            observables = observables * 10**np.random.normal(0., mibi_log10_sd, size=np.shape(observables))
         elif obs_func != mdl.observable_x:
             stds = rel_noise*observables+noise
             observables = observables + np.random.normal(0., stds, size=np.shape(observables))

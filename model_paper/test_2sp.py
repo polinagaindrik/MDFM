@@ -133,6 +133,9 @@ if __name__ == "__main__":
     # MALDI noise of the in-silico data: None = 10 % relative Gaussian noise (relnoise), N = identification of N colonies
     # per plate (multinomial sampling, rare species can be missed); N: folder suffix _maldi<N>
     MALDI_N = 48
+    # plate-count (MiBi) noise: 'log10' = Gaussian noise with standard deviation relnoise on log10 of the counts
+    # (relnoise 0.1 -> 0.1 log10 units, 0.3 -> 0.3), 'relative' = relnoise * count (as before)
+    MIBI_NOISE = 'log10'
     temps = DESIGNS[DESIGN]['temps']
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
     n_cl = N_CL

@@ -42,6 +42,9 @@ if __name__ == "__main__":
     # MALDI noise of the in-silico data: None = relative Gaussian noise (relnoise), N = identification of N colonies
     # per plate (multinomial sampling, rare species can be missed); N: folder suffix _maldi<N>
     MALDI_N = 48
+    # plate-count (MiBi) noise: 'log10' = Gaussian noise with standard deviation relnoise on log10 of the counts
+    # (relnoise 0.1 -> 0.1 log10 units, 0.3 -> 0.3), 'relative' = relnoise * count (as before)
+    MIBI_NOISE = 'log10'
     temps = DESIGNS[DESIGN]['temps']
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
     n_cl = 6
@@ -128,7 +131,8 @@ if __name__ == "__main__":
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
             GEN_MODEL, n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode_true.copy(),
             x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name,
-            t_meas=days_meas, maldi_n=MALDI_N)
+            t_meas=days_meas, maldi_n=MALDI_N,
+            mibi_log10_sd=relnoise if MIBI_NOISE == 'log10' else None)
     else:
         import pandas as pd
         dfs = [pd.read_pickle(path + f'dataframe_{k}{add_name}_preprocessed.pkl') for k in ['mibi', 'maldi', 'ngs']]

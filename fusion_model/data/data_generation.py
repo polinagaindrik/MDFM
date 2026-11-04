@@ -49,8 +49,11 @@ def generate_insilico_df(model, t, param, x0, const,  n_traj=1, exp_start_num=1,
 
 
 def insilico_traj_dataframe(t, n, param, x0, const, create_df_func, bact_name, name_part=[''], obs_func=None,
-                            noise=.0, rel_noise=.0): 
-    """Generate one synthetic observation table, optionally applying an observation model and noise."""
+                            noise=.0, rel_noise=.0, maldi_n=None):
+    """Generate one synthetic observation table, optionally applying an observation model and noise.
+    maldi_n: None: MALDI proportions with Gaussian noise (rel_noise * p + noise) like the other observables;
+    integer N: MALDI as identification of N colonies per plate (medium and time point), species counts
+    ~ Multinomial(N, p), proportions = counts / N (rare species are often missed, as in real MALDI data)."""
     if obs_func is None:
         stds = rel_noise*n+noise
         observables = n + np.random.normal(0., stds, size=np.shape(n))
@@ -64,7 +67,16 @@ def insilico_traj_dataframe(t, n, param, x0, const, create_df_func, bact_name, n
             filt = s_x
         # Noise-free observables; the noise is applied once below, relative to the observables themselves.
         t, observables = obs_func(t, n, filt, x0, const, t, std=0.)
-        if obs_func != mdl.observable_x:
+        if obs_func == mdl.observable_MALDI and maldi_n is not None:
+            p = np.nan_to_num(observables)  # (media, species, times), proportions per medium and time
+            counts = np.zeros_like(p)
+            for m in range(p.shape[0]):
+                for k in range(p.shape[2]):
+                    if p[m, :, k].sum() > 0:
+                        counts[m, :, k] = np.random.multinomial(int(maldi_n), p[m, :, k] / p[m, :, k].sum())
+            stds = np.sqrt(p * (1 - p) / maldi_n)
+            observables = counts / maldi_n
+        elif obs_func != mdl.observable_x:
             stds = rel_noise*observables+noise
             observables = observables + np.random.normal(0., stds, size=np.shape(observables))
         else:

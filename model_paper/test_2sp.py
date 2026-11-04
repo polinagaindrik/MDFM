@@ -35,7 +35,8 @@ import numpy as np
 # ----------------------------------------------------------------------
 N_CL = 2
 # true ODE parameters of species 00 and 01 [lambda_1, lambda_exp, alpha_0, alpha_exp, N_1, N_exp, k_ij]
-# from model_paper/setup/True_parameters_paper.json (created by main_true_parameters.py)
+# from model_paper/setup/True_parameters_paper_uniform.json (created by main_true_parameters.py; the ODE parameters
+# are the same in the files of all initial-value distributions)
 PARAM_ODE_TRUE = fm.data.read_true_parameters(N_CL)['param_ode']
 GEN_MEDIA = ['sel1', 'gen1']  # media order of fm.data.model_2media_expgensel (S rows in the true file)
 

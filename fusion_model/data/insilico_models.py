@@ -7,16 +7,128 @@ from .data_generation import generate_data_dfs
 from ..tools import dataframe_functions as dtf
 
 
-def generate_x0_for_simulation(n_exp_max=20, n_cl_max=20, path='', add_name=''):
-   """Generate and save random log-scale initial values for simulated experiments."""
-   x10 = np.random.uniform(1., 4., size=(n_exp_max, n_cl_max)) # Try with lognormal distribution
+def sample_log10_x0(size, distribution='uniform', low=1., high=4., mean=None, sigma=0.5, truncate=True):
+   """Random log10 initial values L0 = log10(x0).
+   distribution: 'uniform'  : L0 ~ U(low, high) (x0 log-uniform on [10^low, 10^high])
+                 'lognormal': L0 ~ N(mean, sigma) (x0 lognormal), mean default (low + high) / 2;
+                              truncate=True: values outside [low, high] are redrawn (truncated normal)."""
+   if distribution == 'uniform':
+      return np.random.uniform(low, high, size=size)
+   if distribution != 'lognormal':
+      raise ValueError(f"distribution must be 'uniform' or 'lognormal', not {distribution!r}")
+   if mean is None:
+      mean = (low + high) / 2
+   x10 = np.random.normal(mean, sigma, size=size)
+   if truncate:
+      out = (x10 < low) | (x10 > high)
+      while np.any(out):
+         x10[out] = np.random.normal(mean, sigma, size=np.count_nonzero(out))
+         out = (x10 < low) | (x10 > high)
+   return x10
+
+
+def sample_selective_media(n_media=3, n_cl=12, n_targets=3, target=(0.6, 0.95), leak=(0.05, 0.1), min_dist=4,
+                           max_tries=100000):
+   """Random selective media (n_media x n_cl), each targeting its own group of n_targets species:
+   - the groups of different media are disjoint (each species is the target of at most one medium);
+   - target species of one medium are at least min_dist apart in species index (e.g. 0, 4, 9);
+   - target recovery U(target) < 1 (selective agents stress the cells), all other species leakage U(leak).
+   Values rounded to two decimals. Returns (s_selective, groups), groups = sorted target species per medium."""
+   if n_media * n_targets > n_cl:
+      raise ValueError(f'{n_media} media x {n_targets} targets do not fit into {n_cl} species')
+   for _ in range(max_tries):
+      perm = np.random.permutation(n_cl)
+      groups = [sorted(int(k) for k in perm[m*n_targets:(m+1)*n_targets]) for m in range(n_media)]
+      if all(np.min(np.diff(g)) >= min_dist for g in groups if len(g) > 1):
+         break
+   else:
+      raise ValueError(f'no {n_media} groups of {n_targets} species with distance {min_dist} found in {n_cl} species')
+   s = np.random.uniform(*leak, size=(n_media, n_cl))
+   for m, g in enumerate(groups):
+      s[m, g] = np.random.uniform(*target, size=len(g))
+   return np.round(s, 2), groups
+
+
+ZL2030_GENERAL_MEDIUM_DIR = 'out/zl2030/exp_model/calibration/'  # Result_calibration_zl2030_copy.json
+
+
+def zl2030_general_medium(n_cl=12, dir=ZL2030_GENERAL_MEDIUM_DIR):
+   """Recovery coefficients of the general medium (plate count agar, PC) estimated from the ZL2030 data
+   (second row of s_x, media order ['MRS', 'PC']), first n_cl species."""
+   return np.asarray(read_from_json('Result_calibration_zl2030_copy.json', dir=dir)['s_x'], dtype=float)[1, :n_cl]
+
+
+def sample_general_media(n_media=3, base=None, n_cl=12, decimals=2, pair_targets=None, low=0.15, max_tries=10000):
+   """General media gen1..gen<n_media> (n_media x n_cl) as random permutations of the species of a measured
+   general medium base gen0 (default: ZL2030 plate count agar, zl2030_general_medium): each medium has the
+   realistic value distribution of gen0, but assigned to other species. The permutations differ from each other
+   and from gen0. Values rounded to decimals.
+   pair_targets: target species of the paired selective medium of each general medium (gen k + sel k, e.g. the
+   groups of sample_selective_media); the low values (< low) of gen k are then placed on these targets, so that
+   every species is clearly visible in at least one medium of gen k + sel k. Returns (gen0, gen1..gen<n_media>)."""
+   base = np.round(zl2030_general_medium(n_cl) if base is None else np.asarray(base, dtype=float)[:n_cl], decimals)
+   is_low = base < low
+   rows = [base]
+   for _ in range(max_tries):
+      m = len(rows) - 1
+      if pair_targets is None:
+         row = base[np.random.permutation(len(base))]
+      else:
+         targets = [k for k in pair_targets[m] if k < n_cl]
+         if np.count_nonzero(is_low) > len(targets):
+            raise ValueError(f'{np.count_nonzero(is_low)} low values of gen0 do not fit on the targets {targets} of sel{m+1}')
+         row = np.empty(n_cl)
+         low_species = list(np.random.choice(targets, np.count_nonzero(is_low), replace=False))
+         rest = [k for k in range(n_cl) if k not in low_species]
+         row[low_species] = np.random.permutation(base[is_low])
+         row[rest] = np.random.permutation(base[~is_low])
+      if not any(np.array_equal(row, r) for r in rows):
+         rows.append(row)
+         if len(rows) == n_media + 1:
+            return base, np.array(rows[1:])
+   raise ValueError(f'no {n_media} distinct permutations of {base} found')
+
+
+def check_selective_media(s_selective, n_cl=None, n_targets=3, target=(0.6, 0.95), leak=(0.05, 0.1), min_dist=4):
+   """Problems of selective media (rows of s_selective, first n_cl species) w.r.t. the rules of
+   sample_selective_media; empty list: all fine. Targets: species with S >= target[0]."""
+   s = np.asarray(s_selective, dtype=float)[:, :n_cl]
+   problems, groups = [], []
+   for m, row in enumerate(s):
+      g = [int(k) for k in np.flatnonzero(row >= target[0])]
+      groups.append(g)
+      name = f'sel{m+1}'
+      if len(g) < n_targets:
+         problems.append(f'{name}: {len(g)} target species {g}, expected at least {n_targets}')
+      close = [(a, b) for a, b in zip(g[:-1], g[1:]) if b - a < min_dist]
+      if close:
+         problems.append(f'{name}: target species {close} closer than {min_dist} in species index')
+      if np.any(row[g] > target[1]):
+         problems.append(f'{name}: target recovery {row[g].tolist()} above {target[1]}')
+      other = np.setdiff1d(np.arange(len(row)), g)
+      off = [int(j) for j in other if not leak[0] <= row[j] <= leak[1]]
+      if off:
+         problems.append(f'{name}: non-target species {off} with S {row[off].tolist()} outside the leakage range {leak}')
+   for i, gi in enumerate(groups):
+      for j, gj in enumerate(groups[i+1:], start=i+1):
+         shared = sorted(set(gi) & set(gj))
+         if shared:
+            problems.append(f'sel{i+1} and sel{j+1} share target species {shared}')
+   return problems
+
+
+def generate_x0_for_simulation(n_exp_max=20, n_cl_max=20, path='', add_name='', **sampling):
+   """Generate and save random log-scale initial values for simulated experiments.
+   sampling: options of sample_log10_x0 (distribution, low, high, mean, sigma, truncate)."""
+   x10 = sample_log10_x0((n_exp_max, n_cl_max), **sampling)
    json_dump({'x0': x10.astype(list)}, path+f'Initial_values_x0{add_name}.json')
    return x10
 
 
-def get_random_initial_vals(temps, n_cl):
-    """Generate random log-scale initial values and their corresponding model states."""
-    x10 = np.random.uniform(1., 4., size=(len(temps), n_cl))
+def get_random_initial_vals(temps, n_cl, **sampling):
+    """Generate random log-scale initial values and their corresponding model states.
+    sampling: options of sample_log10_x0 (distribution, low, high, mean, sigma, truncate)."""
+    x10 = sample_log10_x0((len(temps), n_cl), **sampling)
     return x10, set_initial_vals(x10, temps, n_cl)
 
 
@@ -31,11 +143,16 @@ def save_all_dfs(dfs, names=[''], path=''):
         df.to_pickle(path+f'dataframe_{n}.pkl')
 
 
-def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name='', t_meas=None):
+def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name='', t_meas=None,
+                          maldi_n=None):
     """Generate synthetic observations and align their MALDI and NGS bacteria.
     t_meas: measurement days (whole days; default: module attribute t = 0, 1, ..., 17); only for the
-    model_exp based generators (model_1media_exp_*, model_2media_exp*)."""
+    model_exp based generators (model_1media_exp_*, model_2media_exp*).
+    maldi_n: None (default): MALDI with relative Gaussian noise; N: MALDI as N identified colonies per plate
+    (multinomial, see insilico_traj_dataframe); only for the model_exp based generators."""
     extra = {} if t_meas is None else {'t_meas': np.asarray(t_meas, dtype=float)}
+    if maldi_n is not None:
+        extra['maldi_n'] = int(maldi_n)
     data = insilico_model(n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name, **extra)
     dfs = data[:-1]
     (df_mibi, df_maldi, df_ngs) = dfs
@@ -314,8 +431,34 @@ t = np.linspace(0., 17., 18)
 # True parameters of the in-silico data (model_paper/setup/)
 # ----------------------------------------------------------------------
 SETUP_DIR = 'model_paper/setup/'                     # relative to the repository root (working directory)
-TRUE_PARAMETERS_FILE = 'True_parameters_paper.json'  # written by model_paper/main_true_parameters.py
-INITIAL_VALUES_FILE = 'Initial_values_x0_paper.json'
+X0_DISTRIBUTIONS = ('uniform', 'lognormal')  # see sample_log10_x0; written by model_paper/main_insilicomodel_generation.py
+X0_DISTRIBUTION = 'lognormal'  # default initial-value distribution of the setup files
+INITIAL_VALUES_FILE = f'Initial_values_x0_paper_{X0_DISTRIBUTION}.json'
+TRUE_PARAMETERS_FILE = f'True_parameters_paper_{X0_DISTRIBUTION}.json'  # written by model_paper/main_true_parameters.py
+
+
+def initial_values_file(distribution=X0_DISTRIBUTION):
+    """Setup file of the initial values sampled from distribution: Initial_values_x0_paper_<distribution>.json."""
+    if distribution not in X0_DISTRIBUTIONS:
+        raise ValueError(f'unknown x0 distribution {distribution!r}, expected one of {X0_DISTRIBUTIONS}')
+    return f'Initial_values_x0_paper_{distribution}.json'
+
+
+def true_parameters_file(distribution=X0_DISTRIBUTION):
+    """Setup file of the true parameters with the initial values of distribution: True_parameters_paper_<distribution>.json."""
+    if distribution not in X0_DISTRIBUTIONS:
+        raise ValueError(f'unknown x0 distribution {distribution!r}, expected one of {X0_DISTRIBUTIONS}')
+    return f'True_parameters_paper_{distribution}.json'
+
+
+def read_initial_values(distribution=X0_DISTRIBUTION, n_exps=None, n_cl=None, dir=SETUP_DIR):
+    """log10 initial values (experiments x species) of the setup file of distribution, first n_exps
+    experiments and n_cl species (None: all)."""
+    file = initial_values_file(distribution)
+    x10 = np.array(read_from_json(file, dir=dir)['x0'], dtype=float)
+    if n_exps is not None and n_exps > len(x10):
+        raise ValueError(f'{dir}{file} has initial values for {len(x10)} experiments, {n_exps} requested')
+    return x10[:n_exps, :n_cl]
 MEDIA_MATRIX_FILE = 'Media_matrix_S_paper.json'
 
 
@@ -355,15 +498,19 @@ def _split_true_param_ode(param_ode, n_cl_file):
     return x0, o[:n], o[n:2*n], o[2*n:3*n], o[3*n:4*n], o[4*n:4*n+2], o[4*n+2:].reshape(n, n)
 
 
-def read_true_parameters(n_cl, file=TRUE_PARAMETERS_FILE, dir=SETUP_DIR):
+def read_true_parameters(n_cl, file=None, dir=SETUP_DIR, distribution=X0_DISTRIBUTION):
     """
     True parameters of the in-silico model for the first n_cl species, from the setup JSON
-    (param_ode = [x0 | ODE] of all species, s_x = media x species, T_x). Returns a dict:
+    (param_ode = [x0 | ODE] of all species, s_x = media x species, T_x); file None: the file of the
+    initial-value distribution, True_parameters_paper_<distribution>.json (the ODE parameters, s_x and T_x
+    are the same for all distributions, only x0 differs). Returns a dict:
       'param_ode': ODE parameters for n_cl species [lambda_1, lambda_exp, alpha_0, alpha_exp, N_1, N_exp, k_ij]
                    (the layout fusion_model2 / model_exp expects)
       'x10'      : log10 initial values, experiments x n_cl
       's_x'      : media x n_cl, 'T_x': n_cl
     """
+    if file is None:
+        file = true_parameters_file(distribution)
     res = read_from_json(file, dir=dir)
     n_file = len(res['T_x'])
     if n_cl > n_file:
@@ -376,25 +523,30 @@ def read_true_parameters(n_cl, file=TRUE_PARAMETERS_FILE, dir=SETUP_DIR):
             'T_x': np.asarray(res['T_x'], dtype=float)[:n_cl]}
 
 
-def true_parameters_from_zl2030(zl2030_dir, n_cl=12, n_exps=9, setup_dir=SETUP_DIR,
-                                initial_values_file=INITIAL_VALUES_FILE, media_file=MEDIA_MATRIX_FILE):
+def true_parameters_for_distribution(distribution, source='uniform', n_exps=None, setup_dir=SETUP_DIR,
+                                     media_file=MEDIA_MATRIX_FILE):
     """
-    Build the true-parameter JSON content (see read_true_parameters) from the ZL2030 calibration
-    (zl2030_dir/Result_calibration_zl2030_copy.json, exponential model, ODE parameters rounded to one
-    decimal as in get_res_from_zl2030dict), the initial values (first n_exps experiments) and the media
-    matrix (s_x = [first selective medium, first general medium], T_x) of the setup folder.
+    True-parameter JSON content (see read_true_parameters) for the initial values of distribution: ODE
+    parameters copied from the frozen file of source (True_parameters_paper_<source>.json),
+    x0 = first n_exps experiments (None: as many as in the source file) of
+    Initial_values_x0_paper_<distribution>.json, s_x = [first selective medium, first general medium] and
+    T_x of the media matrix (Media_matrix_S_paper.json).
     """
-    _, _, ode = get_res_from_zl2030dict(n_cl, model='exponential', dir=zl2030_dir)
-    ode = np.array(ode, dtype=float)
-    k = ode[4*n_cl+2:].reshape(n_cl, n_cl)
-    np.fill_diagonal(k, 0.)  # no self-inhibition
-    ode[4*n_cl+2:] = k.ravel()
-    x10 = np.array(read_from_json(initial_values_file, dir=setup_dir)['x0'], dtype=float)[:n_exps, :n_cl]
+    file = true_parameters_file(source)
+    res = read_from_json(file, dir=setup_dir)
+    n_file = len(res['T_x'])
+    p = np.asarray(res['param_ode'], dtype=float)
+    n_x0 = len(p) - (4*n_file + 2 + n_file*n_file)
+    if n_x0 < 0 or n_x0 % n_file:
+        raise ValueError(f'param_ode of {setup_dir}{file} (length {len(p)}) does not fit {n_file} species')
+    if n_exps is None:
+        n_exps = n_x0 // n_file
+    x10 = read_initial_values(distribution, n_exps, n_file, dir=setup_dir)
     S = read_from_json(media_file, dir=setup_dir)
-    s_x = np.concatenate([np.asarray(S['s_selective'][0][:n_cl], dtype=float),
-                          np.asarray(S['s_general'][0][:n_cl], dtype=float)])
-    return {'param_ode': list(np.concatenate([x10.ravel(), ode])), 's_x': list(s_x),
-            'T_x': list(np.asarray(S['T_x'][:n_cl], dtype=float))}
+    s_x = np.concatenate([np.asarray(S['s_selective'][0][:n_file], dtype=float),
+                          np.asarray(S['s_general'][0][:n_file], dtype=float)])
+    return {'param_ode': list(np.concatenate([x10.ravel(), p[n_x0:]])), 's_x': list(s_x),
+            'T_x': list(np.asarray(S['T_x'][:n_file], dtype=float))}
 
 
 def get_res_from_zl2030dict(n_cl, model='linear', dir=''):
@@ -443,8 +595,10 @@ def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, pa
     return df_mibi, df_maldi, df_ngs, df_realx\
 
 
-def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name='', t_meas=None):
-    """Generate synthetic observations using the exponential temperature-dependent model."""
+def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name='', t_meas=None,
+              maldi_n=None):
+    """Generate synthetic observations using the exponential temperature-dependent model.
+    maldi_n: None: MALDI with relative Gaussian noise; N: multinomial MALDI with N colonies per plate."""
     np.random.seed(46987)
     if param_ode is None:  # true ODE parameters from the setup folder (see read_true_parameters)
         param_ode = read_true_parameters(n_cl)['param_ode']
@@ -459,7 +613,7 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path=
     if t_meas is not None and np.any(np.asarray(t_meas) != np.round(t_meas)):
         raise ValueError('t_meas must be whole days (the data column names contain the day as an integer)')
     df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t if t_meas is None else t_meas, param_model, x0, temps, n_cl, n_traj=ntr,
-                                                                 noise=noise, rel_noise=rel_noise, media=media)
+                                                                 noise=noise, rel_noise=rel_noise, media=media, maldi_n=maldi_n)
     save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, f'Result_real{add_name}.json', dir=path)
     return df_mibi, df_maldi, df_ngs, df_realx
@@ -539,6 +693,17 @@ def model_1media_exp_sel3(n_cl, temps, ntr, S_matrix_setup,  **kwargs):
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['sel3']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
+
+def model_1media_exp_gen0(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data using general medium 0 (ZL2030 plate count agar, key 's_general0')."""
+    if 's_general0' not in S_matrix_setup:
+        raise KeyError("media matrix has no 's_general0' (gen0); generate it with GENERAL_MEDIA = 'generate' in "
+                       "model_paper/main_insilicomodel_generation.py")
+    s_x = np.array(S_matrix_setup["s_general0"][:n_cl])
+    T_x = S_matrix_setup["T_x"][:n_cl]
+    media = ['gen0']
+    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
+
 
 def model_1media_exp_gen1(n_cl, temps, ntr, S_matrix_setup, **kwargs):
     """Generate exponential-model data using general medium 1."""

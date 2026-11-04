@@ -239,18 +239,38 @@ if __name__ == "__main__":
     #   None     : no extension (normal profile run)
     #   'auto'   : EXTEND_AUTO, profiles chosen automatically (open sides + too few points in the CI)
     #   'manual' : EXTEND_MANUAL, profiles and specs chosen by hand
-    EXTEND_MODE = 'auto'
+    EXTEND_MODE = None
     EXTEND_AUTO = {'auto': True, 'ci': {'n_points': 10, 'margin': 0.3, 'min_points': 5, 'max_rounds': 3}}
+    EXTEND_MANUAL = None           # {parameter: spec}, e.g. the rep3 example below
     # rep3 (profile_likelihood_2dim_2media_test_all_neg2logL), after the first extension ({'ci': 5} + 'auto'):
     # all CIs closed (S_sel1,01 ends at its bound 1), but these profiles still had only 3-7 points in the
     # CI region (CI + 30 % margin)
-    EXTEND_MANUAL = {name: {'ci': 7, 'margin': 0.1} for name in [
-        'x_0,00^V01', 'x_0,01^V01', 'x_0,00^V02', 'x_0,01^V02', 'x_0,01^V03', 'x_0,00^V04', 'x_0,01^V04',
-        'x_0,00^V05', 'x_0,01^V05', 'x_0,00^V06', 'x_0,01^V06', 'x_0,00^V07', 'x_0,01^V08', 'x_0,01^V09',
-        'lambda_1,00', 'alpha_0,00', 'alpha_0,01', 'alpha_exp,00', 'alpha_exp,01', 'N_1',
-        'S_gen1,01']}
+    #EXTEND_MANUAL = {name: {'ci': 7, 'margin': 0.1} for name in [
+    #    'x_0,00^V01', 'x_0,01^V01', 'x_0,00^V02', 'x_0,01^V02', 'x_0,01^V03', 'x_0,00^V04', #'x_0,01^V04',
+    #    'x_0,00^V05', 'x_0,01^V05', 'x_0,00^V06', 'x_0,01^V06', 'x_0,00^V07', 'x_0,01^V08', 'x_0,01^V09',
+    #    'lambda_1,00', 'alpha_0,00', 'alpha_0,01', 'alpha_exp,00', 'alpha_exp,01', 'N_1',
+    #    'S_gen1,01']}
+    if EXTEND_MODE == 'manual' and not EXTEND_MANUAL:
+        raise ValueError("EXTEND_MODE = 'manual' needs EXTEND_MANUAL = {parameter: spec}")
     EXTEND = {None: None, 'auto': EXTEND_AUTO, 'manual': EXTEND_MANUAL}[EXTEND_MODE]
     EXTEND_N_POINTS = 6
+    # Profile run (EXTEND_MODE = None) in three steps (run_profile_likelihood_adaptive), as in test_2sp_sepS.py,
+    # grid plot after each step (<plot>_1step.png, _2step, _3step):
+    #   1. profiles on the initial grid (span = 3, 12 points)
+    #   2. sides that do not cross the threshold get EXTEND_N_POINTS new points per round, each round
+    #      doubling the distance of the side's end to the estimate (EXTEND_FACTOR=1; None: up to the bound),
+    #      at most MAX_EXTEND_ROUNDS rounds (0: no extension)
+    #   3. CI_N_POINTS points over each CI, widened by CI_MARGIN x CI half-width on each side (0: skip);
+    #      repeated with twice as many values for the profiles with fewer than MIN_CI_POINTS points inside
+    #      the CI, at most MAX_CI_ROUNDS rounds in total
+    # False: only step 1 (run_profile_likelihood_all, as before: span = 0.3, 35 points)
+    ADAPTIVE = True
+    MAX_EXTEND_ROUNDS = 5
+    EXTEND_FACTOR = 1.0
+    CI_N_POINTS = 2
+    CI_MARGIN = 0.3
+    MIN_CI_POINTS = 5
+    MAX_CI_ROUNDS = 3
     # True: use the current Result_calibration*.json (e.g. a new, better local minimization) as the optimum of
     # the existing profiles (same PROFILE / FIX_* / OBJECTIVE -> same CSV) instead of computing profiles:
     # optimum rows, cost_opt, summary JSON (CIs) and plots are updated, the profile points are kept.
@@ -277,7 +297,8 @@ if __name__ == "__main__":
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
             fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode_gen,
             x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name,
-            t_meas=days_meas, maldi_n=MALDI_N)
+            t_meas=days_meas, maldi_n=MALDI_N,
+            mibi_log10_sd=relnoise if MIBI_NOISE == 'log10' else None)
     else:
         import pandas as pd
         dfs = [pd.read_pickle(path + f'dataframe_{k}{add_name}_preprocessed.pkl') for k in ['mibi', 'maldi', 'ngs']]
@@ -342,6 +363,8 @@ if __name__ == "__main__":
           f'{fm.pest.cost_withS(param_true, calibr_setup, None):.6g}')
 
     # 2) global optimization ---------------------------------------------
+    # local fits (multistart: maxiter 500, local refinement: 1000): settings of test_2sp_sepS.py
+    local_kw = dict(maxiter=1000, method=LOCAL_METHOD, backend=BACKEND)
     fm.pest.optimization.output_file = path + 'optimization_history1.csv'  # DE history into the test folder
     fixed_glob = resolve_fixed_values(FIX_PARAMS, names) if FIX_IN_GLOBAL else {}
     if RUN_GLOBAL:
@@ -356,10 +379,8 @@ if __name__ == "__main__":
             de_starts = [param_glob]
         if GLOBAL_METHOD in ('multistart', 'de+multistart'):
             param_glob, cost_glob = fm.pest.multistart_optimization(
-                fm.pest.cost_withS, glob_setup, n_starts=N_STARTS, extra_starts=de_starts, method=LOCAL_METHOD,
-                backend=BACKEND,
-                maxiter=200 if LOCAL_METHOD == 'least_squares' else 500, n_jobs=n_jobs,
-                history_file=path + 'optimization_history_multistart.csv')
+                fm.pest.cost_withS, glob_setup, n_starts=N_STARTS, extra_starts=de_starts, n_jobs=n_jobs,
+                history_file=path + 'optimization_history_multistart.csv', **dict(local_kw, maxiter=500))
         elif GLOBAL_METHOD != 'de':
             raise ValueError("GLOBAL_METHOD must be 'de', 'multistart' or 'de+multistart'")
         print(f'{(time.time() - start) / 60.:.1f} min (global), cost = {cost_glob:.6g}')
@@ -379,7 +400,10 @@ if __name__ == "__main__":
     if RUN_LOCAL:
         fixed = resolve_fixed_values(FIX_PARAMS, names)
         print_parameter_table(names, param_glob, calibr_setup['param_bnds'], fixed)
-        param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup, fixed_values=fixed, maxiter=400 if LOCAL_METHOD == 'least_squares' else 1000,n_restarts=5, jitter_frac=0.1, n_jobs=n_jobs, method=LOCAL_METHOD, backend=BACKEND, history_file=path + 'optimization_history_local.csv')
+        param_opt, cost_opt = fm.pest.local_optimization(fm.pest.cost_withS, param_glob, calibr_setup, fixed_values=fixed,
+                                                         n_restarts=7, jitter_frac=0.1, n_jobs=n_jobs,
+                                                         history_file=path + 'optimization_history_local.csv',
+                                                         **local_kw)
         print(f'{(time.time() - start) / 60.:.1f} min (global + local), cost = {cost_opt:.6g}')
         s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
         save_result(f'Result_calibration{add_name}.json',
@@ -464,6 +488,30 @@ if __name__ == "__main__":
                 true_params=param_true if SHOW_TRUE_VALUE else None,
                 auto_n_points=EXTEND_N_POINTS,
                 verbose=1,
+            )
+        elif ADAPTIVE:  # settings of test_2sp_sepS.py
+            pl.run_profile_likelihood_adaptive(
+                fm.pest.cost_withS, param_opt, pl_setup,
+                max_extend_rounds=MAX_EXTEND_ROUNDS, extend_factor=EXTEND_FACTOR,
+                extend_n_points=EXTEND_N_POINTS, extend_stop_factor=3,
+                ci_n_points=CI_N_POINTS, ci_margin=CI_MARGIN,
+                min_ci_points=MIN_CI_POINTS, max_ci_rounds=MAX_CI_ROUNDS,
+                extend_n_restarts=3,             # multistart per new point (steps 2 and 3)
+                span=3, n_points=12, method='local',
+                n_jobs=n_jobs,
+                out_csv=out_csv,
+                plot_path=out_path + f'profile_likelihood{tag}.png',
+                param_names=names,
+                n_restarts=1, jitter_frac=0.05,
+                profile_indices=profile_indices,
+                fixed_indices=fixed_indices,
+                refine=FIX_S == 'true' or not same_optimum,  # re-fit first if the optimum differs (FIX_S='true', objective)
+                stop_factor=3,                   # stop each side once Delta > 3 x threshold
+                minimize_options=profile_options,
+                true_params=param_true if SHOW_TRUE_VALUE else None,
+                verbose=1,
+                restart_on_better=False,
+                resume=True,
             )
         else:
             df, cis = pl.run_profile_likelihood_all(

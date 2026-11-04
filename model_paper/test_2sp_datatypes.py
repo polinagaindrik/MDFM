@@ -63,6 +63,9 @@ if __name__ == "__main__":
     # MALDI noise of the in-silico data: None = relative Gaussian noise (relnoise), N = identification of N colonies
     # per plate (multinomial sampling, rare species can be missed; ZL2030: up to 48, median 46); N: suffix _maldi<N>
     MALDI_N = 48
+    # plate-count (MiBi) noise: 'log10' = Gaussian noise with standard deviation relnoise on log10 of the counts
+    # (relnoise 0.1 -> 0.1 log10 units, 0.3 -> 0.3), 'relative' = relnoise * count (as before)
+    MIBI_NOISE = 'log10'
     out_root = f'model_paper/out/test_2sp_datatypes{pp.x0_suffix(X0_DISTRIBUTION)}{pp.maldi_suffix(MALDI_N)}/'  # one subfolder per scenario
     data_path = data_folder('base', relnoise, x0=X0_DISTRIBUTION, maldi_n=MALDI_N)  # in-silico data (shared with test_2sp.py)
     temps = [2., 6., 10.]          # 3 experiments, 3 temperatures
@@ -107,7 +110,8 @@ if __name__ == "__main__":
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
             fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup, param_ode=PARAM_ODE_TRUE.copy(),
             x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=data_path,
-            add_name=add_name, maldi_n=MALDI_N)
+            add_name=add_name, maldi_n=MALDI_N,
+            mibi_log10_sd=relnoise if MIBI_NOISE == 'log10' else None)
     else:
         import pandas as pd
         dfs = [pd.read_pickle(data_path + f'dataframe_{k}{add_name}_preprocessed.pkl') for k in ['mibi', 'maldi', 'ngs']]

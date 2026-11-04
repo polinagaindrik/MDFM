@@ -144,15 +144,19 @@ def save_all_dfs(dfs, names=[''], path=''):
 
 
 def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name='', t_meas=None,
-                          maldi_n=None):
+                          maldi_n=None, mibi_log10_sd=None):
     """Generate synthetic observations and align their MALDI and NGS bacteria.
     t_meas: measurement days (whole days; default: module attribute t = 0, 1, ..., 17); only for the
     model_exp based generators (model_1media_exp_*, model_2media_exp*).
     maldi_n: None (default): MALDI with relative Gaussian noise; N: MALDI as N identified colonies per plate
-    (multinomial, see insilico_traj_dataframe); only for the model_exp based generators."""
+    (multinomial, see insilico_traj_dataframe); only for the model_exp based generators.
+    mibi_log10_sd: None (default): MiBi with relative Gaussian noise; sigma: Gaussian noise with standard deviation
+    sigma on log10 of the plate counts; only for the model_exp based generators."""
     extra = {} if t_meas is None else {'t_meas': np.asarray(t_meas, dtype=float)}
     if maldi_n is not None:
         extra['maldi_n'] = int(maldi_n)
+    if mibi_log10_sd is not None:
+        extra['mibi_log10_sd'] = float(mibi_log10_sd)
     data = insilico_model(n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name, **extra)
     dfs = data[:-1]
     (df_mibi, df_maldi, df_ngs) = dfs
@@ -596,9 +600,10 @@ def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, pa
 
 
 def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name='', t_meas=None,
-              maldi_n=None):
+              maldi_n=None, mibi_log10_sd=None):
     """Generate synthetic observations using the exponential temperature-dependent model.
-    maldi_n: None: MALDI with relative Gaussian noise; N: multinomial MALDI with N colonies per plate."""
+    maldi_n: None: MALDI with relative Gaussian noise; N: multinomial MALDI with N colonies per plate.
+    mibi_log10_sd: None: MiBi with relative Gaussian noise; sigma: Gaussian noise on log10 of the plate counts."""
     np.random.seed(46987)
     if param_ode is None:  # true ODE parameters from the setup folder (see read_true_parameters)
         param_ode = read_true_parameters(n_cl)['param_ode']
@@ -613,7 +618,7 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path=
     if t_meas is not None and np.any(np.asarray(t_meas) != np.round(t_meas)):
         raise ValueError('t_meas must be whole days (the data column names contain the day as an integer)')
     df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t if t_meas is None else t_meas, param_model, x0, temps, n_cl, n_traj=ntr,
-                                                                 noise=noise, rel_noise=rel_noise, media=media, maldi_n=maldi_n)
+                                                                 noise=noise, rel_noise=rel_noise, media=media, maldi_n=maldi_n, mibi_log10_sd=mibi_log10_sd)
     save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, f'Result_real{add_name}.json', dir=path)
     return df_mibi, df_maldi, df_ngs, df_realx

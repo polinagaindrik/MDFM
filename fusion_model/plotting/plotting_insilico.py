@@ -60,7 +60,7 @@ def plot_measurements_insilico(ax0, temp, df, clrs=None, lab='',  media=''):
         k, n_t = {2.: 0, 6.: 1}.get(float(temp), 2), 3
     else:
         k, n_t = all_temps.index(float(temp)), len(all_temps)
-    first = media in ('PC', 'media1', 'gen1')
+    first = media.startswith('gen') or media in ('PC', 'media1')
     second = media in ('MRS', 'media2', 'sel1')
     if first or second:
         letter = chr(ord('a') + k + (n_t if second else 0))

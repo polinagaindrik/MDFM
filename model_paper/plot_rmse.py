@@ -177,7 +177,7 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots()
     for i, res in enumerate(rms_per_species_T):
-        ax.plot(n_cl[-len(res):], res, linestyle='dotted', marker='o', color=clrs1[bact_all[i]], label=f'Species {i+1}')
+        ax.plot(n_cl[-len(res):], res, linestyle='dotted', marker='o', color=clrs1[bact_all[i]], label=f'Species {i:02d}')
     fig, ax = fm.plotting.set_labels(fig, ax, 'Number of bacterial species', r'RMSE$(x)$')
     ticks_val = n_cl
     tick_label = [f'{round(n)}' for n in n_cl]

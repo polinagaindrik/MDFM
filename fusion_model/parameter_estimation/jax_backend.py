@@ -30,7 +30,8 @@ import diffrax
 jax.config.update("jax_enable_x64", True)  # the fit needs double precision
 
 from .cost_function import (cost_sum_and_geometric_mean, relative_mask, _noise_model, SelectedDataTypes,
-                            _n_total_points, maldi_n_of, multinomial_counts, multinomial_deviance_residuals)
+                            _n_total_points, maldi_n_of, multinomial_counts, multinomial_deviance_residuals,
+                            ngs_dm_of, dm_saturated, dm_deviance_residuals, _dm_rate)
 
 
 # ----------------------------------------------------------------------
@@ -105,6 +106,13 @@ class JaxCost:
         if self.maldi_n:
             self.masks[1] = np.isfinite(self.obs[1])
             self.maldi_k = np.where(self.masks[1], multinomial_counts(self.obs[1], self.maldi_n), 0.)
+        # NGS with the Dirichlet-multinomial likelihood: all measured entries incl. zeros (undetected species)
+        self.ngs_dm = ngs_dm_of(calibr_setup)
+        if self.ngs_dm:
+            self.masks[0] = np.isfinite(self.obs[0])
+            self.ngs_k = np.where(self.masks[0], multinomial_counts(self.obs[0], self.ngs_dm[0]), 0.)
+            self.ngs_sat = dm_saturated(self.ngs_k, *self.ngs_dm)
+            self.ngs_c = _dm_rate(*self.ngs_dm)
         self.mibi_max = np.nanmax(self.obs[2], axis=(0, 1))
         self.agg = _jax_aggregation(calibr_setup["aggregation_func"])
         self.penalty_w = float(calibr_setup.get("s_max_penalty") or 0.)
@@ -171,7 +179,10 @@ class JaxCost:
         for i, (obs, mod, mask, kind, scale) in enumerate(zip(self.obs, models, self.masks, self.kinds,
                                                               (1.0, 1.0, self.mibi_max))):
             obs_safe = np.where(mask, obs, 1.0)
-            if i == 1 and self.maldi_n:
+            if i == 0 and self.ngs_dm:
+                r = dm_deviance_residuals(self.ngs_k, jnp.where(mask, mod, 1.0) * self.ngs_dm[1], self.ngs_sat, self.ngs_c,
+                                          xp=jnp, lgamma=jax.scipy.special.gammaln)
+            elif i == 1 and self.maldi_n:
                 r = multinomial_deviance_residuals(self.maldi_k, jnp.where(mask, mod, 1.0) * self.maldi_n, xp=jnp)
             elif self.noise_model == "relative":
                 d = jnp.log(obs_safe) - jnp.log(jnp.maximum(jnp.where(mask, mod, 1.0), 1e-300))
@@ -274,7 +285,7 @@ def jax_cost_for(calibr_setup, **kwargs):
     """JaxCost cached per calibr_setup object and its bounds / objective / noise model / penalty."""
     s_x = calibr_setup.get("s_x")
     key = (id(calibr_setup), id(calibr_setup.get("aggregation_func")), calibr_setup.get("noise_model"),
-           calibr_setup.get("maldi_n"),
+           calibr_setup.get("maldi_n"), None if not calibr_setup.get("ngs_dm") else tuple(calibr_setup["ngs_dm"]),
            None if s_x is None else tuple(np.ravel(np.asarray(s_x, dtype=float))),
            calibr_setup.get("s_max_penalty"), tuple(map(tuple, calibr_setup["param_bnds"])),
            tuple(sorted(kwargs.items())))

@@ -128,10 +128,11 @@ class GaussianNeg2LogLik:
 
 class MultinomialMaldiNeg2LogLik(GaussianNeg2LogLik):
     """
-    -2 log L with MALDI as multinomial counts (calibr_setup['maldi_n'], cost_function.multinomial_residuals) and
-    the other data types as in GaussianNeg2LogLik:
-        sum_k n_k log(SSR_k / n_k) (NGS, MiBi: Gaussian, noise variance estimated) + D_maldi
-    D_maldi: sum of the squared deviance residuals, already -2 log L up to a constant (no variance to estimate).
+    -2 log L with count likelihoods for MALDI (multinomial, calibr_setup['maldi_n'], cost_function.multinomial_residuals)
+    and optionally NGS (Dirichlet-multinomial, calibr_setup['ngs_dm'], cost_function.dm_residuals), the other data types
+    as in GaussianNeg2LogLik:
+        sum_k n_k log(SSR_k / n_k) (Gaussian data types, noise variance estimated) + sum_k D_k (count data types)
+    D_k: sum of the squared deviance residuals, already -2 log L up to a constant (no variance to estimate).
     is_deviance: per data type of J_vect, default [ngs, maldi, mibi] = (False, True, False).
     """
 
@@ -154,17 +155,19 @@ class MultinomialMaldiNeg2LogLik(GaussianNeg2LogLik):
         return total
 
 
-def make_gaussian_neg2loglik(data_array, noise_model="absolute", maldi_n=None):
+def make_gaussian_neg2loglik(data_array, noise_model="absolute", maldi_n=None, ngs_dm=None):
     """
     Build a GaussianNeg2LogLik from ``calibr_setup['data_array']``
     (= extract_observables_from_df(dfs) -> (days, [obs_mibi, obs_maldi, obs_ngs])).
     The residual order of cost_withS / squared_differences is [ngs, maldi, mibi].
     noise_model: as calibr_setup['noise_model'] ('relative': degrees of freedom of the log residuals).
     maldi_n: as calibr_setup['maldi_n'], gives a MultinomialMaldiNeg2LogLik (MALDI multinomial, N colonies per plate).
+    ngs_dm: as calibr_setup['ngs_dm'], the same with NGS Dirichlet-multinomial ((N, A): N reads, concentration A).
     """
     from .cost_function import count_data_points_noise
-    if maldi_n:
-        return MultinomialMaldiNeg2LogLik(count_data_points_noise(data_array, noise_model, maldi_n))
+    if maldi_n or ngs_dm:
+        return MultinomialMaldiNeg2LogLik(count_data_points_noise(data_array, noise_model, maldi_n, ngs_dm),
+                                          is_deviance=(bool(ngs_dm), bool(maldi_n), False))
     return GaussianNeg2LogLik(count_data_points_noise(data_array, noise_model))
 
 

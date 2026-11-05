@@ -25,9 +25,8 @@ if __name__ == "__main__":
    # Media_matrix_S_paper.json by it).
    # GENERAL_MEDIA = 'generate': gen0 = general medium estimated from the ZL2030 data (plate count agar, key
    # 's_general0') and gen1..gen<N_GENERAL> (rows of 's_general') = random permutations of gen0 over the species
-   # (fm.data.sample_general_media), saved to the same file. Pairing gen k + sel k: the low values (< 0.15) of gen k
-   # are placed on the target species of sel k, so every species is visible in each gen k + sel k setup
-   # (needs SELECTIVE_MEDIA = 'generate', or the targets are taken from the read selective media).
+   # (fm.data.sample_general_media), saved to the same file. gen0 is the first general medium of the simulations
+   # (gen0 + sel1); all values of general media are at least 0.15.
    # The selective media are checked against these rules in both cases (fm.data.check_selective_media).
    X0_DISTRIBUTION = 'lognormal'
    X0_MEAN = 2.9
@@ -48,8 +47,7 @@ if __name__ == "__main__":
       S_matrix_setup = dict(S_matrix_setup, s_selective=s_selective)
       print(f'Selective media generated (target species {groups})')
    if GENERAL_MEDIA == 'generate':
-      pair_targets = [[int(k) for k in np.flatnonzero(np.asarray(r) >= 0.6)] for r in S_matrix_setup['s_selective']]
-      s_general0, s_general = fm.data.sample_general_media(n_media=N_GENERAL, n_cl=n_cl_max, pair_targets=pair_targets)
+      s_general0, s_general = fm.data.sample_general_media(n_media=N_GENERAL, n_cl=n_cl_max)
       S_matrix_setup = dict(S_matrix_setup, s_general0=s_general0, s_general=s_general)
       print('General media generated: gen0 = ZL2030 plate count medium, gen1-gen3 = its permutations')
    if 'generate' in (SELECTIVE_MEDIA, GENERAL_MEDIA):

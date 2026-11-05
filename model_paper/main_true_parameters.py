@@ -9,7 +9,7 @@ which the in-silico data generation reads (fm.data.read_true_parameters):
   param_ode = [x0 (N_EXPS x 12) | lambda_1 | lambda_exp | alpha_0 | alpha_exp | N_1, N_exp | k_ij (12 x 12)]
               x0                : first N_EXPS experiments of setup/Initial_values_x0_paper_<X0_DISTRIBUTION>.json
               ODE parameters    : copied from the frozen setup/True_parameters_paper_uniform.json
-  s_x       = [first selective medium, first general medium] of setup/Media_matrix_S_paper.json
+  s_x       = [sel1, gen0] of setup/Media_matrix_S_paper.json
   T_x       = T_x of setup/Media_matrix_S_paper.json
 
 True_parameters_paper_uniform.json is the fixed reference (not rewritten by this script), so the ODE

@@ -58,30 +58,17 @@ def zl2030_general_medium(n_cl=12, dir=ZL2030_GENERAL_MEDIUM_DIR):
    return np.asarray(read_from_json('Result_calibration_zl2030_copy.json', dir=dir)['s_x'], dtype=float)[1, :n_cl]
 
 
-def sample_general_media(n_media=3, base=None, n_cl=12, decimals=2, pair_targets=None, low=0.15, max_tries=10000):
-   """General media gen1..gen<n_media> (n_media x n_cl) as random permutations of the species of a measured
-   general medium base gen0 (default: ZL2030 plate count agar, zl2030_general_medium): each medium has the
-   realistic value distribution of gen0, but assigned to other species. The permutations differ from each other
-   and from gen0. Values rounded to decimals.
-   pair_targets: target species of the paired selective medium of each general medium (gen k + sel k, e.g. the
-   groups of sample_selective_media); the low values (< low) of gen k are then placed on these targets, so that
-   every species is clearly visible in at least one medium of gen k + sel k. Returns (gen0, gen1..gen<n_media>)."""
+def sample_general_media(n_media=3, base=None, n_cl=12, decimals=2, min_value=0.15, max_tries=10000):
+   """General media from a measured general medium base (default: ZL2030 plate count agar, zl2030_general_medium):
+   gen0 = base, rounded to decimals, values below min_value raised to min_value (every species is recovered);
+   gen1..gen<n_media> (n_media x n_cl) = random permutations of gen0 over the species, different from each other
+   and from gen0: the realistic value distribution, assigned to other species.
+   Returns (gen0, gen1..gen<n_media>)."""
    base = np.round(zl2030_general_medium(n_cl) if base is None else np.asarray(base, dtype=float)[:n_cl], decimals)
-   is_low = base < low
+   base = np.maximum(base, min_value)
    rows = [base]
    for _ in range(max_tries):
-      m = len(rows) - 1
-      if pair_targets is None:
-         row = base[np.random.permutation(len(base))]
-      else:
-         targets = [k for k in pair_targets[m] if k < n_cl]
-         if np.count_nonzero(is_low) > len(targets):
-            raise ValueError(f'{np.count_nonzero(is_low)} low values of gen0 do not fit on the targets {targets} of sel{m+1}')
-         row = np.empty(n_cl)
-         low_species = list(np.random.choice(targets, np.count_nonzero(is_low), replace=False))
-         rest = [k for k in range(n_cl) if k not in low_species]
-         row[low_species] = np.random.permutation(base[is_low])
-         row[rest] = np.random.permutation(base[~is_low])
+      row = base[np.random.permutation(len(base))]
       if not any(np.array_equal(row, r) for r in rows):
          rows.append(row)
          if len(rows) == n_media + 1:
@@ -533,8 +520,8 @@ def true_parameters_for_distribution(distribution, source='uniform', n_exps=None
     True-parameter JSON content (see read_true_parameters) for the initial values of distribution: ODE
     parameters copied from the frozen file of source (True_parameters_paper_<source>.json),
     x0 = first n_exps experiments (None: as many as in the source file) of
-    Initial_values_x0_paper_<distribution>.json, s_x = [first selective medium, first general medium] and
-    T_x of the media matrix (Media_matrix_S_paper.json).
+    Initial_values_x0_paper_<distribution>.json, s_x = [sel1, gen0] and T_x of the media matrix
+    (Media_matrix_S_paper.json).
     """
     file = true_parameters_file(source)
     res = read_from_json(file, dir=setup_dir)
@@ -548,7 +535,7 @@ def true_parameters_for_distribution(distribution, source='uniform', n_exps=None
     x10 = read_initial_values(distribution, n_exps, n_file, dir=setup_dir)
     S = read_from_json(media_file, dir=setup_dir)
     s_x = np.concatenate([np.asarray(S['s_selective'][0][:n_file], dtype=float),
-                          np.asarray(S['s_general'][0][:n_file], dtype=float)])
+                          np.asarray(S['s_general0'][:n_file], dtype=float)])
     return {'param_ode': list(np.concatenate([x10.ravel(), p[n_x0:]])), 's_x': list(s_x),
             'T_x': list(np.asarray(S['T_x'][:n_file], dtype=float))}
 
@@ -634,7 +621,23 @@ def model_2media_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path=
     media = ['MRS', 'PC']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name='')
 
+def _s_general0(S_matrix_setup, n_cl):
+    """Coefficients of general medium gen0 (ZL2030 plate count agar, key 's_general0') as a list."""
+    if 's_general0' not in S_matrix_setup:
+        raise KeyError("media matrix has no 's_general0' (gen0); generate it with GENERAL_MEDIA = 'generate' in "
+                       "model_paper/main_insilicomodel_generation.py")
+    return list(S_matrix_setup["s_general0"][:n_cl])
+
+
 def model_2media_expgensel(n_cl, temps, ntr, S_matrix_setup, **kwargs):
+    """Generate exponential-model data for the first media of the simulations: general medium 0, selective medium 1."""
+    s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+_s_general0(S_matrix_setup, n_cl))
+    T_x = S_matrix_setup["T_x"][:n_cl]
+    media = ['sel1', 'gen0']
+    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
+
+
+def model_2media_expgen1sel1(n_cl, temps, ntr, S_matrix_setup, **kwargs):
     """Generate exponential-model data for general medium 1 and selective medium 1."""
     s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_general"][0][:n_cl])
     T_x = S_matrix_setup["T_x"][:n_cl]
@@ -701,10 +704,7 @@ def model_1media_exp_sel3(n_cl, temps, ntr, S_matrix_setup,  **kwargs):
 
 def model_1media_exp_gen0(n_cl, temps, ntr, S_matrix_setup, **kwargs):
     """Generate exponential-model data using general medium 0 (ZL2030 plate count agar, key 's_general0')."""
-    if 's_general0' not in S_matrix_setup:
-        raise KeyError("media matrix has no 's_general0' (gen0); generate it with GENERAL_MEDIA = 'generate' in "
-                       "model_paper/main_insilicomodel_generation.py")
-    s_x = np.array(S_matrix_setup["s_general0"][:n_cl])
+    s_x = np.array(_s_general0(S_matrix_setup, n_cl))
     T_x = S_matrix_setup["T_x"][:n_cl]
     media = ['gen0']
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)

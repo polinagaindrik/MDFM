@@ -28,7 +28,7 @@ MALDI_N = 48
 _DEFAULT = object()
 
 # media whose file suffix differs from the joined media names (first runs: gen1 -> '_gen', gen1+sel1 -> '')
-_MEDIA_SUFFIX = {'gen1': 'gen', 'sel1': 'sel', 'gen1+sel1': ''}
+_MEDIA_SUFFIX = {'gen1': 'gen', 'sel1': 'sel', 'gen1+sel1': '', 'gen0+sel1': ''}
 
 
 def noise_tag(relnoise):
@@ -68,7 +68,7 @@ def run_dir(study, n_cl=None, n_media=2, relnoise=0.1, media=None, design=None, 
                 f'{int(n_cl)}_dim_{int(n_media)}media_exp_{noise_tag(relnoise)}{suffix}/')
     if study == 'media_influence':
         if media is None:
-            raise ValueError("study 'media_influence' needs media, e.g. 'gen1' or 'gen2+sel2'")
+            raise ValueError("study 'media_influence' needs media, e.g. 'gen0' or 'gen2+sel2'")
         return study_dir(study) + f'{media}_media{suffix}/'
     raise ValueError(f'unknown study {study!r}, expected one of {STUDIES}')
 
@@ -98,7 +98,7 @@ def generator_name(media):
     """Name of the in-silico data generator in fusion_model.data for a media combination."""
     if media_n(media) == 1:
         return f'model_1media_exp_{media}'
-    return 'model_2media_exp' + ('gensel' if media == 'gen1+sel1' else media.replace('+', ''))
+    return 'model_2media_exp' + ('gensel' if media == 'gen0+sel1' else media.replace('+', ''))
 
 
 def test_2sp_path(design='base', relnoise=0.1, normalize_true_s=False, x0=None, maldi_n=_DEFAULT):

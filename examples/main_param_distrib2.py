@@ -217,7 +217,7 @@ def estimate_parameter_set(param_init, s_x, n_cl, add_name='',path=''):
         'exp_temps': {exp: temp for exp, temp in zip(exps_calibr, temps)},
         'media': media, 
         }
-    fm.output.json_dump(calibr_presetup['exp_temps'], 'exp_temps_model_paper.json', dir='model_paper/')
+    fm.output.json_dump(calibr_presetup['exp_temps'], 'exp_temps_model_paper.json', dir=path)
 
     x0_bnds_all = tuple([(1., 4.5) for _ in range (calibr_presetup['n_cl']) for _ in range (len(calibr_presetup['exps']))])
     #inhib_bnds = [(0.02, 3.) if i!=j else (0., 0.)

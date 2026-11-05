@@ -126,14 +126,45 @@ class GaussianNeg2LogLik:
         return total
 
 
-def make_gaussian_neg2loglik(data_array, noise_model="absolute"):
+class MultinomialMaldiNeg2LogLik(GaussianNeg2LogLik):
+    """
+    -2 log L with MALDI as multinomial counts (calibr_setup['maldi_n'], cost_function.multinomial_residuals) and
+    the other data types as in GaussianNeg2LogLik:
+        sum_k n_k log(SSR_k / n_k) (NGS, MiBi: Gaussian, noise variance estimated) + D_maldi
+    D_maldi: sum of the squared deviance residuals, already -2 log L up to a constant (no variance to estimate).
+    is_deviance: per data type of J_vect, default [ngs, maldi, mibi] = (False, True, False).
+    """
+
+    def __init__(self, n_data, is_deviance=(False, True, False)):
+        super().__init__(n_data)
+        self.is_deviance = [bool(d) for d in is_deviance]
+        if len(self.is_deviance) != len(self.n_data):
+            raise ValueError("is_deviance: one value per data type of n_data")
+
+    def __call__(self, J_vect):
+        total = 0.
+        for J, n, dev in zip(J_vect, self.n_data, self.is_deviance):
+            if n == 0:
+                continue
+            J = np.asarray(J, dtype=float)
+            if np.any(np.isinf(J)):
+                return PENALTY
+            ssr = np.nansum(J)
+            total += ssr if dev else n * np.log(max(ssr, 1e-300) / n)
+        return total
+
+
+def make_gaussian_neg2loglik(data_array, noise_model="absolute", maldi_n=None):
     """
     Build a GaussianNeg2LogLik from ``calibr_setup['data_array']``
     (= extract_observables_from_df(dfs) -> (days, [obs_mibi, obs_maldi, obs_ngs])).
     The residual order of cost_withS / squared_differences is [ngs, maldi, mibi].
     noise_model: as calibr_setup['noise_model'] ('relative': degrees of freedom of the log residuals).
+    maldi_n: as calibr_setup['maldi_n'], gives a MultinomialMaldiNeg2LogLik (MALDI multinomial, N colonies per plate).
     """
     from .cost_function import count_data_points_noise
+    if maldi_n:
+        return MultinomialMaldiNeg2LogLik(count_data_points_noise(data_array, noise_model, maldi_n))
     return GaussianNeg2LogLik(count_data_points_noise(data_array, noise_model))
 
 

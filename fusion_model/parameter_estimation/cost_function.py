@@ -17,6 +17,12 @@ from fusion_model.parameter_estimation.media_matrix import S_squared_difference
 #   2 present species carries no information. Each composition has (present species - 1) degrees of freedom
 #   (count_data_points_noise), which -2 log L objectives must use as the number of data points.
 # ----------------------------------------------------------------------
+#
+# calibr_setup['maldi_n'] = N (None: off, needs noise_model 'relative' and pl.make_gaussian_neg2loglik(..., maldi_n=N)):
+#   MALDI as N identified colonies per plate, counts k_j = N * measured ~ Multinomial(N, p_j(model)). Residuals
+#   are the deviance residuals of the counts (multinomial_deviance_residuals), one per species incl. the undetected
+#   ones (k_j = 0); their sum of squares is -2 log L of the multinomial up to a constant, with no noise level to estimate.
+# ----------------------------------------------------------------------
 NOISE_MODELS = ('absolute', 'relative')
 
 
@@ -25,6 +31,57 @@ def _noise_model(calibr_setup):
     if nm not in NOISE_MODELS:
         raise ValueError(f"noise_model must be one of {NOISE_MODELS}, got {nm!r}")
     return nm
+
+
+def maldi_n_of(calibr_setup):
+    """Number of identified colonies per plate if MALDI is fitted with the multinomial likelihood, else None;
+    checks that the noise model and the objective fit to it."""
+    n = calibr_setup.get('maldi_n')
+    agg = calibr_setup.get('aggregation_func')
+    agg = getattr(agg, 'aggregation_func', agg)  # inside SelectedDataTypes
+    is_multinomial = type(agg).__name__ == 'MultinomialMaldiNeg2LogLik'
+    if not n:
+        if is_multinomial:
+            raise ValueError("aggregation MultinomialMaldiNeg2LogLik needs calibr_setup['maldi_n']")
+        return None
+    if _noise_model(calibr_setup) != 'relative':
+        raise ValueError("calibr_setup['maldi_n'] needs noise_model = 'relative'")
+    if not is_multinomial:
+        raise ValueError("calibr_setup['maldi_n'] needs the objective pl.make_gaussian_neg2loglik(..., maldi_n=N) "
+                         f"('neg2logL'), got {type(agg).__name__ if agg is not None else None}")
+    return int(n)
+
+
+def multinomial_counts(meas, n):
+    """Colony counts n * meas of MALDI proportions (NaN stays NaN); error if they are not whole numbers, i.e.
+    if the data do not come from n identified colonies per plate."""
+    k = np.asarray(meas, dtype=float) * n
+    if np.nanmax(np.abs(k - np.round(k)), initial=0.) > 1e-6:
+        raise ValueError(f'MALDI proportions are not multiples of 1/{n}: not {n} identified colonies per plate')
+    return np.round(k)
+
+
+def multinomial_deviance_residuals(k, mu, xp=np):
+    """
+    Signed deviance residuals sign(k - mu) * sqrt(2 (k log(k / mu) - (k - mu))) of counts k with expected counts
+    mu = N * p, for numpy or jax.numpy (xp). If sum(k) = sum(mu) = N within a composition, their sum of squares is
+    2 sum_j k_j log(k_j / mu_j) = -2 log L of the multinomial + constant. Undetected species: k = 0 -> -sqrt(2 mu).
+    """
+    mu = xp.maximum(mu, 1e-300)
+    delta = (k - mu) / mu
+    near = xp.abs(delta) < 1e-4  # k = mu: series expansion (sqrt(0) has no derivative)
+    series = (k - mu) / xp.sqrt(mu) * (1. - delta / 6.)
+    k_log = xp.where(k > 0, k * xp.log(xp.where(k > 0, k, 1.) / mu), 0.)
+    d = xp.where(near, 1., xp.maximum(2. * (k_log - (k - mu)), 1e-300))
+    return xp.where(near, series, xp.sign(k - mu) * xp.sqrt(d))
+
+
+def multinomial_residuals(meas, model, n):
+    """Deviance residuals of MALDI proportions meas against the model proportions (NaN where meas is NaN)."""
+    k = multinomial_counts(meas, n)
+    use = np.isfinite(k)
+    r = multinomial_deviance_residuals(np.where(use, k, 0.), np.where(use, np.asarray(model, dtype=float), 1.) * n)
+    return np.where(use, r, np.nan)
 
 
 def relative_mask(meas, kind):
@@ -49,14 +106,17 @@ def relative_residuals(meas, model, kind):
     return np.where(use, d, np.nan)
 
 
-def count_data_points_noise(data_array, noise_model='absolute'):
-    """Number of data points (degrees of freedom) per data type [ngs, maldi, mibi] for a noise model."""
+def count_data_points_noise(data_array, noise_model='absolute', maldi_n=None):
+    """Number of data points (degrees of freedom) per data type [ngs, maldi, mibi] for a noise model.
+    maldi_n: MALDI fitted with the multinomial likelihood, (species - 1) per measured composition incl. zeros."""
     _, (obs_mibi, obs_maldi, obs_ngs) = data_array
     if noise_model == 'relative':
         def comp_dof(obs):
             use = relative_mask(obs, 'composition')
             return int(np.sum(np.maximum(use.sum(axis=-2) - 1, 0)))
-        return [comp_dof(obs_ngs), comp_dof(obs_maldi), int(relative_mask(obs_mibi, 'counts').sum())]
+        dof_maldi = (int(np.sum(np.maximum(np.isfinite(obs_maldi).sum(axis=-2) - 1, 0))) if maldi_n
+                     else comp_dof(obs_maldi))
+        return [comp_dof(obs_ngs), dof_maldi, int(relative_mask(obs_mibi, 'counts').sum())]
     return [int(np.count_nonzero(np.isfinite(o))) for o in (obs_ngs, obs_maldi, obs_mibi)]
 
 
@@ -78,10 +138,15 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, mibi_max):
     _, obs_maldi = observable_MALDI(days, n_C, s_x, n_C0, const, days)
     _, obs_mibi = observable_MiBi(days, n_C, s_x, n_C0, const, days)
     if _noise_model(calibr_setup) == 'relative':
+        n_maldi = maldi_n_of(calibr_setup)
         sq = [relative_residuals(obs_ngs_meas[i], obs_ngs, 'composition')**2,
-              relative_residuals(obs_maldi_meas[i], obs_maldi, 'composition')**2,
+              None if n_maldi else relative_residuals(obs_maldi_meas[i], obs_maldi, 'composition')**2,
               relative_residuals(obs_mibi_meas[i], obs_mibi, 'counts')**2]
-        return tuple(np.where(np.isnan(q), 0., q) for q in sq)  # unused entries: 0 (dropped later)
+        sq = [None if q is None else np.where(np.isnan(q), 0., q) for q in sq]  # unused entries: 0 (dropped later)
+        if n_maldi:  # failed solve (NaN model) -> inf -> PENALTY in the aggregation
+            q = multinomial_residuals(obs_maldi_meas[i], obs_maldi, n_maldi)**2
+            sq[1] = np.where(np.isfinite(obs_maldi_meas[i]), np.nan_to_num(q, nan=np.inf, posinf=np.inf), 0.)
+        return tuple(sq)
     ll_ngs0 = (obs_ngs_meas[i] - obs_ngs)**2
     ll_maldi0 = (obs_maldi_meas[i] - obs_maldi)**2
     ll_mibi0 = (obs_mibi_meas[i] - obs_mibi)**2 /mibi_max
@@ -143,11 +208,15 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
 
     res, owner = [], []
     relative = _noise_model(calibr_setup) == 'relative'
+    n_maldi = maldi_n_of(calibr_setup)
     for obs, mdl_obs, scale, kind in ((obs_ngs_meas, m_ngs, 1., 'composition'),
                                       (obs_maldi_meas, m_maldi, 1., 'composition'),
                                       (obs_mibi_meas, m_mibi, mibi_max, 'counts')):
         obs = np.asarray(obs, dtype=float)
-        if relative:
+        if n_maldi and mdl_obs is m_maldi:
+            mask = np.isfinite(obs)
+            r = multinomial_residuals(obs, mdl_obs, n_maldi)
+        elif relative:
             mask = relative_mask(obs, kind)
             r = relative_residuals(obs, mdl_obs, kind)
         else:

@@ -110,7 +110,7 @@ if __name__ == "__main__":
     # RMSE for model complexity analysis
     n_cl = [4, 6, 8, 10, 12]
     n_media = 2
-    relnoise = 0.1
+    relnoise = pp.PC_SIGMA_LOG10
 
     rms, rms_mibi, rms_maldi, rms_ngs, cost = [np.zeros((len(n_cl))) for _ in range(5)]
     rms_param = np.zeros((3, len(n_cl))) # 3: param_ode, x0, s_x
@@ -192,15 +192,18 @@ if __name__ == "__main__":
 
     # RMSE for noise vs. n_species analysis
     n_cl = [4, 6, 8, 10, 12]
-    relnoise = [0., 0.1, 0.2, 0.3]
+    scenarios = list(pp.NOISE_SCENARIOS)  # low, baseline, high (paper_paths.py)
     n_media = 2
     path_base = pp.study_dir('noise_vs_nspecies')
-    rms, rms_mibi, rms_maldi, rms_ngs, cost = [np.zeros((len(n_cl), len(relnoise))) for _ in range(5)]
-    for j, rn in enumerate(relnoise):
+    rms, rms_mibi, rms_maldi, rms_ngs, cost = [np.zeros((len(n_cl), len(scenarios))) for _ in range(5)]
+    for j, scenario in enumerate(scenarios):
+        noise_setup = pp.noise_settings(scenario)
+        rn = noise_setup['pc_sigma_log10']
         for i, n in enumerate(n_cl):
-            # the 10 % noise runs are the model_complexity runs (noise_vs_nspecies/10noise/ is empty)
-            study = 'model_complexity' if rn == 0.1 else 'noise_vs_nspecies'
-            path = pp.study_path(study, n_cl=n, n_media=n_media, relnoise=rn)
+            # the baseline runs are the model_complexity runs
+            study = 'model_complexity' if scenario == 'baseline' else 'noise_vs_nspecies'
+            path = pp.study_path(study, n_cl=n, n_media=n_media, relnoise=rn, maldi_n=noise_setup['maldi_n'],
+                                 ngs_dm=noise_setup['ngs_dm'])
             add_name = pp.add_name(n, n_media)
             data, rms[i, j], rms_mibi[i, j], rms_maldi[i, j], rms_ngs[i, j], rms_per_species0, cost[i, j], _ = calculate_rmse(n, rn, path, add_name)
 
@@ -211,10 +214,10 @@ if __name__ == "__main__":
         fig.colorbar(im, orientation='vertical')
         ax.set_yticks(np.linspace(0, len(n_cl)-1, len(n_cl)))
         ax.set_yticklabels(n_cl, ha='right')
-        ax.set_xticks(np.linspace(0, len(relnoise)-1, len(relnoise)))
-        ax.set_xticklabels(relnoise, ha='right')
+        ax.set_xticks(np.linspace(0, len(scenarios)-1, len(scenarios)))
+        ax.set_xticklabels(scenarios, ha='right')
         ax.tick_params(axis='both', which='major', labelsize=12)
-        ax.set_xlabel('Relative noise level', fontsize=15)
+        ax.set_xlabel('Noise scenario', fontsize=15)
         ax.set_ylabel('Number of bacterial species', fontsize=15)
         plt.savefig(path_base+'rmse_noise_nspecies'+add+'.pdf', bbox_inches='tight')
         plt.close(fig)
@@ -222,7 +225,7 @@ if __name__ == "__main__":
     # RMSE for different media
     media = ['gen0','gen2', 'gen3', 'sel1', 'sel2', 'sel3', 'gen0+sel1', 'gen2+sel2', 'gen3+sel3', 'sel1+sel2', 'sel1+sel3', 'sel2+sel3']
     n = 6
-    rn = 0.1
+    rn = pp.PC_SIGMA_LOG10
     path_base = pp.study_dir('media_influence')
     rms, rms_mibi, rms_maldi, rms_ngs, cost = [np.zeros((len(media))) for _ in range(5)]
     for i, med in enumerate(media):

@@ -16,7 +16,7 @@ if __name__ == "__main__":
     plt.rcParams['figure.dpi'] = 500
     # Run folder (see paper_paths.py): reads <run>/calibration/, writes <run>/prediction/
     STUDY = 'model_complexity'  # 'model_complexity', 'noise_vs_nspecies' or 'media_influence' (MEDIA)
-    n_cl_run, n_media_run, relnoise = 10, 2, 0.1
+    n_cl_run, n_media_run, relnoise = 10, 2, pp.PC_SIGMA_LOG10
     MEDIA = None  # media_influence only, e.g. 'gen2+sel2'
     path = pp.run_dir(STUDY, n_cl=n_cl_run, n_media=n_media_run, relnoise=relnoise, media=MEDIA)
     workers = -1

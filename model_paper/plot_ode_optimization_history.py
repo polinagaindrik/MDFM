@@ -14,29 +14,38 @@ if __name__ == "__main__":
     # 'test_2sp': 2-species test of model_paper/test_2sp.py
     # 'test_2sp_sepS': test_2sp_sepS.py (S estimated separately, then x0 + ODE with S fixed)
     # 'test_2sp_withS': test_2sp_withS.py (S estimated together with x0 + ODE, S-step cost terms added)
-    CASE = 'test_2sp_withS'
+    CASE = 'test_2sp'
 
     DESIGN = 'rep3'  # test_2sp* only: design as in test_2sp.py ('base', 'rep3', 'temps6', ...)
     NORMALIZE_TRUE_S = False  # test_2sp / test_2sp_withS only: data from the truth rescaled to max(S) = 1
+    # Setup of the run to plot (folder and error bars), as in test_2sp.py / main_paper_calibr.py:
+    X0_DISTRIBUTION = 'lognormal'  # 'uniform' or 'lognormal'
+    MALDI_N = pp.MALDI_N                   # None: relative Gaussian MALDI noise; N: N identified colonies per plate
+    MALDI_FIT = 'multinomial'      # 'multinomial': folder suffix _mnfit; 'clr': log-ratio fit (test_2sp_sepS / _withS too)
+    NGS_DM = pp.NGS_DM             # None: relative Gaussian NGS noise; (N, A): Dirichlet-multinomial (test_2sp_sepS / _withS: None)
+    NGS_FIT = 'dm'                 # 'dm': folder suffix _dmfit; 'clr': log-ratio fit
+    MIBI_NOISE = 'log10'           # 'log10': plate-count noise relnoise on log10 of the counts; 'relative': relnoise * count
 
     if CASE.startswith('test_2sp'):
         n_cl = 2
         n_media = 2
-        relnoise = 0.1
-        data_path = pp.test_2sp_path(DESIGN, relnoise, NORMALIZE_TRUE_S and CASE != 'test_2sp_sepS')
+        relnoise = pp.PC_SIGMA_LOG10
+        data_path = pp.test_2sp_path(DESIGN, relnoise, NORMALIZE_TRUE_S and CASE != 'test_2sp_sepS',
+                                     x0=X0_DISTRIBUTION, maldi_n=MALDI_N, maldi_fit=MALDI_FIT, ngs_dm=NGS_DM, ngs_fit=NGS_FIT)
         # results of test_2sp_sepS / _withS in <data folder>_sepS/ resp. _withS/, data and truth in the data folder
         path = data_path if CASE == 'test_2sp' else data_path.rstrip('/') + CASE[len('test_2sp'):] + '/'
         add_name = f'_{int(n_cl)}dim_{int(n_media)}media_test'
         real_file = f'Result_real{add_name}.json'
     else:
         STUDY = 'model_complexity'  # 'model_complexity', 'noise_vs_nspecies' or 'media_influence'
-        n_cl = 4
+        n_cl = 6
         n_media = 2
-        relnoise = 0.1
+        relnoise = pp.PC_SIGMA_LOG10
         MEDIA = None  # media_influence only, e.g. 'gen2+sel2' (sets n_media)
         if MEDIA is not None:
             n_media = pp.media_n(MEDIA)
-        path = pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=MEDIA)
+        path = pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=MEDIA,
+                             x0=X0_DISTRIBUTION, maldi_n=MALDI_N, maldi_fit=MALDI_FIT, ngs_dm=NGS_DM, ngs_fit=NGS_FIT)
         add_name = pp.add_name(n_cl, n_media, media=MEDIA)
         real_file = 'Result_temp_together_real.json'
         data_path = path
@@ -105,8 +114,9 @@ if __name__ == "__main__":
     calibr_setup['s_x'] = s_x
     res_real = fm.output.read_from_json(real_file, dir=data_path)
     if CASE.startswith('test_2sp'):
-        # true S rows in the media order of fm.data.model_2media_expgensel, estimated S rows in sorted media order
-        s_true = dict(zip(['sel1', 'gen1'], np.array(res_real['s_x'], dtype=float).reshape((n_media, n_cl))))
+        # true S rows in the media order of the generator (selective, general), estimated S rows in sorted media order
+        s_true = dict(zip(sorted(calibr_setup['media'], reverse=True),
+                          np.array(res_real['s_x'], dtype=float).reshape((n_media, n_cl))))
         print(f'S estimated / true (rows {calibr_setup["media"]}):\n', s_x, '\n',
               np.array([s_true[m] for m in calibr_setup['media']]))
     param_ode_real = np.array(res_real['param_ode'])[n_cl*len(exps):]
@@ -117,4 +127,5 @@ if __name__ == "__main__":
     calibr_setup['dfs'] = data+[df_x]
     fm.plotting.plot_optimization_result(np.array(param_ode), calibr_setup, np.linspace(0, 17, 100),
                                          path=path2, clrs=clrs1, add_name=add_name+'_calibration',
-                                         relnoise=relnoise)
+                                         relnoise=relnoise, maldi_n=MALDI_N, ngs_dm=NGS_DM,
+                                         mibi_log10_sd=relnoise if MIBI_NOISE == 'log10' else None)

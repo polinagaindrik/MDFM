@@ -11,7 +11,7 @@ estimation (test_2sp_sepS.py, media_matrix.S_squared_difference) added to the ob
   (+ the S_MAX_PENALTY group, as in test_2sp.py)
 
 Parameter vector [x0 | ODE | S (media sorted)], as in test_2sp.py. The media relation term ties the ratio of
-the S rows (gen1 vs. sel1) to MiBi x MALDI on both media; the S groups depend on S only, not on x0 / ODE.
+the S rows (gen0 vs. sel1) to MiBi x MALDI on both media; the S groups depend on S only, not on x0 / ODE.
 The objectives are -2 log L forms with one group per residual type (each with its own variance), so the
 S terms enter like two further data types; 'calibration' (cost_sum_and_geometric_mean) is not offered.
 
@@ -36,6 +36,7 @@ from fusion_model.parameter_estimation import least_squares_fit as lsf
 from profile_likelihood_model_paper import (make_param_names, exp_temps_from_columns, resolve_fixed_values,
                                             fixed_values_from_result, print_parameter_table,
                                             copy_result_to_all_profiles)
+import paper_paths as pp
 from test_2sp import (N_CL, PARAM_ODE_TRUE, DESIGNS, data_folder, true_parameter_vector,
                       normalize_truth_max_s, rescale_truth_max_s, print_comparison)
 
@@ -127,13 +128,13 @@ if __name__ == "__main__":
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
     n_cl = N_CL
     n_media = 2
-    relnoise = 0.1
+    relnoise = pp.PC_SIGMA_LOG10
     # initial values of the in-silico data: setup/Initial_values_x0_paper_<X0_DISTRIBUTION>.json ('uniform' or
     # 'lognormal', see main_insilicomodel_generation.py); other than 'uniform': folder suffix _x0<distribution>
     X0_DISTRIBUTION = 'lognormal'
     # MALDI noise of the in-silico data: None = relative Gaussian noise (relnoise), N = identification of N colonies
     # per plate (multinomial sampling, rare species can be missed; ZL2030: up to 48, median 46); N: suffix _maldi<N>
-    MALDI_N = 48
+    MALDI_N = pp.MALDI_N
     # plate-count (MiBi) noise: 'log10' = Gaussian noise with standard deviation relnoise on log10 of the counts
     # (relnoise 0.1 -> 0.1 log10 units, 0.3 -> 0.3), 'relative' = relnoise * count (as before)
     MIBI_NOISE = 'log10'
@@ -220,7 +221,7 @@ if __name__ == "__main__":
                     min_ci_points=MIN_CI_POINTS, max_ci_rounds=MAX_CI_ROUNDS,
                     extend_n_restarts=2)  # multistart per new point (steps 2 and 3)
 
-    data_path = data_folder(DESIGN, relnoise, NORMALIZE_TRUE_S, x0=X0_DISTRIBUTION, maldi_n=MALDI_N)
+    data_path = data_folder(DESIGN, relnoise, NORMALIZE_TRUE_S, x0=X0_DISTRIBUTION, maldi_n=MALDI_N, maldi_fit='clr', ngs_dm=None)
     path = data_path.rstrip('/') + '_withS/'
     os.makedirs(path, exist_ok=True)
     start = time.time()

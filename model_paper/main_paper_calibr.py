@@ -39,19 +39,25 @@ if __name__ == "__main__":
     # initial values of the in-silico data: setup/Initial_values_x0_paper_<X0_DISTRIBUTION>.json ('uniform' or
     # 'lognormal', see main_insilicomodel_generation.py); other than 'uniform': folder suffix _x0<distribution>
     X0_DISTRIBUTION = 'lognormal'
-    # MALDI noise of the in-silico data: None = relative Gaussian noise (relnoise), N = identification of N colonies
-    # per plate (multinomial sampling, rare species can be missed); N: folder suffix _maldi<N>
-    MALDI_N = 48
-    # plate-count (MiBi) noise: 'log10' = Gaussian noise with standard deviation relnoise on log10 of the counts
-    # (relnoise 0.1 -> 0.1 log10 units, 0.3 -> 0.3), 'relative' = relnoise * count (as before)
-    MIBI_NOISE = 'log10'
+    # Noise of the in-silico data: pp.NOISE_SCENARIO in paper_paths.py, 'low', 'baseline' or 'high'. Each data type has its own
+    # setting, folder name: _<sigma * 100>noise, _maldi<N>, _ngsA<A>.
+    NOISE_SCENARIO = pp.NOISE_SCENARIO
+    noise_setup = pp.noise_settings(NOISE_SCENARIO)
+    PC_SIGMA_LOG10 = noise_setup['pc_sigma_log10']  # plate counts: Gaussian noise, standard deviation on log10 of the counts
+    MALDI_N = noise_setup['maldi_n']                # MALDI: N identified colonies per plate, multinomial
+    NGS_DM = noise_setup['ngs_dm']                  # NGS: (N, A), N reads per sample, Dirichlet-multinomial, concentration A
+    # fit of multinomial MALDI data: 'multinomial' = multinomial likelihood incl. undetected species (folder suffix
+    # _mnfit, needs the objective 'neg2logL'), 'clr' = log-ratio residuals, undetected species dropped
+    MALDI_FIT = 'multinomial'
+    # fit of Dirichlet-multinomial NGS data: 'dm' = Dirichlet-multinomial likelihood incl. undetected species (folder suffix
+    # _dmfit, needs the objective 'neg2logL'), 'clr' = log-ratio residuals, undetected species dropped
+    NGS_FIT = 'dm'
     temps = DESIGNS[DESIGN]['temps']
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
     n_cl = 6
     n_media = 2
-    relnoise = 0.1
     ntr = 1                        # keep 1: replicates via repeated temperatures (see DESIGNS)
-    MEDIA = 'sel1'  # media_influence only: 'gen1', ..., 'sel3', 'gen1+sel1', 'gen2+sel2', ... (sets n_media and GEN_MODEL)
+    MEDIA = 'sel1'  # media_influence only: 'gen0', ..., 'sel3', 'gen0+sel1', 'gen2+sel2', ... (sets n_media and GEN_MODEL)
     workers = -1                   # differential evolution: -1 = all cores
     n_jobs = 22                    # local multistart processes
 
@@ -94,9 +100,9 @@ if __name__ == "__main__":
     # 'neg2logL'   : -2 log L, data types weighted by their number of points
     # 'geomean'    : -2 log L form of cost_sum_and_geometric_mean (same optimum, equal weight per data type)
     # 'calibration': cost_sum_and_geometric_mean itself (as before)
-    # 'known_noise': -2 log L with a KNOWN noise level KNOWN_SIGMA, e.g. for noise-free data (relnoise = 0);
+    # 'known_noise': -2 log L with a KNOWN noise level KNOWN_SIGMA, e.g. for noise-free data;
     #                the objectives above estimate the noise from the residuals and diverge for noise-free data.
-    CALIBRATION_OBJECTIVE = 'neg2logL' if relnoise > 0 else 'known_noise'
+    CALIBRATION_OBJECTIVE = 'neg2logL' if PC_SIGMA_LOG10 > 0 else 'known_noise'
     # noise level for 'known_noise': one value or [NGS, MALDI, MiBi], in the units of the residuals
     # (NOISE_MODEL = 'relative': standard deviation of the log residuals, 0.1 ~ 10 % relative noise)
     KNOWN_SIGMA = 0.1
@@ -106,16 +112,18 @@ if __name__ == "__main__":
     if media_run is not None:
         n_media = pp.media_n(media_run)
     add_name = pp.add_name(n_cl, n_media, media=media_run)
-    path = pp.ensure_dir(pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=relnoise, media=media_run,
-                                       design=DESIGN, x0=X0_DISTRIBUTION, maldi_n=MALDI_N))
+    path = pp.ensure_dir(pp.study_path(STUDY, n_cl=n_cl, n_media=n_media, relnoise=PC_SIGMA_LOG10, media=media_run,
+                                       design=DESIGN, x0=X0_DISTRIBUTION, maldi_n=MALDI_N, maldi_fit=MALDI_FIT,
+                                       ngs_dm=NGS_DM, ngs_fit=NGS_FIT))
+    print(f'Noise scenario {NOISE_SCENARIO!r}: plate counts sigma = {PC_SIGMA_LOG10} log10, MALDI N = {MALDI_N}, NGS (N, A) = {NGS_DM}')
     print(f'Design {DESIGN!r}: temperatures {temps}, days {days_meas if days_meas is not None else "0..17"}, '
           f'output {path} (files *{add_name}*)')
     start = time.time()
 
     # 1) in-silico data -------------------------------------------------
     # data generator = media of the in-silico data, must match n_media (functions in fusion_model/data/insilico_models.py):
-    #   1 medium : fm.data.model_1media_exp_sel1 / _sel2 / _sel3 / _gen1 / _gen2 / _gen3
-    #   2 media  : fm.data.model_2media_expgensel (sel1 + gen1), _expgen2sel2, _expgen3sel3, _expsel1sel2, ...
+    #   1 medium : fm.data.model_1media_exp_sel1 / _sel2 / _sel3 / _gen0 / _gen1 / _gen2 / _gen3
+    #   2 media  : fm.data.model_2media_expgensel (sel1 + gen0), _expgen1sel1, _expgen2sel2, _expgen3sel3, _expsel1sel2, ...
     #   media_influence: chosen from MEDIA automatically
     GEN_MODEL = fm.data.model_2media_expgensel
     if media_run is not None:
@@ -130,9 +138,9 @@ if __name__ == "__main__":
     if RUN_DATA or not os.path.exists(path + f'dataframe_mibi{add_name}_preprocessed.pkl'):
         dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(
             GEN_MODEL, n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode_true.copy(),
-            x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name,
-            t_meas=days_meas, maldi_n=MALDI_N,
-            mibi_log10_sd=relnoise if MIBI_NOISE == 'log10' else None)
+            x10=x10, inhib=True, noise=0., rel_noise=0., cutoff=0., cutoff_prop=0., path=path, add_name=add_name,
+            t_meas=days_meas, maldi_n=MALDI_N, ngs_dm=NGS_DM,
+            mibi_log10_sd=PC_SIGMA_LOG10)
     else:
         import pandas as pd
         dfs = [pd.read_pickle(path + f'dataframe_{k}{add_name}_preprocessed.pkl') for k in ['mibi', 'maldi', 'ngs']]
@@ -165,10 +173,13 @@ if __name__ == "__main__":
     calibr_setup['data_array'] = fm.dtf.extract_observables_from_df(dfs)
     calibr_setup['s_max_penalty'] = S_MAX_PENALTY
     calibr_setup['noise_model'] = NOISE_MODEL
+    calibr_setup['maldi_n'] = MALDI_N if MALDI_FIT == 'multinomial' else None  # MALDI likelihood, see cost_function.py
+    calibr_setup['ngs_dm'] = NGS_DM if NGS_FIT == 'dm' else None  # NGS likelihood, see cost_function.py
 
     def make_objective(name):
         """Aggregation function of an objective name (see CALIBRATION_OBJECTIVE)."""
-        return {'neg2logL': pl.make_gaussian_neg2loglik(calibr_setup['data_array'], NOISE_MODEL),
+        return {'neg2logL': pl.make_gaussian_neg2loglik(calibr_setup['data_array'], NOISE_MODEL, maldi_n=calibr_setup['maldi_n'],
+                                                 ngs_dm=calibr_setup['ngs_dm']),
                 'geomean': pl.make_geomean_neg2loglik(calibr_setup['data_array'], NOISE_MODEL),
                 'calibration': fm.pest.cost_sum_and_geometric_mean,
                 'known_noise': pl.make_known_noise_neg2loglik(calibr_setup['data_array'], KNOWN_SIGMA, NOISE_MODEL)}[name]
@@ -187,7 +198,8 @@ if __name__ == "__main__":
                     import shutil
                     shutil.copy(f, bak)
                     print(f'Kept the previous result (objective {old_obj}) as {bak}')
-        fm.output.json_dump(dict(data, objective=CALIBRATION_OBJECTIVE, noise_model=NOISE_MODEL, backend=BACKEND),
+        fm.output.json_dump(dict(data, objective=CALIBRATION_OBJECTIVE, noise_model=NOISE_MODEL, backend=BACKEND,
+                                 maldi_n=calibr_setup['maldi_n'], ngs_dm=calibr_setup['ngs_dm']),
                             fname, dir=path)
 
     calibr_setup['aggregation_func'] = make_objective(CALIBRATION_OBJECTIVE)

@@ -14,7 +14,7 @@ if __name__ == "__main__":
     STUDY = 'model_complexity'
     n_cl = 6
     n_media = 2
-    relnoise = 0.1
+    relnoise = pp.PC_SIGMA_LOG10
     MEDIA = None  # media_influence only, e.g. 'gen2+sel2' (sets n_media)
     if MEDIA is not None:
         n_media = pp.media_n(MEDIA)

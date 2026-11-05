@@ -56,18 +56,18 @@ if __name__ == "__main__":
     SCENARIOS = ['ngs_maldi', 'ngs_mibi', 'maldi_mibi']  # subset of SCENARIOS_ALL, run one after the other
     n_cl = N_CL
     n_media = 2
-    relnoise = 0.1
+    relnoise = pp.PC_SIGMA_LOG10
     # initial values of the in-silico data: setup/Initial_values_x0_paper_<X0_DISTRIBUTION>.json ('uniform' or
     # 'lognormal', see main_insilicomodel_generation.py); other than 'uniform': folder suffix _x0<distribution>
     X0_DISTRIBUTION = 'lognormal'
     # MALDI noise of the in-silico data: None = relative Gaussian noise (relnoise), N = identification of N colonies
     # per plate (multinomial sampling, rare species can be missed; ZL2030: up to 48, median 46); N: suffix _maldi<N>
-    MALDI_N = 48
+    MALDI_N = pp.MALDI_N
     # plate-count (MiBi) noise: 'log10' = Gaussian noise with standard deviation relnoise on log10 of the counts
     # (relnoise 0.1 -> 0.1 log10 units, 0.3 -> 0.3), 'relative' = relnoise * count (as before)
     MIBI_NOISE = 'log10'
-    out_root = f'model_paper/out/test_2sp_datatypes{pp.x0_suffix(X0_DISTRIBUTION)}{pp.maldi_suffix(MALDI_N)}/'  # one subfolder per scenario
-    data_path = data_folder('base', relnoise, x0=X0_DISTRIBUTION, maldi_n=MALDI_N)  # in-silico data (shared with test_2sp.py)
+    out_root = f'model_paper/out/test_2sp_datatypes{pp.x0_suffix(X0_DISTRIBUTION)}{pp.maldi_suffix(MALDI_N, 'clr')}/'  # one subfolder per scenario
+    data_path = data_folder('base', relnoise, x0=X0_DISTRIBUTION, maldi_n=MALDI_N, maldi_fit='clr', ngs_dm=None)  # in-silico data (shared with test_2sp.py)
     temps = [2., 6., 10.]          # 3 experiments, 3 temperatures
     ntr = 1
     add_name = f'_{n_cl}dim_{n_media}media_test'

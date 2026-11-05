@@ -30,8 +30,8 @@ if __name__ == "__main__":
     # STUDY: 'test_2sp' (DESIGN as in test_2sp.py) or 'model_complexity', 'noise_vs_nspecies', 'media_influence'
     # (MEDIA), folders see paper_paths.py
     STUDY = "test_2sp"
-    DESIGN = "base"
-    n_cl, n_media, relnoise = 2, 2, 0.1
+    DESIGN = "rep3"
+    n_cl, n_media, relnoise = 2, 2, pp.PC_SIGMA_LOG10
     MEDIA = None  # media_influence only, e.g. "gen2+sel2" (sets n_media)
     if STUDY == "test_2sp":
         add_name = f"_{int(n_cl)}dim_{int(n_media)}media_test"

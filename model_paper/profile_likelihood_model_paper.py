@@ -209,9 +209,13 @@ def build_calibr_setup(path, add_name, n_cl, n_media, objective="neg2logL"):
         print(f"Calibration used s_max_penalty = {calibr_setup['s_max_penalty']}: applied in the profiles too")
     calibr_setup["noise_model"] = result.get("noise_model", "absolute")  # same noise model as the calibration
     print(f"Noise model of the calibration: {calibr_setup['noise_model']}")
+    calibr_setup["maldi_n"] = result.get("maldi_n")  # same MALDI likelihood as the calibration
+    calibr_setup["ngs_dm"] = result.get("ngs_dm")  # same NGS likelihood as the calibration
     if objective == "neg2logL":
         calibr_setup["aggregation_func"] = pl.make_gaussian_neg2loglik(calibr_setup["data_array"],
-                                                                       calibr_setup["noise_model"])
+                                                                       calibr_setup["noise_model"],
+                                                                       maldi_n=calibr_setup["maldi_n"],
+                                                                       ngs_dm=calibr_setup["ngs_dm"])
     elif objective == "geomean":
         calibr_setup["aggregation_func"] = pl.make_geomean_neg2loglik(calibr_setup["data_array"],
                                                                       calibr_setup["noise_model"])
@@ -232,7 +236,7 @@ if __name__ == "__main__":
     STUDY = "model_complexity"
     n_cl = 4
     n_media = 2
-    relnoise = 0.1
+    relnoise = pp.PC_SIGMA_LOG10
     MEDIA = None  # media_influence only, e.g. "gen2+sel2" (sets n_media)
     if MEDIA is not None:
         n_media = pp.media_n(MEDIA)

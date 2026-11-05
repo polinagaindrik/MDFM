@@ -44,6 +44,7 @@ from fusion_model.parameter_estimation import profile_likelihood as pl
 from profile_likelihood_model_paper import (make_param_names, exp_temps_from_columns, resolve_fixed_values,
                                             fixed_values_from_result, print_parameter_table,
                                             copy_result_to_all_profiles)
+import paper_paths as pp
 from test_2sp import N_CL, PARAM_ODE_TRUE, GEN_MEDIA, DESIGNS, data_folder, print_comparison
 
 import numpy as np
@@ -109,7 +110,8 @@ def load_true(path, add_name, media_sorted, n_cl):
     """True S (media sorted) and true [x0 | ODE] vector from Result_real<add_name>.json."""
     tr = fm.output.read_from_json(f'Result_real{add_name}.json', dir=path)
     s_true = np.array(tr['s_x'], dtype=float).reshape(len(GEN_MEDIA), n_cl)
-    s_true = np.array([s_true[GEN_MEDIA.index(m)] for m in media_sorted])
+    order = sorted(media_sorted, reverse=True)  # generator order: selective, general
+    s_true = np.array([s_true[order.index(m)] for m in media_sorted])
     return s_true, np.ravel(tr['param_ode']).astype(float)
 
 
@@ -120,19 +122,19 @@ if __name__ == "__main__":
     # in-silico data: the same design and noise level as in test_2sp.py -> same data folder (shared), the
     # results of this script go to <data folder>_sepS/ (base design, 10 % noise: model_paper/out/test_2sp_sepS/)
     DESIGN = 'rep3'                # key of DESIGNS in test_2sp.py ('base', 'rep3', 'temps6', ...)
-    relnoise = 0.1                 # 0: noise-free data (use OBJECTIVE = 'known_noise')
+    relnoise = pp.PC_SIGMA_LOG10         # 0: noise-free data (use OBJECTIVE = 'known_noise')
     # initial values of the in-silico data: setup/Initial_values_x0_paper_<X0_DISTRIBUTION>.json ('uniform' or
     # 'lognormal', see main_insilicomodel_generation.py); other than 'uniform': folder suffix _x0<distribution>
     X0_DISTRIBUTION = 'lognormal'
     # MALDI noise of the in-silico data: None = relative Gaussian noise (relnoise), N = identification of N colonies
     # per plate (multinomial sampling, rare species can be missed; ZL2030: up to 48, median 46); N: suffix _maldi<N>
-    MALDI_N = 48
+    MALDI_N = pp.MALDI_N
     # plate-count (MiBi) noise: 'log10' = Gaussian noise with standard deviation relnoise on log10 of the counts
     # (relnoise 0.1 -> 0.1 log10 units, 0.3 -> 0.3), 'relative' = relnoise * count (as before)
     MIBI_NOISE = 'log10'
     temps = DESIGNS[DESIGN]['temps']
     days_meas = DESIGNS[DESIGN].get('days')  # None: default 0..17
-    data_path = data_folder(DESIGN, relnoise, x0=X0_DISTRIBUTION, maldi_n=MALDI_N)
+    data_path = data_folder(DESIGN, relnoise, x0=X0_DISTRIBUTION, maldi_n=MALDI_N, maldi_fit='clr', ngs_dm=None)
     path = data_path.rstrip('/') + '_sepS/'
     n_cl = N_CL
     n_media = 2

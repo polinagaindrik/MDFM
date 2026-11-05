@@ -12,21 +12,21 @@ if __name__ == "__main__":
     plt.rcParams['figure.dpi'] = 500
     # 'paper'   : calibration of one study (STUDY and n_cl etc. set below, folders see paper_paths.py)
     # 'test_2sp': 2-species test of model_paper/test_2sp.py
-    CASE = 'test_2sp'
+    CASE = 'paper'
 
-    DESIGN = 'base'  # test_2sp only: design as in test_2sp.py ('base', 'rep3', 'temps6', ...)
+    DESIGN = 'rep3'  # test_2sp only: design as in test_2sp.py ('base', 'rep3', 'temps6', ...)
 
     if CASE == 'test_2sp':
         n_cl = 2
         n_media = 2
-        relnoise = 0.1
+        relnoise = pp.PC_SIGMA_LOG10
         path = pp.test_2sp_path(DESIGN, relnoise)
         add_name = f'_{int(n_cl)}dim_{int(n_media)}media_test'
     else:
         STUDY = 'model_complexity'  # 'model_complexity', 'noise_vs_nspecies' or 'media_influence'
         n_cl = 4
         n_media = 2
-        relnoise = 0.1
+        relnoise = pp.PC_SIGMA_LOG10
         MEDIA = None  # media_influence only, e.g. 'gen2+sel2' (sets n_media)
         if MEDIA is not None:
             n_media = pp.media_n(MEDIA)

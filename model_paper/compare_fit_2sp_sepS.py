@@ -26,6 +26,7 @@ sys.path.append(os.getcwd())
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import fusion_model as fm
 from profile_likelihood_model_paper import exp_temps_from_columns, fixed_values_from_result
+import paper_paths as pp
 from test_2sp import N_CL, data_folder, true_parameter_vector
 from test_2sp_withS import S_GROUPS, S_term_masks, _S_term_raw
 
@@ -64,14 +65,14 @@ if __name__ == "__main__":
     # Settings (as in test_2sp.py / test_2sp_sepS.py)
     # ================================================================
     DESIGN = 'rep3'
-    relnoise = 0.1
+    relnoise = pp.PC_SIGMA_LOG10
     NORMALIZE_TRUE_S = False       # test_2sp.py setting (data folder suffix '_normS')
     NOISE_MODEL = 'relative'       # residuals of the comparison ('absolute' or 'relative')
     n_media = 2
     add_name = f'_{N_CL}dim_{n_media}media_test'
     # ================================================================
-    path_joint = data_folder(DESIGN, relnoise, NORMALIZE_TRUE_S)
-    path_sep = data_folder(DESIGN, relnoise).rstrip('/') + '_sepS/'
+    path_joint = data_folder(DESIGN, relnoise, NORMALIZE_TRUE_S, maldi_fit='clr', ngs_dm=None)
+    path_sep = data_folder(DESIGN, relnoise, maldi_fit='clr', ngs_dm=None).rstrip('/') + '_sepS/'
     path_withS = path_joint.rstrip('/') + '_withS/'
     n_cl = N_CL
 

@@ -6,44 +6,59 @@
 <details>
   <summary>Table of Contents</summary>
   <ol>
-    <li>
-      <a href="#about-the-project">About The Project</a>
-    </li>
-        <li>
-      <a href="#theoretical-background">Theoretical Background</a>
-      <ul>
-        <li><a href="#data-fusion-model">Data Fusion Model</a></li>
-      </ul>
+    <li><a href="#about-the-project">About The Project</a></li>
+    <li><a href="#theoretical-background">Theoretical Background</a></li>
     <li>
       <a href="#getting-started">Getting Started</a>
       <ul>
         <li><a href="#prerequisites">Prerequisites</a></li>
         <li><a href="#installation">Installation</a></li>
+        <li><a href="#quick-start">Quick Start</a></li>
       </ul>
-    <li><a href="#usage">Usage</a></li>
-    <ul>
-        <li><a href="#download-data">Download Data</a></li>
+    </li>
+    <li>
+      <a href="#usage">Usage</a>
+      <ul>
+        <li><a href="#prepare-data">Prepare Data</a></li>
         <li><a href="#model-calibration">Model Calibration</a></li>
         <li><a href="#model-prediction">Model Prediction</a></li>
-    </ul>
+        <li><a href="#local-refinement-and-identifiability">Local Refinement and Identifiability</a></li>
+      </ul>
+    </li>
+    <li><a href="#repository-structure">Repository Structure</a></li>
+    <li><a href="#license">License</a></li>
   </ol>
 </details>
-
 
 
 <!-- ABOUT THE PROJECT -->
 ## About The Project
 
-`fusion_model` is a tool developed for the project [Zukunftslabor2030 (ZL2030)](https://zukunftslabor2030.de) that aims the dynamic assessment and prediction of food spoilage on the basis of different measurement data.
-This tool focuses on developing a temperature-dependent data fusion shelf-life model by analyzing bacterial count data (MiBi) and bacterial diversity data (NGS, MALDI-ToF).
-By calibrating the model with microbiological measurements, it predicts the shelf life of the product based on input storage temperature conditions and an initial number of bacteria.
+MDFM (Python package `fusion_model`) is a temperature-dependent model of bacterial growth in food that fuses three kinds of microbiome measurements:
+
+- bacterial plate counts on different media (microbiology, MiBi),
+- species proportions from MALDI-ToF,
+- species proportions from amplicon sequencing (NGS).
+
+The package calibrates the model on these data, estimating the growth parameters of each species, the interactions between species and the recovery of each species on each medium. With the calibrated model it then predicts the bacterial dynamics of new experiments from their storage temperature and initial values, and analyses which parameters the data can identify.
+
+It was developed for the project [Zukunftslabor2030 (ZL2030)](https://zukunftslabor2030.de), which aims at the dynamic assessment and prediction of food spoilage. It can be used with the ZL2030 measurements or with generated in-silico data.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+
 ## Theoretical Background
 
-### Data Fusion Model
-The mathematical model developed for data fusion of the microbiome data could be soon found in the coming out paper.
+The mathematical model will be described in a forthcoming paper. In short, the main model `fusion_model2` is a system of ODEs for the bacterial count of each species with a lag phase, temperature-dependent growth rates, a common carrying capacity and pairwise inhibition between species. Each data type observes these counts differently:
+
+- plate counts and MALDI-ToF see the species filtered by a media matrix `S` (media x species),
+- NGS sees the proportions of the species, weighted by `T_x`.
+
+The parameter vector of a calibration with `fm.pest.cost_withS` and `fusion_model2` is:
+
+```
+[ x0 (n_cl per experiment, log10) | lambda_1 (n_cl) | lambda_exp (n_cl) | alpha_0 (n_cl) | alpha_exp (n_cl) | N_1 | N_exp | k_ij (n_cl x n_cl) | S (n_media x n_cl) ]
+```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -53,113 +68,178 @@ The mathematical model developed for data fusion of the microbiome data could be
 
 ### Prerequisites
 
-For this tool a working installation of the python scripting language version `python 3.11` is required. All necessary libraries could be found in `requirements.txt` and can be installed thin `pip`:
-```sh
-  pip install -r requirements.txt
-```
+- Python 3.11 or newer
+- A LaTeX installation with `dvipng` for the figures (the plotting functions use `text.usetex`)
 
 ### Installation
 
-To get started with the `fusion_model` project the user is expected to clone the git repository:
+Clone the repository and install the package, ideally in a virtual environment:
+
 ```sh
-   git clone https://github.com/polinagaindrik/fusion_model
+git clone https://github.com/polinagaindrik/MDFM
+cd MDFM
+pip install -e .
 ```
-  
+
+Two optional extras speed up the calibration:
+
+```sh
+pip install -e ".[numba]"    # about 6x faster ODE solves of fusion_model2
+pip install -e ".[jax]"      # exact derivatives for the local fits (backend='jax' of fm.pest.local_optimization)
+```
+
+For a GPU, install JAX with `pip install "jax[cuda12]"`. Note that `requirements.txt` installs the dependencies including both extras, but not the package itself.
+
+### Quick Start
+
+[`main.py`](main.py) is a complete example on in-silico data that needs no measurement data or setup files. It generates data for 2 species on 2 media, calibrates the model, predicts a new experiment and writes the results and figures to `out/main_example/`:
+
+```sh
+python main.py
+```
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
+
 
 <!-- USAGE EXAMPLES -->
 ## Usage
 
-To start with the Digital Twin project we use a `main.py` file that allows us to download data, calibrate the model, and predict the behavior of the model for input temperature conditions. Below is a brief overview of the primary functions available.
+The steps below follow [`main.py`](main.py), which shows them in context. All snippets use:
 
-At the beginning we import the functions of the source code to our main file:
-```sh
-  import os
-  import sys
-  sys.path.append(os.getcwd())
-  import DT_diversity as fm
+```python
+import fusion_model as fm
+```
+
+The main submodules are `fm.data` (data), `fm.mdl` (ODE models), `fm.pest` (parameter estimation), `fm.plotting` and `fm.output` (JSON results).
+
+### Prepare Data
+
+All functions return the data frames `dfs = [df_mibi, df_maldi, df_ngs]`, the species names, the NGS weights `T_x` and the predefined entries of the media matrix `s_x_predefined` (`nan` = to be estimated).
+
+**In-silico data.** A generator such as `fm.data.model_2media_expgensel` simulates `fusion_model2` with given parameters:
+
+```python
+S_matrix_setup = {'s_selective': [[0.87, 0.09]], 's_general0': [0.7, 0.56], 'T_x': [1., 1.]}
+dfs, bact, T_x, s_x_predefined = fm.data.prepare_insilico_data(
+    fm.data.model_2media_expgensel, n_cl, temps, ntr, S_matrix_setup,
+    param_ode=param_ode_true, x10=x10, path=path, inhib=True, rel_noise=0.1)
+```
+
+Here `n_cl` is the number of species, `temps` the temperature of each experiment, `ntr` the number of trajectories per temperature and `x10` the log10 initial values (experiments x species). The folder `path` has to exist. Instead of the relative Gaussian noise `rel_noise`, each data type can have a noise model of its own: `mibi_log10_sd` (Gaussian on log10 of the counts), `maldi_n` (multinomial) and `ngs_dm` (Dirichlet-multinomial).
+
+**ZL2030 data.** The measurements are stored in the project's OpenBIS and need a ZL2030 login. Download them to the matching subfolders of `experiments/` (`microbiology`, `MALDI`, `NGS`). If the password is left out, it is asked for interactively:
+
+```python
+fm.data.download_microbiology_from_openbis(path, username)
+fm.data.download_MALDI_from_openbis(path, username)
+fm.data.download_NGS_from_openbis(path, username)
+```
+
+Then read the experiments to use for each data type. This also needs the temperature of each experiment in `inputs_fusionmodel/exp_temps.json`. [`examples/create_exp_temps_dict.py`](examples/create_exp_temps_dict.py) creates this file from the temperature profiles `input_6St_interruption.json` and `input_12St_interruption.json` in the same folder. These input files are not part of the repository:
+
+```python
+dfs, bact, T_x, s_x_predefined = fm.data.prepare_ZL2030_data(exps_mibi, exps_maldi, exps_ngs, cutoff=0.01, path=path)
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-### Download Data
-
-The Excel sheets containing microbiology (MiBi) experimental data stored
-in OpenBis can be easily downloaded with the function:
-```sh
-fm.data.download_microbiology_from_openbis(path, username, password)
-```
-Here `path="/../"` defines the location where Excel files are saved.
-`username`, `password` are personal login data for OpenBis.
-
-  
-MALDI-ToF data:
-```sh
-fm.data.download_MALDI_from_openbis(path, username, password)
-```
-NGS data:
-```sh
-fm.data.download_NGS_from_openbis(path, username, password)
-```
-
-To prepare the ZL2030 data for model calibration use the function:
-```sh
-dfs_calibr, bact, T, s_predef = fm.data.prepare_ZL2030_data(exps_mibi, exps_maldi, exps_ngs, cutoff=0.01)
-```
-where `exps_mibi`, `exps_maldi`, `exps_ngs` define available experiments for each data type that we want to use for model calibration.
-
-Or another way to get the data is to generate the in-silico data for a defined insilico_model (e.g. from fm.data.):
-```sh
-dfs_calibr, bact, T, s_predef =  fm.data.prepare_insilico_data(insilico_model, temps, ntr)
-```
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
 
 ### Model Calibration
 
-At the beginning we need to define calibration setup, for example:
-```sh
-calibr_setup={
-        'model': ode_model,
-        'param_bnds':p_bnds,
-        'T_x': T,
-        'workers': -1,
-        'output_path': path,
-        'n_cl': n_cl,
-        'n_media': n_media,
-        'dfs': dfs_calibr,
-        'aggregation_func': fm.pest.cost_sum_and_geometric_mean,
-        'exps': exps_mibi,
-        'exp_temps': ['V01':2.,]
-        }
+Define the calibration setup. `define_calibr_setup_insilico` adds the parameter bounds, use `define_calibr_setup_ZL2030` for the ZL2030 data:
+
+```python
+calibr_setup = fm.pest.define_calibr_setup_insilico({
+    'model': fm.mdl.fusion_model2,
+    'T_x': T_x,
+    'workers': -1,                     # processes of differential evolution, -1 = all cores
+    'output_path': path,
+    'n_cl': n_cl,
+    'n_media': n_media,
+    'media': media,                    # sorted media names, e.g. ['gen0', 'sel1']
+    'dfs': dfs,
+    'aggregation_func': fm.pest.cost_sum_and_geometric_mean,
+    'exps': exps,                      # e.g. ['V01', 'V02', 'V03']
+    'exp_temps': exp_temps,            # e.g. {'V01': 2., 'V02': 6., 'V03': 10.}
+}, inhib=True, s_x_predefined=s_x_predefined)
 ```
 
-To run the parameter estimation function:
-```sh
-param_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_setup)[0]
+Run the parameter estimation (differential evolution). The history of the optimization is written to `fm.pest.optimization.output_file`, by default in `out/`, so this folder has to exist or the file has to be set to another path:
+
+```python
+param_opt, cost_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_setup)
 ```
-To plot the estimated model for each experiment:
-```sh
-fm.plotting.plot_optimization_result(param_opt, calibr_setup, time_array)
+
+Split the result and plot the fit for each experiment:
+
+```python
+param_ode = param_opt[n_cl*len(exps):-n_cl*n_media]
+s_x = param_opt[-n_cl*n_media:].reshape((n_media, n_cl))
+fm.plotting.plot_optimization_result(param_opt[:-n_cl*n_media], dict(calibr_setup, s_x=s_x), t_plot, path=path)
 ```
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### Model Prediction
 
-The initial conditions for each experiment are different and needed to be estimated for correct model prediction. For this we define prediction setup with `param_ode` and `s_x` estimated in `param_opt` and `dfs_predict`, `exps_predict` defining experiments for prediction:
-```sh
-    prediction_setup = calibr_setup
-    prediction_setup['param_ode'] = param_ode
-    prediction_setup['dfs'] = dfs_predict
-    prediction_setup['param_bnds'] = x0_bnds
-    prediction_setup['exps'] = exps_predict
-    prediction_setup['s_x'] = s_x
-```
-To run the initial values estimation for the model prediction:
-```sh
+The ODE parameters and `S` stay fixed from the calibration, and only the initial values of the new experiments are estimated:
+
+```python
+prediction_setup = dict(calibr_setup,
+                        param_ode=param_ode,
+                        s_x=s_x,
+                        dfs=dfs_predict,
+                        param_bnds=x0_bnds,    # bounds of the log10 initial values, n_cl per experiment
+                        exps=exps_predict,
+                        exp_temps=exp_temps_predict)
 x0_opt = fm.pest.calculate_prediction(fm.pest.cost_initvals, prediction_setup)[0]
 ```
-To plot the estimated model for each experiment:
-```sh
-fm.plotting.plot_prediction_result(prediction_setup['param_ode'], x0_opt, prediction_setup, time_array)
+
+Plot the prediction. `x0_dict` maps each experiment to its initial values:
+
+```python
+x0_dict = {exp: x0_opt[n_cl*i:n_cl*(i+1)] for i, exp in enumerate(exps_predict)}
+fm.plotting.plot_prediction_result(param_ode, x0_dict, prediction_setup, t_plot, path=path)
 ```
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+### Local Refinement and Identifiability
+
+Differential evolution usually ends close to, but not at, a local minimum. To refine the result (methods `'L-BFGS-B'` or `'least_squares'`):
+
+```python
+param_opt, cost_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_setup, local_polish=True,
+                                                     local_options={'method': 'least_squares'})
+```
+
+`fm.pest.multistart_optimization` is an alternative global search with many local fits from Latin hypercube start points.
+
+`fm.pest.profile_likelihood` computes profile likelihoods with confidence intervals of the parameters and a classification of their identifiability (`run_profile_likelihood_all`, `run_profile_likelihood_adaptive`). Its use on a small problem is shown in `model_paper/test_2sp.py` of the paper repository.
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+## Repository Structure
+
+| Path | Content |
+|---|---|
+| `fusion_model/data` | OpenBIS download, reading of the ZL2030 data, in-silico data generators, JSON output |
+| `fusion_model/model` | ODE models and observables |
+| `fusion_model/parameter_estimation` | Cost functions and likelihoods, global and local optimization, media matrix, profile likelihood, JAX backend |
+| `fusion_model/plotting` | Figures of data, fits and parameters |
+| `fusion_model/dimensionality_reduction` | Projection and clustering of species |
+| `fusion_model/analysis` | Spectral expansion |
+| `fusion_model/tools` | Data frame helpers |
+| `main.py` | Complete example on in-silico data |
+| `examples/main_ZL2030_*.py` | Calibration and prediction on the ZL2030 data (need the measurement data) |
+| `examples/main_param_distrib*.py`, `examples/plot_*.py` | Parameter distribution studies, plots of saved results |
+| `plot_results/` | Further plotting scripts |
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>
+
+
+## License
+
+Distributed under the MIT License, see [`LICENSE`](LICENSE).
+
+<p align="right">(<a href="#readme-top">back to top</a>)</p>

@@ -6,7 +6,7 @@ Same pipeline as main_paper_calibr.py + profile_likelihood_model_paper.py on a
 small problem, to check parameter estimation and identifiability end to end:
 
   1) in-silico data: fusion_model2 with known ("true") parameters, 2 species,
-     2 media (sel1, gen1), 3 experiments at 2, 6 and 10 degC, 10% relative noise
+     2 media (sel1, gen0), 3 experiments at 2, 6 and 10 degC, 10% relative noise
   2) global optimization (differential evolution)       -> Result_calibration<add_name>_global.json
   3) local refinement (L-BFGS-B multistart)              -> Result_calibration<add_name>.json
   4) profile likelihood (local fits; objective see OBJECTIVE) -> profile_likelihood/...
@@ -38,7 +38,7 @@ N_CL = 2
 # from model_paper/setup/True_parameters_paper_uniform.json (created by main_true_parameters.py; the ODE parameters
 # are the same in the files of all initial-value distributions)
 PARAM_ODE_TRUE = fm.data.read_true_parameters(N_CL)['param_ode']
-GEN_MEDIA = ['sel1', 'gen1']  # media order of fm.data.model_2media_expgensel (S rows in the true file)
+GEN_MEDIA = ['sel1', 'gen0']  # media order of fm.data.model_2media_expgensel (S rows in the true file)
 
 # Experimental designs of the in-silico data (each design has its own output folder, so that the designs can
 # be compared; 'base' = model_paper/out/test_2sp_<noise>noise/). Replicates = repeated temperatures, each
@@ -63,7 +63,8 @@ def true_parameter_vector(path, add_name, media_sorted, n_cl):
     """True parameters in the layout of the calibration vector [x0 | ODE | S (media sorted)]."""
     tr = fm.output.read_from_json(f'Result_real{add_name}.json', dir=path)
     s_true = np.array(tr['s_x'], dtype=float).reshape(len(GEN_MEDIA), n_cl)
-    s_true = np.array([s_true[GEN_MEDIA.index(m)] for m in media_sorted])  # calibration uses sorted media
+    order = sorted(media_sorted, reverse=True)  # generator order: selective, general (results with gen1 too)
+    s_true = np.array([s_true[order.index(m)] for m in media_sorted])  # calibration uses sorted media
     return np.concatenate([np.ravel(tr['param_ode']), s_true.ravel()])
 
 
@@ -71,17 +72,17 @@ def normalize_truth_max_s(S_matrix_setup, x10, param_ode, n_cl):
     """
     Rescale the true parameters so that the largest media coefficient is 1 (as S_MAX_PENALTY assumes), with
     (almost) unchanged observables: S / m, counts * m, i.e. x0 + log10(m), N_1 + log10(m), k_ij / m, where
-    m = max(S) of the media used (sel1, gen1). Exact up to the one initially active cell per species.
+    m = max(S) of the media used (sel1, gen0). Exact up to the one initially active cell per species.
     Returns (S_matrix_setup, x10, param_ode, m) with copies of the changed values.
     """
     sel = np.array(S_matrix_setup['s_selective'][0][:n_cl], dtype=float)
-    gen = np.array(S_matrix_setup['s_general'][0][:n_cl], dtype=float)
+    gen = np.array(S_matrix_setup['s_general0'][:n_cl], dtype=float)
     m = float(max(sel.max(), gen.max()))
     S2 = dict(S_matrix_setup)
     S2['s_selective'] = [list(r) for r in S_matrix_setup['s_selective']]
-    S2['s_general'] = [list(r) for r in S_matrix_setup['s_general']]
+    S2['s_general0'] = list(S_matrix_setup['s_general0'])
     S2['s_selective'][0][:n_cl] = list(sel / m)
-    S2['s_general'][0][:n_cl] = list(gen / m)
+    S2['s_general0'][:n_cl] = list(gen / m)
     p = np.array(param_ode, dtype=float)
     p[4 * n_cl] += np.log10(m)          # N_1
     p[4 * n_cl + 2:] = p[4 * n_cl + 2:] / m  # k_ij

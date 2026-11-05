@@ -220,14 +220,14 @@ if __name__ == "__main__":
         plt.close(fig)
 
     # RMSE for different media
-    media = ['gen1','gen2', 'gen3', 'sel1', 'sel2', 'sel3', 'gen1+sel1', 'gen2+sel2', 'gen3+sel3', 'sel1+sel2', 'sel1+sel3', 'sel2+sel3']
+    media = ['gen0','gen2', 'gen3', 'sel1', 'sel2', 'sel3', 'gen0+sel1', 'gen2+sel2', 'gen3+sel3', 'sel1+sel2', 'sel1+sel3', 'sel2+sel3']
     n = 6
     rn = 0.1
     path_base = pp.study_dir('media_influence')
     rms, rms_mibi, rms_maldi, rms_ngs, cost = [np.zeros((len(media))) for _ in range(5)]
     for i, med in enumerate(media):
-        if med == 'gen1+sel1':
-            # gen1+sel1 is the 6 species model_complexity run
+        if med == 'gen0+sel1':
+            # gen0+sel1 is the 6 species model_complexity run
             path = pp.study_path('model_complexity', n_cl=n, n_media=2, relnoise=rn)
             add_name = pp.add_name(n, 2)
         else:

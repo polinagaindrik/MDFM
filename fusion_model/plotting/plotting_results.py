@@ -98,10 +98,28 @@ def plot_prediction_result_x0lambda(param, lambda_dict, x0_dict, prediction_setu
         plot_one_exp_model(exp, param_opt, L0_arr[i], prediction_setup, t_model, media=prediction_setup['media'], **kwargs)
 
 
+def is_general_medium(med):
+    """General media: gen0, gen1, ..., PC, media1; all others are selective."""
+    return med.startswith('gen') or med in ('PC', 'media1')
+
+
+def medium_label(med):
+    """Name of a medium in the figures, e.g. 'general medium gen1'."""
+    return f"{'general' if is_general_medium(med) else 'selective'} medium {med}"
+
+
+def species_label(bact):
+    """Name of a species in the figures, as in the parameter names: 'Bacteria_00' -> 'Species 00'."""
+    suffix = bact.split('_')[-1]
+    return f'Species {suffix}' if suffix.isdigit() else bact
+
+
 def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=[''], clrs=None, path='', add_name='',
-                       relnoise=0.1):
+                       relnoise=0.1, maldi_n=None, mibi_log10_sd=None, ngs_dm=None):
     """Plot one experiment's predicted bacterial counts and observation types
-    (error bars: relnoise * data of MiBi, MALDI and NGS)."""
+    (error bars: relnoise * data of MiBi, MALDI and NGS; maldi_n: MALDI as N identified colonies per plate,
+    see plot_opt_res_maldi; mibi_log10_sd: MiBi noise on log10 of the counts, see plot_opt_res_mibi;
+    ngs_dm: NGS as (reads N, concentration A), see plot_opt_res_ngs)."""
     data = prediction_setup['dfs']
     n_cl = np.shape(data[1])[0]
 
@@ -127,20 +145,24 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
 
     f_x = mdl.media_filtering(t_model, n_C, prediction_setup['s_x'], n_C0, const)
 
-    plot_opt_res_realx(df_x0, t_model, n_C, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name)
+    where = f'{exp}, {temp:g}$^\\circ$C'
+    plot_opt_res_realx(df_x0, t_model, n_C, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name,
+                       title=f'Cells, {where}')
     for i in range (len(media)):
-        plot_opt_res_realx(df_x0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name, plot_meas=False)
+        plot_opt_res_realx(df_x0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name, plot_meas=False,
+                           title=f'Cells recovered on {medium_label(media[i])}, {where}')
     plot_opt_res_ngs(df_ngs0, days_ngs, obs_ngs, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name,
-                     relnoise=relnoise)
+                     relnoise=relnoise, ngs_dm=ngs_dm, title=f'NGS, {where}')
     plot_opt_res_maldi(df_maldi0, days_maldi, obs_maldi, exp, media=media, path=path+'Param_estim_', clrs=clrs,
-                       add_name=add_name, relnoise=relnoise)
+                       add_name=add_name, relnoise=relnoise, maldi_n=maldi_n, title=where)
     plot_opt_res_mibi(df_mibi0, days_mibi, obs_mibi, exp, media=media, path=path+'Param_estim_', add_name=add_name,
-                      relnoise=relnoise)
+                      relnoise=relnoise, log10_sd=mibi_log10_sd, title=f'Plate counts, {where}')
 
 
-def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None, relnoise=0.1):
+def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None, relnoise=0.1,
+                     title=None, ngs_dm=None):
     """Plot modeled NGS proportions against measurements for one experiment
-    (error bars std, if None relnoise * data)."""
+    (error bars std, if None relnoise * data; ngs_dm = (N, A): Dirichlet-multinomial standard deviation)."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     days_meas = [float(f.split('_')[3]) for f in df_ngs0.columns]
@@ -149,6 +171,8 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
     lines = []
     for k, (o_n, o_meas, bact) in enumerate(zip(np.array(obs_model), np.array(obs_meas).T, df_ngs0.T.columns)):
         err = relnoise*o_meas if std is None else std
+        if std is None and ngs_dm is not None:
+            err = np.sqrt(o_meas * (1 - o_meas) * (ngs_dm[0] + ngs_dm[1]) / (ngs_dm[0] * (1 + ngs_dm[1])))
         if clrs is not None:
             clr = clrs[bact]
         else:
@@ -156,7 +180,7 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
         ax.errorbar(days_meas, o_meas, yerr=err, fmt='o', capsize=3, color=clr, label=f'{bact}') # , label=f'Data Cl. {k}'
         #ax.scatter(days_model, o_n,label=f'{bact}', color='w', marker='o', s=40, edgecolors=clr)
         ax.plot(days_model, o_n, color=clr)
-        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'Species {int(bact.split("_")[-1])+1}'))
+        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=species_label(bact)))
     fig, ax = plt_templ.set_labels(fig, ax,  r'Time, $t$', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
     #ax.set_ylim(-0.05, 1.05)
@@ -165,15 +189,28 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
     coord_text = (0.06, 0.92)
     ax.text(*coord_text, '(b)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     ax.legend(handles=lines, ncol=2)
+    if title is not None:
+        ax.set_title(title, fontsize=13)
     #ax.legend(fontsize=13, framealpha=0., handlelength=2., bbox_to_anchor=(1.,1.))# bbox_to_anchor=(1., 0.1, 0.5, 0.5))#, bbox_to_anchor=(1, 1)) # 
     plt.savefig(path+exp+add_name+'_ngs.pdf', bbox_inches='tight')
     plt.close(fig)
 
 
+def wilson_error_bars(p, n, z=1.):
+    """Lower and upper error bar (y - low, high - y) of proportions p from n identified colonies: Wilson score
+    interval (z = 1: about +- 1 SD); unlike sqrt(p(1-p)/n) it is also informative for p = 0 and p = 1."""
+    p = np.asarray(p, dtype=float)
+    center = (p + z**2/(2*n)) / (1 + z**2/n)
+    half = z/(1 + z**2/n) * np.sqrt(p*(1 - p)/n + z**2/(4*n**2))
+    return np.array([np.maximum(p - (center - half), 0.), np.maximum(center + half - p, 0.)])
+
+
 def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=[' '], path='', add_name='', clrs=None,
-                       relnoise=0.1):
+                       relnoise=0.1, maldi_n=None, title=None):
     """Plot modeled MALDI proportions against measurements for one experiment
-    (error bars std, if None relnoise * data)."""
+    (error bars std, if None relnoise * data; maldi_n = N identified colonies per plate: wilson_error_bars).
+    title: figure title after 'MALDI, <medium>', each medium has its own figure and panel letter."""
+    general = [is_general_medium(m) for m in media]
     for j, med in enumerate(media):
         fig, ax = plt.subplots()
         fig.subplots_adjust()
@@ -187,49 +224,56 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
                 clr = clrs[bact]
             else:
                 clr = plt_templ.colors_ngs[4*k]
-            err = relnoise*o_meas if std is None else std
+            if std is not None:
+                err = std
+            elif maldi_n is not None:
+                err = wilson_error_bars(o_meas, maldi_n)
+            else:
+                err = relnoise*o_meas
             ax.errorbar(days_meas, o_meas, yerr=err, fmt='o', capsize=3, color=clr, label=f'{bact}')
             ax.plot(days_model, o_m, color=clr)
-            lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'Species {int(bact.split("_")[-1])+1}'))
+            lines.append(mlines.Line2D([], [], color=clr, marker='o', label=species_label(bact)))
         ax.set_ylim(-0.05, np.max([np.max(obs_meas), np.max(o_model)])*1.1)#+0.1)
         ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
         fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         
         coord_text = (0.06, 0.92)
-        if med=='PC' or med=='media1' or med[:-1]=='gen':
-            ax.text(*coord_text, '(c)', fontsize=20,
-                    horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        # (c) general, (d) selective medium; two media of the same kind: in their order
+        first = j == 0 if len(media) > 1 and len(set(general)) == 1 else general[j]
+        ax.text(*coord_text, '(c)' if first else '(d)', fontsize=20,
+                horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        if is_general_medium(med):
             ax.legend(handles=lines, bbox_to_anchor=(0.72, 0.3))
-        elif med =='MRS' or med =='media2' or med=='sel1':
-            ax.text(*coord_text, '(d)', fontsize=20,
-                    horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        else:
             ax.legend(handles=lines)
+        if title is not None:
+            ax.set_title(f'MALDI, {medium_label(med)}, {title}', fontsize=13)
         #ax.legend(bbox_to_anchor=(1., 1.))#, bbox_to_anchor=(1., 0.1, 0.5, 0.5)) #, bbox_to_anchor=(1, 1)
         plt.savefig(path+exp+add_name+f'_{med}'+'_maldi.pdf', bbox_inches='tight')
         plt.close(fig)
     
 
 def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=[''], path='', add_name='', clrs=None,
-                      relnoise=0.1):
-    """Plot modeled MiBi counts against measurements for one experiment (error bars relnoise * data)."""
+                      relnoise=0.1, log10_sd=None, title=None):
+    """Plot modeled MiBi counts against measurements for one experiment (error bars relnoise * data;
+    log10_sd: noise on log10 of the counts, error bars +- log10_sd in log10 units)."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     lines = []
     for j, med in enumerate(media):
-        if med ==  'PC' or med == 'media1' or med=='gen1':
-            med_label = 'general'
-        else:
-            med_label = 'selective'
+        med_label = medium_label(med)
         days_meas = [float(f.split('_')[3]) for f in df_mibi0.filter(like=med).columns]
         obs_meas = np.array([df_mibi0.filter(like=med)[f]['Average'] for f in df_mibi0.filter(like=med).columns])
         stds = np.array([df_mibi0.filter(like=med)[f]['Standard deviation'] for f in df_mibi0.filter(like=med).columns])
         stds = relnoise*obs_meas
         days_meas, obs_meas, stds = zip(*sorted(zip(days_meas, obs_meas, stds)))
+        if log10_sd is not None:
+            stds = np.array([np.array(obs_meas)*(1 - 10.**(-log10_sd)), np.array(obs_meas)*(10.**log10_sd - 1)])
         o_model = obs_model[j]
-        ax.plot(days_model, o_model, color=plt_templ.colors_ngs[2*j], label=med_label+' media (model)')
-        ax.errorbar(days_meas, obs_meas, yerr=stds, fmt='o', capsize=3, color=plt_templ.colors_ngs[2*j], label=med_label+' media (data)')
-        lines.append(mlines.Line2D([], [], color=plt_templ.colors_ngs[2*j], marker='o', label=med_label+' media'))
+        ax.plot(days_model, o_model, color=plt_templ.colors_ngs[2*j], label=med_label+' (model)')
+        ax.errorbar(days_meas, obs_meas, yerr=stds, fmt='o', capsize=3, color=plt_templ.colors_ngs[2*j], label=med_label+' (data)')
+        lines.append(mlines.Line2D([], [], color=plt_templ.colors_ngs[2*j], marker='o', label=med_label))
     coord_text = (0.06, 0.92)
     ax.text(*coord_text, '(a)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     ax.set_yscale('log')
@@ -237,12 +281,16 @@ def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=['']
     fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'log CFU mL$^{-1}$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
     ax.legend()#, handles=lines)
+    if title is not None:
+        ax.set_title(title, fontsize=13)
     plt.savefig(path+exp+add_name+'_mibi.pdf', bbox_inches='tight')
     plt.close(fig)
 
 
-def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None, plot_meas=True):
-    """Plot modeled bacterial trajectories against measured count data."""
+def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None, plot_meas=True, title=None):
+    """Plot modeled bacterial trajectories against measured count data.
+    title: figure of a fit result, full time range and y-range of the curves, legend inside the axes, no panel
+    letter; None: layout of the data-generation figures (panel letter = temperature, days 0-10 above 2 C)."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     bact_all = df0.T.columns
@@ -258,8 +306,19 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
         ax.plot(days_model, o_n, label=f'{bact_all[k]}', color=clr)
         if plot_meas:
             ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
-        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=f'Species {int(bact_all[k].split("_")[-1])+1}'))
+        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=species_label(bact_all[k])))
     ax.set_yscale('log')
+    if title is not None:
+        shown = np.array(obs_model, dtype=float)[:, np.asarray(days_model) <= np.max(days_meas)]
+        low, high = (np.min(obs_meas), np.max(obs_meas)) if plot_meas else (np.min(shown), np.max(shown))
+        ax.set_xlim(0., np.max(days_meas)+0.3)
+        ax.set_ylim(low*0.5, high*2.5)
+        fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'log $x(t)$')
+        ax.legend(ncol=max(1, len(bact_all)//4), handles=lines)
+        ax.set_title(title, fontsize=13)
+        plt.savefig(path+exp+add_name+'_realx.pdf', bbox_inches='tight')
+        plt.close(fig)
+        return
     #ax.set_xlim(-0.25, np.max(days_meas)+0.3)
     ax.set_xlim(0., np.max(days_meas)+0.3)
     ax.set_ylim(np.min(obs_meas)*0.5, np.max(obs_meas)*2.5)

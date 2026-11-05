@@ -120,17 +120,22 @@ def copy_result_to_all_profiles(path, add_name, profile_dir="profile_likelihood"
     return done
 
 
-def build_calibr_setup(path, add_name, n_cl, n_media, define_setup, objective="neg2logL"):
+def build_calibr_setup(path, add_name, n_cl, n_media, define_setup, objective="neg2logL", exps=None):
     """calibr_setup (incl. param_bnds and data_array) for a saved calibration.
     define_setup: function that adds the parameter bounds of this kind of data, fm.pest.define_calibr_setup_ZL2030
                   or fm.pest.define_calibr_setup_insilico
     objective: 'neg2logL'    GaussianNeg2LogLik: -2 log L, data types weighted by their number of points
                'geomean'     GeometricMeanNeg2LogLik: -2 log L version of the calibration cost
                              (same optimum as cost_sum_and_geometric_mean, equal weight per data type)
-               'calibration' cost_sum_and_geometric_mean itself (scale='auto': linearized G_opt / N)"""
+               'calibration' cost_sum_and_geometric_mean itself (scale='auto': linearized G_opt / N)
+    exps: experiments of the calibration; None: all experiments of the saved plate count data frame. Experimental
+          data frames can contain more experiments than were used in the calibration: then give exps, the data
+          frames are reduced to them."""
     if objective not in ("neg2logL", "geomean", "calibration"):
         raise ValueError(f"unknown objective {objective!r}")
     dfs, result, true_params = load_calibration(path, add_name)
+    if exps is not None:  # the cost function takes the experiments from the columns of the data frames
+        dfs = [df[[c for c in df.columns if c.split("_")[0] in exps]] for df in dfs]
     df_mibi, df_maldi, df_ngs = dfs
     exps = sorted(list(set([s.split("_")[0] for s in df_mibi.columns])))
     media = sorted(list(set([s.split("_")[-1].split("-")[0] for s in df_maldi.columns])))

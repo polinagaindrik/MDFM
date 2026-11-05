@@ -164,8 +164,8 @@ if __name__ == "__main__":
     # global step: 'de'            differential evolution (as before)
     #              'multistart'    N_STARTS local fits from Latin hypercube points (recommended for many species)
     #              'de+multistart' differential evolution, then the multistart incl. the DE result
-    GLOBAL_METHOD = 'de'
-    N_STARTS = 1
+    GLOBAL_METHOD = 'de+multistart'
+    N_STARTS = 22
     # local step and profile fits: 'L-BFGS-B' (as before) or 'least_squares' (trust-region least squares on
     # the residuals, parameters scaled, much faster convergence for ill-conditioned problems)
     LOCAL_METHOD = 'least_squares'

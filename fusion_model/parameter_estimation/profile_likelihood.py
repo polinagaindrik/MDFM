@@ -1,5 +1,5 @@
 """
-Profile likelihood for fusion_model / model_paper
+Profile likelihood for fusion_model
 =================================================
 
 Same public API as ``pool_paper_casestudy/fusion_core/likelihood.py`` in the
@@ -25,7 +25,7 @@ projects:
     plot_profile_likelihood_individual(csv_path, confidence_level, scale, out_dir, file_prefix,
                                        file_ext, figsize)
 
-Extra (model_paper only): extend_profile_likelihood(cost_func, calibr_setup, out_csv, extend, ...)
+Extra: extend_profile_likelihood(cost_func, calibr_setup, out_csv, extend, ...)
 adds points to the profiles of an existing run (explicit values, up to a new end
 value, or extend='auto' for every side that does not reach the threshold).
 run_profile_likelihood_adaptive(cost_func, param_opt, calibr_setup, ...) does all in one call:

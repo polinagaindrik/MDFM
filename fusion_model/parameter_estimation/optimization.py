@@ -14,9 +14,6 @@ from fusion_model.tools.dataframe_functions import extract_observables_from_df
 
 
 optimization_history = []
-#output_file = 'model_paper/out/optimization_history1.csv'
-#output_file2 = 'model_paper/out/optimization_history2.csv'
-#output_file_predict = 'model_paper/out/optimization_history_predict.csv'
 output_file = 'out/optimization_history1.csv'
 output_file2 = 'out/optimization_history2.csv'
 output_file_predict = 'out/optimization_history_predict.csv'

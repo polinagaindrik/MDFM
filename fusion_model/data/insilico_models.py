@@ -423,13 +423,26 @@ t = np.linspace(0., 17., 18)
 #np.random.seed(4698517)
 
 # ----------------------------------------------------------------------
-# True parameters of the in-silico data (model_paper/setup/)
+# True parameters of the in-silico data (setup folder of the project that generates the data)
 # ----------------------------------------------------------------------
-SETUP_DIR = 'model_paper/setup/'                     # relative to the repository root (working directory)
-X0_DISTRIBUTIONS = ('uniform', 'lognormal')  # see sample_log10_x0; written by model_paper/main_insilicomodel_generation.py
+_setup_dir = 'setup/'  # relative to the working directory; a project sets its own folder with set_setup_dir
+
+
+def set_setup_dir(dir):
+    """Folder of the setup files of the in-silico data, used by all functions below when no dir is given."""
+    global _setup_dir
+    _setup_dir = dir
+
+
+def get_setup_dir():
+    """Folder of the setup files of the in-silico data (see set_setup_dir)."""
+    return _setup_dir
+
+
+X0_DISTRIBUTIONS = ('uniform', 'lognormal')  # see sample_log10_x0
 X0_DISTRIBUTION = 'lognormal'  # default initial-value distribution of the setup files
 INITIAL_VALUES_FILE = f'Initial_values_x0_paper_{X0_DISTRIBUTION}.json'
-TRUE_PARAMETERS_FILE = f'True_parameters_paper_{X0_DISTRIBUTION}.json'  # written by model_paper/main_true_parameters.py
+TRUE_PARAMETERS_FILE = f'True_parameters_paper_{X0_DISTRIBUTION}.json'
 
 
 def initial_values_file(distribution=X0_DISTRIBUTION):
@@ -446,9 +459,10 @@ def true_parameters_file(distribution=X0_DISTRIBUTION):
     return f'True_parameters_paper_{distribution}.json'
 
 
-def read_initial_values(distribution=X0_DISTRIBUTION, n_exps=None, n_cl=None, dir=SETUP_DIR):
+def read_initial_values(distribution=X0_DISTRIBUTION, n_exps=None, n_cl=None, dir=None):
     """log10 initial values (experiments x species) of the setup file of distribution, first n_exps
-    experiments and n_cl species (None: all)."""
+    experiments and n_cl species (None: all); dir None: the setup folder (set_setup_dir)."""
+    dir = _setup_dir if dir is None else dir
     file = initial_values_file(distribution)
     x10 = np.array(read_from_json(file, dir=dir)['x0'], dtype=float)
     if n_exps is not None and n_exps > len(x10):
@@ -493,7 +507,7 @@ def _split_true_param_ode(param_ode, n_cl_file):
     return x0, o[:n], o[n:2*n], o[2*n:3*n], o[3*n:4*n], o[4*n:4*n+2], o[4*n+2:].reshape(n, n)
 
 
-def read_true_parameters(n_cl, file=None, dir=SETUP_DIR, distribution=X0_DISTRIBUTION):
+def read_true_parameters(n_cl, file=None, dir=None, distribution=X0_DISTRIBUTION):
     """
     True parameters of the in-silico model for the first n_cl species, from the setup JSON
     (param_ode = [x0 | ODE] of all species, s_x = media x species, T_x); file None: the file of the
@@ -503,7 +517,9 @@ def read_true_parameters(n_cl, file=None, dir=SETUP_DIR, distribution=X0_DISTRIB
                    (the layout fusion_model2 / model_exp expects)
       'x10'      : log10 initial values, experiments x n_cl
       's_x'      : media x n_cl, 'T_x': n_cl
+    dir None: the setup folder (set_setup_dir).
     """
+    dir = _setup_dir if dir is None else dir
     if file is None:
         file = true_parameters_file(distribution)
     res = read_from_json(file, dir=dir)
@@ -518,15 +534,16 @@ def read_true_parameters(n_cl, file=None, dir=SETUP_DIR, distribution=X0_DISTRIB
             'T_x': np.asarray(res['T_x'], dtype=float)[:n_cl]}
 
 
-def true_parameters_for_distribution(distribution, source='uniform', n_exps=None, setup_dir=SETUP_DIR,
+def true_parameters_for_distribution(distribution, source='uniform', n_exps=None, setup_dir=None,
                                      media_file=MEDIA_MATRIX_FILE):
     """
     True-parameter JSON content (see read_true_parameters) for the initial values of distribution: ODE
     parameters copied from the frozen file of source (True_parameters_paper_<source>.json),
     x0 = first n_exps experiments (None: as many as in the source file) of
     Initial_values_x0_paper_<distribution>.json, s_x = [sel1, gen0] and T_x of the media matrix
-    (Media_matrix_S_paper.json).
+    (Media_matrix_S_paper.json). setup_dir None: the setup folder (set_setup_dir).
     """
+    setup_dir = _setup_dir if setup_dir is None else setup_dir
     file = true_parameters_file(source)
     res = read_from_json(file, dir=setup_dir)
     n_file = len(res['T_x'])
@@ -599,7 +616,7 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path=
     np.random.seed(46987)
     if param_ode is None:  # true ODE parameters from the setup folder (see read_true_parameters)
         param_ode = read_true_parameters(n_cl)['param_ode']
-        print(f'model_exp: true ODE parameters of {n_cl} species from {SETUP_DIR}{TRUE_PARAMETERS_FILE}')
+        print(f'model_exp: true ODE parameters of {n_cl} species from {_setup_dir}{TRUE_PARAMETERS_FILE}')
     if not inhib:
         param_ode[-n_cl*n_cl:] = 0.
     param_model = np.concatenate([param_ode, s_x, T_x])
@@ -629,8 +646,7 @@ def model_2media_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path=
 def _s_general0(S_matrix_setup, n_cl):
     """Coefficients of general medium gen0 (ZL2030 plate count agar, key 's_general0') as a list."""
     if 's_general0' not in S_matrix_setup:
-        raise KeyError("media matrix has no 's_general0' (gen0); generate it with GENERAL_MEDIA = 'generate' in "
-                       "model_paper/main_insilicomodel_generation.py")
+        raise KeyError("media matrix has no 's_general0' (gen0); generate it with sample_general_media")
     return list(S_matrix_setup["s_general0"][:n_cl])
 
 

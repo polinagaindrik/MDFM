@@ -2,11 +2,7 @@
 Profile likelihood for fusion_model
 =================================================
 
-Same public API as ``pool_paper_casestudy/fusion_core/likelihood.py`` in the
-separate pool-paper-casestudy repo (https://github.com/polinagaindrik/pool-paper-casestudy)
-(function names, argument names and defaults, return values, CSV format), so
-that calls, CSV files and plotting scripts are interchangeable between the two
-projects:
+Public functions:
 
     free_param_indices(param_bnds)
     profile_likelihood_for_param(cost_func, param_opt, param_index, calibr_setup, span, n_points,
@@ -31,27 +27,25 @@ value, or extend='auto' for every side that does not reach the threshold).
 run_profile_likelihood_adaptive(cost_func, param_opt, calibr_setup, ...) does all in one call:
 initial grid -> extend until the threshold is crossed -> denser points in and around the CIs.
 
-Grid (as in pool_paper): ``n_points`` values in [p - span*|p|, p + span*|p|],
+Grid: ``n_points`` values in [p - span*|p|, p + span*|p|],
 clipped to the bounds, plus the optimum itself (full bound range if p == 0).
-For positive parameters this is exactly pool_paper's p*(1 -/+ span); writing it
-with |p| also works for negative parameters such as lambda_1 in [-7, -2].
+Written with |p| so that it also works for negative parameters such as lambda_1 in [-7, -2].
 
-Differences in *how* the points are computed (results are compatible):
+How the points are computed:
 
 * ``method="local"``: the grid is walked outward from the optimum (left and
   right separately) and every point is warm-started from the solution of its
-  neighbour (Raue et al. 2009); additionally from param_opt (as pool_paper's
-  restart 0, ``anchor_start=True``) and from ``n_restarts - 1`` random
+  neighbour (Raue et al. 2009); additionally from param_opt
+  (``anchor_start=True``) and from ``n_restarts - 1`` random
   jitters. The best of these local L-BFGS-B fits is kept.
 * ``method="global"``: differential_evolution per grid point, with the
   neighbouring solution included in the initial population;
-  ``per_point_workers`` workers inside each point (see CAVEAT ON
-  MULTIPROCESSING in the pool_paper module).
+  ``per_point_workers`` workers inside each point.
 * ``n_jobs`` parallelizes over walks, i.e. (parameter, direction) pairs; when there
   are fewer walks than n_jobs (and for the refit with ``refine=True``) it instead
   parallelizes the finite-difference gradient inside each L-BFGS-B fit.
 
-Optional extras (keyword arguments with defaults; pool_paper calls work unchanged):
+Optional extras (keyword arguments with defaults):
   profile_indices, fixed_indices, refine, stop_factor, anchor_start,
   minimize_options, solve_timeout, resume, true_params, verbose
 
@@ -65,8 +59,7 @@ unknown variance per data type (NGS, MALDI, MiBi), profiled out analytically:
 
 With this aggregation ``scale="auto"`` resolves to 1. For any other aggregation
 (e.g. cost_sum_and_geometric_mean or cost_arithmetic_mean) ``scale="auto"``
-uses pool_paper's estimate (cost_opt / n_data), which is only meaningful for a
-mean squared residual -- see the CAVEAT ON THE CHI2 THRESHOLD there.
+uses the estimate cost_opt / n_data, which is only meaningful for a mean squared residual.
 """
 
 import os
@@ -338,7 +331,7 @@ def free_param_indices(param_bnds, fixed_indices=()):
 
 
 def _build_grid(param_opt, param_index, param_bnds, span, n_points):
-    """pool_paper's grid, written with |p| so that it also works for negative values."""
+    """Grid around the estimate, written with |p| so that it also works for negative values."""
     p_opt_val = float(param_opt[param_index])
     lo, hi = param_bnds[param_index]
     if hi <= lo:
@@ -722,8 +715,7 @@ def profile_likelihood_for_param(
 ):
     """
     Scan one parameter around its estimated value, re-optimizing all other
-    free parameters at each grid point (same signature and return value as
-    pool_paper; extras after jitter_frac are optional).
+    free parameters at each grid point (extras after jitter_frac are optional).
     Returns (grid, profile_cost, profile_params); points not computed because
     of stop_factor have cost NaN.
     """
@@ -758,7 +750,7 @@ def confidence_interval_from_profile(grid, profile_cost, cost_opt, confidence_le
                                      interpolate=False):
     """
     threshold = chi2.ppf(confidence_level, dof) * scale
-    CI = smallest/largest grid point with profile_cost - cost_opt <= threshold (same as pool_paper).
+    CI = smallest/largest grid point with profile_cost - cost_opt <= threshold.
     interpolate=True (extra option): the bounds are instead the linearly interpolated
     threshold crossings between the last point below and the first point above the
     threshold, which does not shrink to single grid points on coarse grids.
@@ -816,8 +808,7 @@ def identifiability_from_profile(grid, profile_cost, cost_opt, p_hat, confidence
 def count_data_points(cost_func, param, calibr_setup, jac_spasity=None):
     """
     Number of residual terms feeding into cost_func(), counted by temporarily
-    swapping in a counting aggregation_func. Unlike pool_paper (where only the
-    first entry of J_vect is data and the rest is regularization), every entry
+    swapping in a counting aggregation_func. Every entry
     of J_vect is data in fusion_model's cost functions ([ngs, maldi, mibi]),
     so all are counted (NaN = missing data excluded).
     """
@@ -845,7 +836,7 @@ def estimate_profile_scale(cost_func, param_opt, calibr_setup, cost_opt, n_free_
       -2 log L n_bar * sum_k log SSR_k = N * log G: Delta(-2 log L) ~ N * Delta G / G_opt,
       i.e. scale = G_opt / N (N = total number of data points). sigma_hat2 is returned as None.
       Exact alternative without linearization: GeometricMeanNeg2LogLik.
-    * otherwise pool_paper's estimate for a mean squared residual under i.i.d. Gaussian noise:
+    * otherwise the estimate for a mean squared residual under i.i.d. Gaussian noise:
       sigma_hat2 = cost_opt, scale = sigma_hat2 / n_data.
     """
     agg = calibr_setup.get("aggregation_func")
@@ -889,7 +880,7 @@ def run_profile_likelihood_all(
     plot=True,
     plot_path="profile_likelihood.png",
     ncols=4,
-    # ---- optional extras (not in pool_paper) ----
+    # ---- optional extras ----
     profile_indices=None,
     fixed_indices=(),
     refine=False,
@@ -905,7 +896,7 @@ def run_profile_likelihood_all(
     max_restarts=3,
 ):
     """
-    Profile every free parameter (same arguments and return value as pool_paper):
+    Profile every free parameter:
 
     cost_func         : cost_func(param, calibr_setup, jac_spasity) -> float, e.g. fm.pest.cost_withS
     param_opt         : full estimated parameter vector (layout of calibr_setup['param_bnds'])
@@ -927,8 +918,8 @@ def run_profile_likelihood_all(
     profile_indices   : profile only these indices (default: all free)
     fixed_indices     : hold these at param_opt (neither profiled nor re-optimized), e.g. x0
     refine            : first polish param_opt locally with the profiling objective
-    stop_factor       : stop a walk once Delta > stop_factor * threshold (None: whole grid, as pool_paper)
-    anchor_start      : also start each point from param_opt (pool_paper's restart 0)
+    stop_factor       : stop a walk once Delta > stop_factor * threshold (None: whole grid)
+    anchor_start      : also start each point from param_opt
     minimize_options  : L-BFGS-B options (default maxiter=300, ftol=1e-10, gtol=1e-8), or
                         {'method': 'least_squares', 'maxiter': 200, 'max_outer': 8, 'log_scale': 'auto'}
                         for the trust-region least-squares fit (least_squares_fit.py) at every point;
@@ -944,7 +935,7 @@ def run_profile_likelihood_all(
                         was not a minimum), stop, re-fit from that point (refine) and restart the
                         profiles from the new optimum; at most max_restarts times
 
-    Returns (df, ci_results) with ci_results = {param_index: (lo, hi)} as in pool_paper.
+    Returns (df, ci_results) with ci_results = {param_index: (lo, hi)}.
     Also writes <out_csv>_summary.json (cost_opt, scale, CIs, identifiability status).
     """
     call_args = dict(locals())  # for a restart from a better optimum
@@ -1078,7 +1069,7 @@ def run_profile_likelihood_all(
         call_args.update(param_opt=better.x, refine=True, max_restarts=max_restarts - 1, resume=False)
         return run_profile_likelihood_all(**call_args)
 
-    # --- assemble (pool_paper CSV format) -----------------------------
+    # --- assemble (CSV format) -----------------------------
     opt_records = _records([{"param_index": i, "direction": 0, "param_value": float(param_opt[i]),
                              "cost": cost_opt, "success": True, "x": param_opt} for i in profile_indices])
     df_all = pd.DataFrame(done_rows + new_records + opt_records)
@@ -2038,8 +2029,8 @@ def plot_profile_likelihood(
     true_params=None,
 ):
     """
-    Grid of subplots, one per profiled parameter (same signature as pool_paper,
-    plus optional true_params). The y-axis is Delta(-2 log L) = (cost - cost_opt) / scale.
+    Grid of subplots, one per profiled parameter (optional true_params).
+    The y-axis is Delta(-2 log L) = (cost - cost_opt) / scale.
     """
     free_idx = sorted(df["param_index"].unique())
     n = len(free_idx)
@@ -2083,7 +2074,7 @@ _META_COLS = ("param_index", "direction", "param_value", "cost", "success", "nit
 def _read_csv_and_summary(csv_path, scale, param_opt=None):
     """
     Profile points + (scale, cost_opt, param_opt) for plotting.
-    * <csv> (finished run): CSV in pool_paper format + <csv>_summary.json.
+    * <csv> (finished run): CSV + <csv>_summary.json.
     * otherwise <csv>_partial.csv (run still going or stopped): all finished walks
       + <csv>_run.json (written when the walks start). Missing information falls back
       to: cost_opt from the partial CSV, scale = 1 (-2 log L objective), param_opt as
@@ -2178,8 +2169,7 @@ def plot_profile_likelihood_from_csv(
     reference="optimum",
 ):
     """
-    Regenerate the grid plot from a CSV written by run_profile_likelihood_all
-    (same signature as pool_paper's plot_profile_from_csv.py). scale='auto'
+    Regenerate the grid plot from a CSV written by run_profile_likelihood_all. scale='auto'
     reads the scale from <csv>_summary.json. If the run has not finished, the finished
     walks in <csv>_partial.csv are plotted. param_opt: estimate, used only if the run
     files don't contain it.
@@ -2211,8 +2201,7 @@ def plot_profile_likelihood_individual(
     reference="optimum",
 ):
     """
-    One figure per parameter (as pool_paper's plot_profile_likelihood_individual,
-    without the case-study-specific panel letters). Returns {param_index: file path}.
+    One figure per parameter. Returns {param_index: file path}.
     """
     import re
     os.makedirs(out_dir, exist_ok=True)

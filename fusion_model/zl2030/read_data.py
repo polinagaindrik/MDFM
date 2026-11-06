@@ -6,7 +6,12 @@ import getpass
 
 from ..tools.dataframe_functions import drop_column, merge_dfs, calc_proportion
 from fusion_model.tools import dataframe_functions as dtf
-from .output import read_from_json
+from ..data.output import read_from_json
+
+# Storage temperature (degC) of each experiment series. V03 is 14 degC, although its colony count sample names say 02C:
+# its sampling days and growth are those of the 14 degC runs and its MALDI / NGS samples are labelled 14C.
+EXP_TEMPS = {'V01': 2., 'V02': 10., 'V03': 14., 'V04': 14., 'V05': 10., 'V06': 14., 'V07': 2., 'V08': 2., 'V09': 10.,
+             **{f'V{i:02d}': 2. for i in range(10, 29)}}
 
 
 def get_bacteria_for_model(exps_maldi, exps_ngs, path_data, cutoff=0., cutoff_prop=0.,):
@@ -124,7 +129,7 @@ def _correct_df_for_tempinterruption(df):
 
 def read_mibi(exp_name, dir_data=''):
     """Read and normalize colony-count measurements for one experiment."""
-    exp_temps = read_from_json(''+'exp_temps.json', dir='inputs_fusionmodel/')
+    exp_temps = EXP_TEMPS
     exp_filename = _get_exp_filename(exp_name)
     # Read the file:
     filename = f'Data on colony counts - {exp_filename}.xlsx'
@@ -247,7 +252,7 @@ def read_ngs(exp_name, **kwargs):
 
 def read_ngs1(exp_name, dir_data=''):
     """Read the earlier NGS table format and aggregate counts into genus proportions."""
-    exp_temps = read_from_json(''+'exp_temps.json', dir='inputs_fusionmodel/')
+    exp_temps = EXP_TEMPS
     temp = exp_temps[exp_name[:3]]
     filename = f'ZOTU_Table_{exp_name}.tsv'
     df = pd.read_csv(dir_data + filename, sep='\t', header=[0, 1, 2, 3], keep_default_na=True, encoding="ISO-8859-1")
@@ -343,7 +348,7 @@ def _rename_df_biochem(df):
 
 def read_color(exp_name, dir_data=''):
     """Read color measurements and return values grouped by property and sample."""
-    exp_temps = read_from_json(''+'exp_temps.json', dir='inputs_fusionmodel/')
+    exp_temps = EXP_TEMPS
     filename = f'Data of color measurement main trial {int(exp_name[1:])} KI.xlsx'
     df0 = pd.read_excel(dir_data + filename, keep_default_na=True, header=[0])
 

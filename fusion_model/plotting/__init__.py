@@ -1,4 +1,4 @@
-from .plotting_ZL2030 import *
+from ..zl2030.plotting import *
 from .plotting_templates import *
 from .plotting_insilico import *
 from .plotting_results import *

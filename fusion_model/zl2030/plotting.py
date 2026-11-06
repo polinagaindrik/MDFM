@@ -2,7 +2,7 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
-from . import plotting_templates as plt_templ
+from ..plotting import plotting_templates as plt_templ
 from ..tools.dataframe_functions import merge_dfs, get_values_from_dataframe_biochem, filter_dataframe
 
 

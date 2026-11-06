@@ -5,7 +5,7 @@ from ..tools.dataframe_functions import get_values_from_dataframe, filter_datafr
 from ..data.output import read_from_json
 from ..model.solving import model_ODE_solution, get_bacterial_count
 from ..dimensionality_reduction.dimension_reduction import model_one_experiment_withP
-from ..data.read_ZL2030data import read_pkl
+from ..zl2030.read_data import read_pkl
 from .plotting_templates import set_labels, colors_ngs
 from .plotting_results import define_bacteria_colors, plot_opt_res_ngs, plot_opt_res_maldi, plot_opt_res_mibi
 

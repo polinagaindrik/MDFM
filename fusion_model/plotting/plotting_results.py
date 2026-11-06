@@ -143,14 +143,14 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
     days_maldi, obs_maldi = mdl.observable_MALDI(t_model, n_C, prediction_setup['s_x'], n_C0, const, t_model)
     days_mibi, obs_mibi = mdl.observable_MiBi(t_model, n_C, prediction_setup['s_x'], n_C0, const, t_model)
 
-    f_x = mdl.media_filtering(t_model, n_C, prediction_setup['s_x'], n_C0, const)
+    #f_x = mdl.media_filtering(t_model, n_C, prediction_setup['s_x'], n_C0, const)
 
     where = f'{exp}, {temp:g}$^\\circ$C'
     plot_opt_res_realx(df_x0, t_model, n_C, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name,
                        title=f'Cells, {where}')
-    for i in range (len(media)):
-        plot_opt_res_realx(df_x0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name, plot_meas=False,
-                           title=f'Cells recovered on {medium_label(media[i])}, {where}')
+    #for i in range (len(media)):
+    #    plot_opt_res_realx(df_x0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name, plot_meas=False,
+    #                       title=f'Cells recovered on {medium_label(media[i])}, {where}')
     plot_opt_res_ngs(df_ngs0, days_ngs, obs_ngs, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name,
                      relnoise=relnoise, ngs_dm=ngs_dm, title=f'NGS, {where}')
     plot_opt_res_maldi(df_maldi0, days_maldi, obs_maldi, exp, media=media, path=path+'Param_estim_', clrs=clrs,
@@ -233,7 +233,7 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
             ax.errorbar(days_meas, o_meas, yerr=err, fmt='o', capsize=3, color=clr, label=f'{bact}')
             ax.plot(days_model, o_m, color=clr)
             lines.append(mlines.Line2D([], [], color=clr, marker='o', label=species_label(bact)))
-        ax.set_ylim(-0.05, np.max([np.max(obs_meas), np.max(o_model)])*1.1)#+0.1)
+        ax.set_ylim(-0.05, np.nanmax([np.nanmax(obs_meas), np.nanmax(o_model)])*1.1)#+0.1)
         ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
         fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')

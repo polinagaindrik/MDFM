@@ -42,7 +42,7 @@ MDFM (Python package `fusion_model`) is a temperature-dependent model of bacteri
 
 The package calibrates the model on these data, estimating the growth parameters of each species, the interactions between species and the recovery of each species on each medium. With the calibrated model it then predicts the bacterial dynamics of new experiments from their storage temperature and initial values, and analyses which parameters the data can identify.
 
-It was developed for the project [Zukunftslabor2030 (ZL2030)](https://zukunftslabor2030.de), which aims at the dynamic assessment and prediction of food spoilage. It can be used with the ZL2030 measurements or with generated in-silico data.
+It was developed for the project [Zukunftslabor2030 (ZL2030)](https://zukunftslabor2030.de), which aims at the dynamic assessment and prediction of food spoilage. This repository is the core library: the model, cost functions, optimization and plotting, with examples on generated in-silico data. It contains no measurement data and no application to a specific data set.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -88,7 +88,7 @@ pip install -e ".[numba]"    # about 6x faster ODE solves of fusion_model2
 pip install -e ".[jax]"      # exact derivatives for the local fits (backend='jax' of fm.pest.local_optimization)
 ```
 
-For a GPU, install JAX with `pip install "jax[cuda12]"`. Note that `requirements.txt` installs the dependencies including both extras, but not the package itself.
+For a GPU, install JAX with `pip install "jax[cuda12]"`. JAX then uses the GPU by default. With many parallel processes, for example in `fm.pest.multistart_optimization`, large problems can run out of GPU memory; set `JAX_PLATFORMS=cpu` to use one CPU core per process instead. Note that `requirements.txt` installs the dependencies including both extras, but not the package itself.
 
 ### Quick Start
 
@@ -127,11 +127,19 @@ dfs, bact, T_x, s_x_predefined = fm.data.prepare_insilico_data(
 
 Here `n_cl` is the number of species, `temps` the temperature of each experiment, `ntr` the number of trajectories per temperature and `x10` the log10 initial values (experiments x species). The folder `path` has to exist. Instead of the relative Gaussian noise `rel_noise`, each data type can have a noise model of its own: `mibi_log10_sd` (Gaussian on log10 of the counts), `maldi_n` (multinomial) and `ngs_dm` (Dirichlet-multinomial).
 
+**Measured data.** Provide the same three data frames from your own measurements:
+
+| Data frame | Rows | Columns, e.g. experiment `V01`, atmosphere `M1`, 2 °C, day 3, medium `PC` |
+|---|---|---|
+| `df_mibi` | `Average`, `Replicas`, `Standard deviation` | `V01_M1_02C_03_PC-mibi` |
+| `df_maldi` | Species, proportions | `V01_M1_02C_03_PC-maldi` |
+| `df_ngs` | Species, proportions | `V01_M1_02C_03_ngs` |
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### Model Calibration
 
-Define the calibration setup. `define_calibr_setup_insilico` adds the parameter bounds:
+Define the calibration setup. `define_calibr_setup_insilico` adds the parameter bounds, `lambda_exp_max` sets the upper bound of `lambda_exp`:
 
 ```python
 calibr_setup = fm.pest.define_calibr_setup_insilico({
@@ -217,7 +225,9 @@ param_opt, cost_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_
 | `fusion_model/analysis` | Spectral expansion |
 | `fusion_model/tools` | Data frame helpers |
 | `main.py` | Complete example on in-silico data |
-| `examples/main_param_distrib*.py`, `examples/plot_*.py` | Parameter distribution studies, plots of saved results |
+| `experiments/insilico/` | Example of generated in-silico data frames |
+| `examples/` | Parameter distribution studies on in-silico data, plots of saved results |
+| `others/` | Notes and earlier scripts, not maintained |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

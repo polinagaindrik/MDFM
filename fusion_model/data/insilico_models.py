@@ -49,15 +49,12 @@ def sample_selective_media(n_media=3, n_cl=12, n_targets=3, target=(0.6, 0.95), 
    return np.round(s, 2), groups
 
 
-def sample_general_media(n_media=3, base=None, n_cl=12, decimals=2, min_value=0.15, max_tries=10000):
-   """General media from a measured general medium base (default: ZL2030 plate count agar, zl2030_general_medium):
+def sample_general_media(base, n_media=3, n_cl=12, decimals=2, min_value=0.15, max_tries=10000):
+   """General media from a measured general medium base:
    gen0 = base, rounded to decimals, values below min_value raised to min_value (every species is recovered);
    gen1..gen<n_media> (n_media x n_cl) = random permutations of gen0 over the species, different from each other
    and from gen0: the realistic value distribution, assigned to other species.
    Returns (gen0, gen1..gen<n_media>)."""
-   if base is None:
-      from ..zl2030.insilico_from_fit import zl2030_general_medium
-      base = zl2030_general_medium(n_cl)
    base = np.round(np.asarray(base, dtype=float)[:n_cl], decimals)
    base = np.maximum(base, min_value)
    rows = [base]
@@ -472,7 +469,7 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path=
 # Exponential models:
 
 def _s_general0(S_matrix_setup, n_cl):
-    """Coefficients of general medium gen0 (ZL2030 plate count agar, key 's_general0') as a list."""
+    """Coefficients of general medium gen0 (key 's_general0') as a list."""
     if 's_general0' not in S_matrix_setup:
         raise KeyError("media matrix has no 's_general0' (gen0); generate it with sample_general_media")
     return list(S_matrix_setup["s_general0"][:n_cl])

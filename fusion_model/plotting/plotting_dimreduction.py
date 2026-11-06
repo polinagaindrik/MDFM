@@ -1,11 +1,11 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
 from ..tools.dataframe_functions import get_values_from_dataframe, filter_dataframe
 from ..data.output import read_from_json
 from ..model.solving import model_ODE_solution, get_bacterial_count
 from ..dimensionality_reduction.dimension_reduction import model_one_experiment_withP
-from ..zl2030.read_data import read_pkl
 from .plotting_templates import set_labels, colors_ngs
 from .plotting_results import define_bacteria_colors, plot_opt_res_ngs, plot_opt_res_maldi, plot_opt_res_mibi
 
@@ -23,7 +23,7 @@ def plot_p_slopes(exps, path=''):
     lwdth = [1.7, 1.5, 2., 3.]
     lbls = [r'$P_{2C}$', r'$P_{10C}$', r'$P_{14C}$', r'$P_{tot}$']
 
-    df_x = read_pkl('dataframe_x.pkl', path) 
+    df_x = pd.read_pickle(path + 'dataframe_x.pkl') 
     fig, ax = plt.subplots(3, 3, figsize=(12, 10))
     fig.subplots_adjust(hspace=0.35, wspace=0.3)
     for i, p_vals in enumerate(zip(*Pmatrix_separate, Pmatrix_together)):

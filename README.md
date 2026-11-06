@@ -127,25 +127,11 @@ dfs, bact, T_x, s_x_predefined = fm.data.prepare_insilico_data(
 
 Here `n_cl` is the number of species, `temps` the temperature of each experiment, `ntr` the number of trajectories per temperature and `x10` the log10 initial values (experiments x species). The folder `path` has to exist. Instead of the relative Gaussian noise `rel_noise`, each data type can have a noise model of its own: `mibi_log10_sd` (Gaussian on log10 of the counts), `maldi_n` (multinomial) and `ngs_dm` (Dirichlet-multinomial).
 
-**ZL2030 data.** The measurements are stored in the project's OpenBIS and need a ZL2030 login. Download them to the matching subfolders of `experiments/` (`microbiology`, `MALDI`, `NGS`). If the password is left out, it is asked for interactively:
-
-```python
-fm.data.download_microbiology_from_openbis(path, username)
-fm.data.download_MALDI_from_openbis(path, username)
-fm.data.download_NGS_from_openbis(path, username)
-```
-
-Then read the experiments to use for each data type. This also needs the temperature of each experiment in `inputs_fusionmodel/exp_temps.json`. [`examples/create_exp_temps_dict.py`](examples/create_exp_temps_dict.py) creates this file from the temperature profiles `input_6St_interruption.json` and `input_12St_interruption.json` in the same folder. These input files are not part of the repository:
-
-```python
-dfs, bact, T_x, s_x_predefined = fm.data.prepare_ZL2030_data(exps_mibi, exps_maldi, exps_ngs, cutoff=0.01, path=path)
-```
-
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### Model Calibration
 
-Define the calibration setup. `define_calibr_setup_insilico` adds the parameter bounds, use `define_calibr_setup_ZL2030` for the ZL2030 data:
+Define the calibration setup. `define_calibr_setup_insilico` adds the parameter bounds:
 
 ```python
 calibr_setup = fm.pest.define_calibr_setup_insilico({
@@ -230,12 +216,8 @@ param_opt, cost_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_
 | `fusion_model/dimensionality_reduction` | Projection and clustering of species |
 | `fusion_model/analysis` | Spectral expansion |
 | `fusion_model/tools` | Data frame helpers |
-| `fusion_model/zl2030` | Everything specific to the ZL2030 experiments: OpenBIS download, reading of the data, temperatures, bounds, figures, in-silico data from a ZL2030 fit |
 | `main.py` | Complete example on in-silico data |
-| `examples/main_ZL2030_*.py` | Calibration and prediction on the ZL2030 data (need the measurement data) |
-| `examples/zl2030/` | Multistart fit of the 12-species model to the ZL2030 data, its progress and figures (results in `out/zl2030/`) |
 | `examples/main_param_distrib*.py`, `examples/plot_*.py` | Parameter distribution studies, plots of saved results |
-| `plot_results/` | Further plotting scripts |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

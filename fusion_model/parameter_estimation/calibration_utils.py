@@ -122,8 +122,7 @@ def copy_result_to_all_profiles(path, add_name, profile_dir="profile_likelihood"
 
 def build_calibr_setup(path, add_name, n_cl, n_media, define_setup, objective="neg2logL", exps=None):
     """calibr_setup (incl. param_bnds and data_array) for a saved calibration.
-    define_setup: function that adds the parameter bounds of this kind of data, fm.pest.define_calibr_setup_ZL2030
-                  or fm.pest.define_calibr_setup_insilico
+    define_setup: function that adds the parameter bounds of this kind of data, e.g. fm.pest.define_calibr_setup_insilico
     objective: 'neg2logL'    GaussianNeg2LogLik: -2 log L, data types weighted by their number of points
                'geomean'     GeometricMeanNeg2LogLik: -2 log L version of the calibration cost
                              (same optimum as cost_sum_and_geometric_mean, equal weight per data type)

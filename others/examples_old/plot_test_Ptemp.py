@@ -2,7 +2,7 @@ import os
 import sys
 sys.path.append(os.getcwd())
 import fusion_model as fm
-
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
@@ -14,9 +14,9 @@ if __name__ == "__main__":
     path = 'out/test_Ptemp/'
 
     # Read saved data and S matrix
-    df_mibi = fm.data.read_pkl('dataframe_mibi.pkl', path)
-    df_maldi = fm.data.read_pkl('dataframe_maldi.pkl', path)
-    df_ngs = fm.data.read_pkl('dataframe_ngs.pkl', path)
+    df_mibi = pd.read_pickle(path + 'dataframe_mibi.pkl')
+    df_maldi = pd.read_pickle(path + 'dataframe_maldi.pkl')
+    df_ngs = pd.read_pickle(path + 'dataframe_ngs.pkl')
     s_x = fm.output.read_from_json('S_matrix.json', dir=path)
     print('S matrix: \n', s_x)
 

@@ -216,6 +216,21 @@ def count_data_points_noise(data_array, noise_model='absolute', maldi_n=None, ng
     return [int(np.count_nonzero(np.isfinite(o))) for o in (obs_ngs, obs_maldi, obs_mibi)]
 
 
+def ode_params_for_model(param_ode, calibr_setup, xp=np):
+    """
+    ODE parameters in the form the model functions expect. Default: unchanged.
+    calibr_setup['lambda_tref'] = T_ref (one value or one per species): the first n_cl entries of param_ode are
+    lambda_ref = log10 lambda(T_ref) instead of lambda_1, i.e. lambda(T) = 10^lambda_ref * (T / T_ref)^lambda_exp.
+    Same model, it only decorrelates the two lambda parameters: lambda_1 = lambda_ref - lambda_exp * log10(T_ref).
+    """
+    t_ref = calibr_setup.get('lambda_tref')
+    if t_ref is None:
+        return param_ode
+    n_cl = calibr_setup['n_cl']
+    ode = xp.asarray(param_ode)
+    return xp.concatenate([ode[:n_cl] - ode[n_cl:2*n_cl] * np.log10(t_ref), ode[n_cl:]])
+
+
 def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, mibi_max):
     """Simulate one experiment and return squared residuals for NGS, MALDI, and MiBi."""
     #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
@@ -255,6 +270,7 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, mibi_max):
 
 def squared_differences(param_ode, x0_vals, s_x, calibr_setup, jac_spasity=None):
     """Collect the nonzero observation residuals across all calibration experiments."""
+    param_ode = ode_params_for_model(param_ode, calibr_setup)
     (df_mibi, df_maldi, df_ngs, ) = calibr_setup['dfs']
     days, [obs_mibi_meas, obs_maldi_meas, obs_ngs_meas] = calibr_setup['data_array']
     n_cl = np.shape(obs_maldi_meas)[2] #np.shape(df_maldi)[0]
@@ -292,6 +308,7 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
     n_cl_d = np.shape(obs_maldi_meas)[2]
     exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))
     mibi_max = np.nanmax(obs_mibi_meas, axis=(0, 1))
+    param_ode = ode_params_for_model(param_ode, calibr_setup)
     model = calibr_setup['model']
     T_x = calibr_setup['T_x']
     m_ngs, m_maldi, m_mibi = (np.full(np.shape(obs_ngs_meas), np.nan), np.full(np.shape(obs_maldi_meas), np.nan),

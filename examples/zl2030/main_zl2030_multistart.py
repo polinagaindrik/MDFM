@@ -6,7 +6,7 @@ Fits the ODE model and bounds of the in-silico case (fusion_model2, define_calib
 compare with the parameter set used for the in-silico studies (out/zl2030/exp_model/calibration/Result_calibration_zl2030_copy.json).
 
 Differences to that earlier fit (differential evolution with the ZL2030 bounds and cost_sum_and_geometric_mean):
-  - objective: -2 log L with the relative noise model and the max S = 1 penalty, as in the in-silico study of the paper.
+  - objective: -2 log L with the relative noise model and the max S = 1 penalty.
     The real MALDI and NGS data have no fixed number of counts per sample, so the multinomial and Dirichlet-multinomial
     likelihoods of the in-silico fits (which need one) are not used here.
   - bounds: in-silico bounds, e.g. lambda_exp in (0, 3) and 'Others' may grow (lower bound alpha_0 = 0.001).
@@ -53,7 +53,7 @@ N_JOBS = os.cpu_count()       # all cores, one start per core at a time
 MAX_ITER = 500                # residual evaluations per least-squares solve
 MAX_MINUTES = 240             # limit per start
 SEED = 0
-S_MAX_PENALTY = 100           # as in main_paper_calibr.py
+S_MAX_PENALTY = 100           # penalty so that the largest media coefficient S is 1
 NOISE_MODEL = 'relative'
 LOG_K = '--log-k' in sys.argv
 N_STARTS_LOG_K = 48           # --log-k: Latin hypercube starts
@@ -61,7 +61,7 @@ K_START_RANGE = (0.02, 20.)   # --log-k: k_ij of the start points, log10 uniform
 LAMBDA_EXP_MAX = 3.           # upper bound of lambda_exp
 NEAR_BEST = 3.84              # starts within this cost of the best count as "near best" (chi2, 1 dof, 95 %)
 
-CUTOFF, CUTOFF_PROP = 0.1, 0.001    # gives the 11 prevalent species + Others of the earlier fit, see paper_core/paths.py
+CUTOFF, CUTOFF_PROP = 0.1, 0.001    # gives the 11 prevalent species + Others of the earlier fit
 EXPS_NGS = [f'V{i:02d}' for i in range(1, 13)] + [f'V{i:02d}' for i in range(15, 21)] + ['V22']
 EXPS_MALDI = [f'V{i:02d}' for i in range(1, 20)] + ['V22']
 EXPS = [f'V{i:02d}' for i in range(1, 10)] + ['V11', 'V12'] + [f'V{i:02d}' for i in range(16, 20)]

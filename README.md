@@ -214,7 +214,7 @@ param_opt, cost_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_
 
 `fm.pest.multistart_optimization` is an alternative global search with many local fits from Latin hypercube start points.
 
-`fm.pest.profile_likelihood` computes profile likelihoods with confidence intervals of the parameters and a classification of their identifiability (`run_profile_likelihood_all`, `run_profile_likelihood_adaptive`). Its use on a small problem is shown in `model_paper/test_2sp.py` of the paper repository.
+`fm.pest.profile_likelihood` computes profile likelihoods with confidence intervals of the parameters and a classification of their identifiability (`run_profile_likelihood_all`, `run_profile_likelihood_adaptive`).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

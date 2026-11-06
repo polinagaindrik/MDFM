@@ -5,15 +5,15 @@ from scipy.optimize import brentq
 from scipy.special import gammaln, polygamma
 from scipy.stats.mstats import gmean
 from fusion_model.model.solving import model_ODE_solution, get_bacterial_count
-from fusion_model.model.solving import observable_NGS, observable_MALDI, observable_MiBi
+from fusion_model.model.solving import observable_NGS, observable_MALDI, observable_platecount
 from fusion_model.parameter_estimation.media_matrix import S_squared_difference
 
 
 # ----------------------------------------------------------------------
 # Noise model of the residuals: calibr_setup['noise_model']
-#   'absolute' (default): residual = measured - model (MiBi divided by its maximum)
+#   'absolute' (default): residual = measured - model (plate counts divided by their maximum)
 #   'relative': for multiplicative noise, measured = model * (1 + eps):
-#       MiBi (counts):          log(measured) - log(model)
+#       plate counts (counts):          log(measured) - log(model)
 #       MALDI, NGS (fractions): centred log-ratio residual within each composition (over the species of one
 #                               experiment / medium / time point): log-ratios are not affected by the
 #                               normalization to proportions, the noise becomes eps_i - mean(eps)
@@ -179,7 +179,7 @@ def dm_residuals(meas, model, n, conc):
 
 def relative_mask(meas, kind):
     """Data entries used by the relative noise model (depends only on the data).
-    kind: 'counts' (MiBi) or 'composition' (MALDI, NGS; species on axis -2)."""
+    kind: 'counts' (plate counts) or 'composition' (MALDI, NGS; species on axis -2)."""
     meas = np.asarray(meas, dtype=float)
     use = np.isfinite(meas) & (meas > 0)
     if kind == 'composition':
@@ -200,10 +200,10 @@ def relative_residuals(meas, model, kind):
 
 
 def count_data_points_noise(data_array, noise_model='absolute', maldi_n=None, ngs_dm=None):
-    """Number of data points (degrees of freedom) per data type [ngs, maldi, mibi] for a noise model.
+    """Number of data points (degrees of freedom) per data type [ngs, maldi, platecount] for a noise model.
     maldi_n: MALDI fitted with the multinomial likelihood, (species - 1) per measured composition incl. zeros.
     ngs_dm: the same for NGS fitted with the Dirichlet-multinomial likelihood."""
-    _, (obs_mibi, obs_maldi, obs_ngs) = data_array
+    _, (obs_platecount, obs_maldi, obs_ngs) = data_array
     if noise_model == 'relative':
         def comp_dof(obs):
             use = relative_mask(obs, 'composition')
@@ -212,8 +212,8 @@ def count_data_points_noise(data_array, noise_model='absolute', maldi_n=None, ng
                      else comp_dof(obs_maldi))
         dof_ngs = (int(np.sum(np.maximum(np.isfinite(obs_ngs).sum(axis=-2) - 1, 0))) if ngs_dm
                    else comp_dof(obs_ngs))
-        return [dof_ngs, dof_maldi, int(relative_mask(obs_mibi, 'counts').sum())]
-    return [int(np.count_nonzero(np.isfinite(o))) for o in (obs_ngs, obs_maldi, obs_mibi)]
+        return [dof_ngs, dof_maldi, int(relative_mask(obs_platecount, 'counts').sum())]
+    return [int(np.count_nonzero(np.isfinite(o))) for o in (obs_ngs, obs_maldi, obs_platecount)]
 
 
 def ode_params_for_model(param_ode, calibr_setup, xp=np):
@@ -231,11 +231,11 @@ def ode_params_for_model(param_ode, calibr_setup, xp=np):
     return xp.concatenate([ode[:n_cl] - ode[n_cl:2*n_cl] * np.log10(t_ref), ode[n_cl:]])
 
 
-def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, mibi_max):
-    """Simulate one experiment and return squared residuals for NGS, MALDI, and MiBi."""
-    #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
+def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, platecount_max):
+    """Simulate one experiment and return squared residuals for NGS, MALDI, and plate counts."""
+    #temp = float(df_platecount0.columns[0].split("_")[2][:-1])
     model = calibr_setup['model']
-    days, [obs_mibi_meas, obs_maldi_meas, obs_ngs_meas] = calibr_setup['data_array']
+    days, [obs_platecount_meas, obs_maldi_meas, obs_ngs_meas] = calibr_setup['data_array']
     temp = calibr_setup['exp_temps'][exp]
     T_x = calibr_setup['T_x']
     const = [[temp], n_cl, calibr_setup['media']]
@@ -247,13 +247,13 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, mibi_max):
 
     _, obs_ngs = observable_NGS(days, n_C, T_x, n_C0, const, days)
     _, obs_maldi = observable_MALDI(days, n_C, s_x, n_C0, const, days)
-    _, obs_mibi = observable_MiBi(days, n_C, s_x, n_C0, const, days)
+    _, obs_platecount = observable_platecount(days, n_C, s_x, n_C0, const, days)
     if _noise_model(calibr_setup) == 'relative':
         n_maldi = maldi_n_of(calibr_setup)
         dm_ngs = ngs_dm_of(calibr_setup)
         sq = [None if dm_ngs else relative_residuals(obs_ngs_meas[i], obs_ngs, 'composition')**2,
               None if n_maldi else relative_residuals(obs_maldi_meas[i], obs_maldi, 'composition')**2,
-              relative_residuals(obs_mibi_meas[i], obs_mibi, 'counts')**2]
+              relative_residuals(obs_platecount_meas[i], obs_platecount, 'counts')**2]
         sq = [None if q is None else np.where(np.isnan(q), 0., q) for q in sq]  # unused entries: 0 (dropped later)
         if n_maldi:  # failed solve (NaN model) -> inf -> PENALTY in the aggregation
             q = multinomial_residuals(obs_maldi_meas[i], obs_maldi, n_maldi)**2
@@ -264,29 +264,29 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, mibi_max):
         return tuple(sq)
     ll_ngs0 = (obs_ngs_meas[i] - obs_ngs)**2
     ll_maldi0 = (obs_maldi_meas[i] - obs_maldi)**2
-    ll_mibi0 = (obs_mibi_meas[i] - obs_mibi)**2 /mibi_max
-    return ll_ngs0, ll_maldi0, ll_mibi0
+    ll_platecount0 = (obs_platecount_meas[i] - obs_platecount)**2 /platecount_max
+    return ll_ngs0, ll_maldi0, ll_platecount0
 
 
 def squared_differences(param_ode, x0_vals, s_x, calibr_setup, jac_spasity=None):
     """Collect the nonzero observation residuals across all calibration experiments."""
     param_ode = ode_params_for_model(param_ode, calibr_setup)
-    (df_mibi, df_maldi, df_ngs, ) = calibr_setup['dfs']
-    days, [obs_mibi_meas, obs_maldi_meas, obs_ngs_meas] = calibr_setup['data_array']
+    (df_platecount, df_maldi, df_ngs, ) = calibr_setup['dfs']
+    days, [obs_platecount_meas, obs_maldi_meas, obs_ngs_meas] = calibr_setup['data_array']
     n_cl = np.shape(obs_maldi_meas)[2] #np.shape(df_maldi)[0]
-    exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))
-    mibi_max = np.nanmax(obs_mibi_meas, axis=(0, 1))**2
-    ll_ngs, ll_maldi, ll_mibi = np.zeros(np.shape(obs_ngs_meas)), np.zeros(np.shape(obs_maldi_meas)), np.zeros(np.shape(obs_mibi_meas))
+    exps = sorted(list(set([s.split('_')[0] for s in df_platecount.columns])))
+    platecount_max = np.nanmax(obs_platecount_meas, axis=(0, 1))**2
+    ll_ngs, ll_maldi, ll_platecount = np.zeros(np.shape(obs_ngs_meas)), np.zeros(np.shape(obs_maldi_meas)), np.zeros(np.shape(obs_platecount_meas))
     for i, exp in enumerate(exps):
-        ll_ngs[i], ll_maldi[i], ll_mibi[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, s_x, mibi_max)
-    return ll_ngs[ll_ngs!=0], ll_maldi[ll_maldi!=0], ll_mibi[ll_mibi!=0]
+        ll_ngs[i], ll_maldi[i], ll_platecount[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, s_x, platecount_max)
+    return ll_ngs[ll_ngs!=0], ll_maldi[ll_maldi!=0], ll_platecount[ll_platecount!=0]
 
 
 def residuals_withS(param, calibr_setup, jac_spasity=None):
     """
     Signed residuals of cost_withS, for least-squares solvers:
-    returns ([r_ngs, r_maldi, r_mibi], [exp_ngs, exp_maldi, exp_mibi]) with
-    r_k = measured - model (MiBi divided by its maximum, as in sq_diff_oneexp) for all
+    returns ([r_ngs, r_maldi, r_platecount], [exp_ngs, exp_maldi, exp_platecount]) with
+    r_k = measured - model (plate counts divided by their maximum, as in sq_diff_oneexp) for all
     measured (non-NaN) entries, and exp_k = index of the experiment of each residual
     (sorted experiment order, as the x0 block of param). sum(r_k**2) equals the sum of
     the squared differences that cost_withS passes to calibr_setup['aggregation_func'].
@@ -302,17 +302,17 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
     s_x = param[-n_cl*n_media:].reshape((n_media, n_cl))
     x0_vals = param[:n_cl*len(exps_setup)]
 
-    (df_mibi, df_maldi, df_ngs, ) = calibr_setup['dfs']
+    (df_platecount, df_maldi, df_ngs, ) = calibr_setup['dfs']
     days, meas = calibr_setup['data_array']
-    obs_mibi_meas, obs_maldi_meas, obs_ngs_meas = meas
+    obs_platecount_meas, obs_maldi_meas, obs_ngs_meas = meas
     n_cl_d = np.shape(obs_maldi_meas)[2]
-    exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))
-    mibi_max = np.nanmax(obs_mibi_meas, axis=(0, 1))
+    exps = sorted(list(set([s.split('_')[0] for s in df_platecount.columns])))
+    platecount_max = np.nanmax(obs_platecount_meas, axis=(0, 1))
     param_ode = ode_params_for_model(param_ode, calibr_setup)
     model = calibr_setup['model']
     T_x = calibr_setup['T_x']
-    m_ngs, m_maldi, m_mibi = (np.full(np.shape(obs_ngs_meas), np.nan), np.full(np.shape(obs_maldi_meas), np.nan),
-                              np.full(np.shape(obs_mibi_meas), np.nan))
+    m_ngs, m_maldi, m_platecount = (np.full(np.shape(obs_ngs_meas), np.nan), np.full(np.shape(obs_maldi_meas), np.nan),
+                              np.full(np.shape(obs_platecount_meas), np.nan))
     for i, exp in enumerate(exps):
         const = [[calibr_setup['exp_temps'][exp]], n_cl_d, calibr_setup['media']]
         C0 = np.concatenate((10**np.array(x0_vals[n_cl_d*i:n_cl_d*(i+1)]), np.ones((n_cl_d+1))))
@@ -321,7 +321,7 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
         n_C0 = get_bacterial_count(np.array(C0).reshape(len(C0), 1), np.shape(s_x)[-1], 2)
         m_ngs[i] = observable_NGS(days, n_C, T_x, n_C0, const, days)[1]
         m_maldi[i] = observable_MALDI(days, n_C, s_x, n_C0, const, days)[1]
-        m_mibi[i] = observable_MiBi(days, n_C, s_x, n_C0, const, days)[1]
+        m_platecount[i] = observable_platecount(days, n_C, s_x, n_C0, const, days)[1]
 
     res, owner = [], []
     relative = _noise_model(calibr_setup) == 'relative'
@@ -329,7 +329,7 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
     dm_ngs = ngs_dm_of(calibr_setup)
     for obs, mdl_obs, scale, kind in ((obs_ngs_meas, m_ngs, 1., 'composition'),
                                       (obs_maldi_meas, m_maldi, 1., 'composition'),
-                                      (obs_mibi_meas, m_mibi, mibi_max, 'counts')):
+                                      (obs_platecount_meas, m_platecount, platecount_max, 'counts')):
         obs = np.asarray(obs, dtype=float)
         if n_maldi and mdl_obs is m_maldi:
             mask = np.isfinite(obs)
@@ -386,19 +386,19 @@ def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
     s_x = np.array(param)[-n_cl*n_media:].reshape((n_media, n_cl))
     x0_vals = param[:n_cl*len(exps)]
 
-    (df_mibi, df_maldi, df_ngs, ) = calibr_setup['dfs']
-    days, [obs_mibi_meas, obs_maldi_meas, obs_ngs_meas] = calibr_setup['data_array']
+    (df_platecount, df_maldi, df_ngs, ) = calibr_setup['dfs']
+    days, [obs_platecount_meas, obs_maldi_meas, obs_ngs_meas] = calibr_setup['data_array']
     n_cl = np.shape(obs_maldi_meas)[2] #np.shape(df_maldi)[0]
-    exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))
-    mibi_max = np.nanmax(obs_mibi_meas, axis=(0, 1))**2
-    ll_ngs, ll_maldi, ll_mibi = np.zeros(np.shape(obs_ngs_meas)), np.zeros(np.shape(obs_maldi_meas)), np.zeros(np.shape(obs_mibi_meas))
+    exps = sorted(list(set([s.split('_')[0] for s in df_platecount.columns])))
+    platecount_max = np.nanmax(obs_platecount_meas, axis=(0, 1))**2
+    ll_ngs, ll_maldi, ll_platecount = np.zeros(np.shape(obs_ngs_meas)), np.zeros(np.shape(obs_maldi_meas)), np.zeros(np.shape(obs_platecount_meas))
     for i, exp in enumerate(exps):
         param_ode = np.concatenate((lambd, alph[n_cl*i:n_cl*(i+1)], rest_ode_param))
-        ll_ngs[i], ll_maldi[i], ll_mibi[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, s_x, mibi_max)
+        ll_ngs[i], ll_maldi[i], ll_platecount[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, s_x, platecount_max)
     ll_ngs = ll_ngs[ll_ngs!=0]
     ll_maldi = ll_maldi[ll_maldi!=0]
-    ll_mibi = ll_mibi[ll_mibi!=0]
-    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])
+    ll_platecount = ll_platecount[ll_platecount!=0]
+    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_platecount])
 
 
 def _n_total_points(aggregation_func):
@@ -452,9 +452,9 @@ def cost_withS(param, calibr_setup, jac_spasity):
     param_ode = param[n_cl*len(exps):-n_cl*n_media]
     s_x = np.array(param)[-n_cl*n_media:].reshape((n_media, n_cl))
     x0_vals = param[:n_cl*len(exps)]
-    ll_ngs, ll_maldi, ll_mibi = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
+    ll_ngs, ll_maldi, ll_platecount = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
     #ll_s1, ll_s2 = S_squared_difference(param[-n_cl*n_media:], calibr_setup['dfs'], calibr_setup['data_array'], calibr_setup['T_x'])
-    cost = calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])#, ll_s1, ll_s2])
+    cost = calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_platecount])#, ll_s1, ll_s2])
     # optional penalty so that the largest media coefficient is 1 (calibr_setup['s_max_penalty'] = weight)
     return apply_s_max_penalty(cost, calibr_setup, s_max_penalty_sq(s_x))
 
@@ -466,8 +466,8 @@ def cost_direct(param, calibr_setup, jac_spasity):
     exps = calibr_setup['exps']
     param_ode = param[n_cl*len(exps):]
     x0_vals = param[:n_cl*len(exps)]
-    ll_ngs, ll_maldi, ll_mibi = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
-    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])
+    ll_ngs, ll_maldi, ll_platecount = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
+    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_platecount])
 
 
 def cost_initvals(param, calibr_setup, jac_spasity):
@@ -477,8 +477,8 @@ def cost_initvals(param, calibr_setup, jac_spasity):
     param_ode = calibr_setup['param_ode']
     s_x = calibr_setup['s_x']
     x0_vals = param[:n_cl*len(exps)]
-    ll_ngs, ll_maldi, ll_mibi = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
-    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])
+    ll_ngs, ll_maldi, ll_platecount = squared_differences(param_ode, x0_vals, s_x, calibr_setup)
+    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_platecount])
 
 
 def cost_initvals_lambda(param, calibr_setup, jac_spasity):
@@ -489,41 +489,41 @@ def cost_initvals_lambda(param, calibr_setup, jac_spasity):
     s_x = calibr_setup['s_x']
     x0_vals = param[:n_cl*len(exps)]
     lambd = param[n_cl*len(exps):]
-    ll_ngs, ll_maldi, ll_mibi = squared_differences(np.concatenate((lambd, param_ode)), x0_vals, s_x, calibr_setup)
-    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_mibi])
+    ll_ngs, ll_maldi, ll_platecount = squared_differences(np.concatenate((lambd, param_ode)), x0_vals, s_x, calibr_setup)
+    return calibr_setup['aggregation_func']([ll_ngs, ll_maldi, ll_platecount])
 
 
-def cost_logsumexp(J_vect):#ll_ngs, ll_maldi, ll_mibi):
+def cost_logsumexp(J_vect):#ll_ngs, ll_maldi, ll_platecount):
     """Combine residual arrays with a smooth log-sum-exp aggregate, ignoring NaNs."""
     a = .1
     num_meas = np.sum([np.size(Ji[~np.isnan(Ji)]) for Ji in J_vect])
     return np.log(np.nansum([np.nansum(np.exp(a*Ji)) for Ji in J_vect])/num_meas)/a
 
 
-def cost_geometric_mean(J_vect):#ll_ngs, ll_maldi, ll_mibi):
+def cost_geometric_mean(J_vect):#ll_ngs, ll_maldi, ll_platecount):
     """Compute the geometric mean across the supplied residual values, ignoring NaNs."""
     num_meas = np.sum([np.size(Ji[~np.isnan(Ji)]) for Ji in J_vect])
     return np.nanprod([Ji**(1/num_meas) for Ji in J_vect])
 
 
-def cost_arithmetic_mean(J_vect):#ll_ngs, ll_maldi, ll_mibi):
+def cost_arithmetic_mean(J_vect):#ll_ngs, ll_maldi, ll_platecount):
     """Return the mean of each residual array's mean, ignoring NaNs."""
     return np.nanmean([np.nanmean(Ji) for Ji in J_vect])
 
 
-def cost_sum_and_geometric_mean(J_vect):#ll_ngs, ll_maldi, ll_mibi):
+def cost_sum_and_geometric_mean(J_vect):#ll_ngs, ll_maldi, ll_platecount):
     """Return the geometric mean of the non-NaN residual sum from each array."""
     return gmean([np.nansum(Ji) for Ji in J_vect], nan_policy='omit', axis=None)
 
 
-DATA_TYPES = ('ngs', 'maldi', 'mibi')  # order of J_vect in cost_withS / squared_differences
+DATA_TYPES = ('ngs', 'maldi', 'platecount')  # order of J_vect in cost_withS / squared_differences
 
 
 class SelectedDataTypes:
     """
     Aggregation over a subset of the data types: calls aggregation_func only with the
     residual arrays of the data types in use (names from DATA_TYPES), e.g.
-    SelectedDataTypes(cost_sum_and_geometric_mean, ['ngs', 'maldi']) calibrates without MiBi.
+    SelectedDataTypes(cost_sum_and_geometric_mean, ['ngs', 'maldi']) calibrates without plate counts.
     A class (not a closure) so that calibr_setup stays picklable for the worker pools.
     """
     def __init__(self, aggregation_func, use):

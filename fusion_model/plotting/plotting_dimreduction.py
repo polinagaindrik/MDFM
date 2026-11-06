@@ -7,7 +7,7 @@ from ..data.output import read_from_json
 from ..model.solving import model_ODE_solution, get_bacterial_count
 from ..dimensionality_reduction.dimension_reduction import model_one_experiment_withP
 from .plotting_templates import set_labels, colors_ngs
-from .plotting_results import define_bacteria_colors, plot_opt_res_ngs, plot_opt_res_maldi, plot_opt_res_mibi
+from .plotting_results import define_bacteria_colors, plot_opt_res_ngs, plot_opt_res_maldi, plot_opt_res_platecount
 
 
 def lin_func(x, k, b):
@@ -75,15 +75,15 @@ def plot_optimization_result_withP(data, param_x0, calibr_setup, s_x, t_model, p
     print('x0:', param_x0[:n_cl*len(exps)])
     print('p:', param_x0[n_cl*len(exps):])
     for i, exp in enumerate(exps):
-        df_mibi0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
-        temp = float(df_mibi0.columns[0].split("_")[2][:-1])
+        df_platecount0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
+        temp = float(df_platecount0.columns[0].split("_")[2][:-1])
         const = [[temp], n_cl]
         C0_opt = np.concatenate((10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), np.ones((n_cl+1))))
-        df_mibi_model, df_maldi_model, df_ngs_model = model_one_experiment_withP(df_mibi0, df_maldi0, df_ngs0, calibr_setup['model'], t_model,
+        df_platecount_model, df_maldi_model, df_ngs_model = model_one_experiment_withP(df_platecount0, df_maldi0, df_ngs0, calibr_setup['model'], t_model,
                                                                                  param_opt, C0_opt, const, Pinv, s_x, t_model, t_model,
                                                                                  n_states=2)
-        # Calculate model + Observables calculation: MiBi, MALDI, NGS
-        plot_opt_res_mibi(df_mibi0, df_mibi_model, exp, path=path+'Param_estim_', media=['PC', 'MRS'])
+        # Calculate model + Observables calculation: plate counts, MALDI, NGS
+        plot_opt_res_platecount(df_platecount0, df_platecount_model, exp, path=path+'Param_estim_', media=['PC', 'MRS'])
         plot_opt_res_maldi(df_maldi0, df_maldi_model, exp, path=path+'Param_estim_', media=['PC', 'MRS'])
         plot_opt_res_ngs(df_ngs0, df_ngs_model, exp, path=path+'Param_estim_')
 
@@ -98,8 +98,8 @@ def plot_optimization_result_withP_diffT(data, param_x0, calibr_setup, s_x, t_mo
     print('x0:', param_x0[:n_cl*len(exps)])
     print('p:', param_x0[n_cl*len(exps):])
     for i, exp in enumerate(exps):
-        df_mibi0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
-        temp = float(df_mibi0.columns[0].split("_")[2][:-1])
+        df_platecount0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
+        temp = float(df_platecount0.columns[0].split("_")[2][:-1])
         const = [[temp], np.shape(Pmatrices[0])[0]]
         if temp == 2.:
             pinv = Pinv[0]
@@ -108,11 +108,11 @@ def plot_optimization_result_withP_diffT(data, param_x0, calibr_setup, s_x, t_mo
         elif temp == 14.:
             pinv = Pinv[2]
         C0_opt = np.concatenate((10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), np.ones((n_cl+1))))
-        df_mibi_model, df_maldi_model, df_ngs_model = model_one_experiment_withP(df_mibi0, df_maldi0, df_ngs0, calibr_setup['model'], t_model,
+        df_platecount_model, df_maldi_model, df_ngs_model = model_one_experiment_withP(df_platecount0, df_maldi0, df_ngs0, calibr_setup['model'], t_model,
                                                                                  param_opt, C0_opt, const, pinv, s_x, t_model, t_model,
                                                                                  n_states=2)
-        # Calculate model + Observables calculation: MiBi, MALDI, NGS
-        plot_opt_res_mibi(df_mibi0, df_mibi_model, exp, path=path+'Param_estim_diffT_', media=['PC', 'MRS'])
+        # Calculate model + Observables calculation: plate counts, MALDI, NGS
+        plot_opt_res_platecount(df_platecount0, df_platecount_model, exp, path=path+'Param_estim_diffT_', media=['PC', 'MRS'])
         plot_opt_res_maldi(df_maldi0, df_maldi_model, exp, path=path+'Param_estim_diffT_', media=['PC', 'MRS'])
         plot_opt_res_ngs(df_ngs0, df_ngs_model, exp, path=path+'Param_estim_diffT_')
 
@@ -125,8 +125,8 @@ def plot_reduced_model(data, param_x0, calibr_setup, s_x, t_model, path=''):
     n_cl = np.shape(Pmatrices[0])[0]
     param_opt = param_x0[n_cl*len(exps):]
     for i, exp in enumerate(exps):
-        df_mibi0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
-        temp = float(df_mibi0.columns[0].split("_")[2][:-1])
+        df_platecount0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
+        temp = float(df_platecount0.columns[0].split("_")[2][:-1])
         const = [[temp], np.shape(Pmatrices[0])[0]]
         if temp == 2.:
             pinv = Pinv[0]
@@ -158,8 +158,8 @@ def plot_reduced_model_temptogether(data, param_x0, calibr_setup, s_x, t_model, 
     n_cl = np.shape(Pmatrix)[0]
     param_opt = param_x0[n_cl*len(exps):]
     for i, exp in enumerate(exps):
-        df_mibi0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
-        temp = float(df_mibi0.columns[0].split("_")[2][:-1])
+        df_platecount0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
+        temp = float(df_platecount0.columns[0].split("_")[2][:-1])
         const = [[temp], np.shape(Pmatrix)[0]]
         C0_opt = np.concatenate((10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), np.ones((n_cl+1))))
         C = model_ODE_solution(calibr_setup['model'], t_model, param_opt, C0_opt, const)
@@ -183,8 +183,8 @@ def plot_reduced_model_direct(data, param_x0, calibr_setup, s_x, t_model, path='
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     param_opt = param_x0[n_cl*len(exps):]
     for i, exp in enumerate(exps):
-        df_mibi0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
-        temp = float(df_mibi0.columns[0].split("_")[2][:-1])
+        df_platecount0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
+        temp = float(df_platecount0.columns[0].split("_")[2][:-1])
         const = [[temp], n_cl]
         C0_opt = np.concatenate((10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), np.ones((n_cl+1))))
         C = model_ODE_solution(calibr_setup['model'], t_model, param_opt, C0_opt, const)

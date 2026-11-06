@@ -8,8 +8,8 @@ import numpy as np
 if __name__ == "__main__":
     # ZL2030 data:
     #exps_calibr = [f'V{i:02d}' for i in range(1, 10)]
-    #exps_mibi, exps_maldi, exps_ngs = [exps_calibr for _ in range (3)]
-    #dfs_calibr, bact, T, _ = fm.data.prepare_ZL2030_data(exps_mibi, exps_maldi, exps_ngs, cutoff=0.05, cutoff_prop=0.)
+    #exps_platecount, exps_maldi, exps_ngs = [exps_calibr for _ in range (3)]
+    #dfs_calibr, bact, T, _ = fm.data.prepare_ZL2030_data(exps_platecount, exps_maldi, exps_ngs, cutoff=0.05, cutoff_prop=0.)
 
     # In-silico data:
     temps = [2., 10., 14.]

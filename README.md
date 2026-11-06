@@ -36,7 +36,7 @@
 
 MDFM (Python package `fusion_model`) is a temperature-dependent model of bacterial growth in food that fuses three kinds of microbiome measurements:
 
-- bacterial plate counts on different media (microbiology, MiBi),
+- bacterial plate counts on different media (microbiology),
 - species proportions from MALDI-ToF,
 - species proportions from amplicon sequencing (NGS).
 
@@ -114,7 +114,7 @@ The main submodules are `fm.data` (data), `fm.mdl` (ODE models), `fm.pest` (para
 
 ### Prepare Data
 
-All functions return the data frames `dfs = [df_mibi, df_maldi, df_ngs]`, the species names, the NGS weights `T_x` and the predefined entries of the media matrix `s_x_predefined` (`nan` = to be estimated).
+All functions return the data frames `dfs = [df_platecount, df_maldi, df_ngs]`, the species names, the NGS weights `T_x` and the predefined entries of the media matrix `s_x_predefined` (`nan` = to be estimated).
 
 **In-silico data.** A generator such as `fm.data.model_2media_expgensel` simulates `fusion_model2` with given parameters:
 
@@ -125,13 +125,13 @@ dfs, bact, T_x, s_x_predefined = fm.data.prepare_insilico_data(
     param_ode=param_ode_true, x10=x10, path=path, inhib=True, rel_noise=0.1)
 ```
 
-Here `n_cl` is the number of species, `temps` the temperature of each experiment, `ntr` the number of trajectories per temperature and `x10` the log10 initial values (experiments x species). The folder `path` has to exist. Instead of the relative Gaussian noise `rel_noise`, each data type can have a noise model of its own: `mibi_log10_sd` (Gaussian on log10 of the counts), `maldi_n` (multinomial) and `ngs_dm` (Dirichlet-multinomial).
+Here `n_cl` is the number of species, `temps` the temperature of each experiment, `ntr` the number of trajectories per temperature and `x10` the log10 initial values (experiments x species). The folder `path` has to exist. Instead of the relative Gaussian noise `rel_noise`, each data type can have a noise model of its own: `platecount_log10_sd` (Gaussian on log10 of the counts), `maldi_n` (multinomial) and `ngs_dm` (Dirichlet-multinomial).
 
 **Measured data.** Provide the same three data frames from your own measurements:
 
 | Data frame | Rows | Columns, e.g. experiment `V01`, atmosphere `M1`, 2 °C, day 3, medium `PC` |
 |---|---|---|
-| `df_mibi` | `Average`, `Replicas`, `Standard deviation` | `V01_M1_02C_03_PC-mibi` |
+| `df_platecount` | `Average`, `Replicas`, `Standard deviation` | `V01_M1_02C_03_PC-platecount` |
 | `df_maldi` | Species, proportions | `V01_M1_02C_03_PC-maldi` |
 | `df_ngs` | Species, proportions | `V01_M1_02C_03_ngs` |
 

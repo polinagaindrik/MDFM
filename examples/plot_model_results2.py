@@ -30,7 +30,7 @@ rcParams['figure.dpi'] = 500
 
 
 def extract_observables_from_df(dfs):
-    (df_mibi, df_maldi, df_ngs, df_x ) = dfs
+    (df_platecount, df_maldi, df_ngs, df_x ) = dfs
     exps = sorted(list(set([s.split('_')[0] for s in df_x.columns])))
     days_x = sorted(set([float(f.split('_')[3]) for f in df_x.columns]))
     x = fm.dtf.extract_observables_from_df_x(df_x, days_x, exps)
@@ -98,7 +98,7 @@ if __name__ == "__main__":
     alph_opt_vals = []
     for k in range (n_exps):
         add_name = f'_{k}'
-        df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl', f'dataframe_x{add_name}.pkl']
+        df_names = [f'dataframe_platecount{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl', f'dataframe_x{add_name}.pkl']
         data = [pd.read_pickle(path2+df_name) for df_name in df_names]
         data = fm.dtf.filter_dataframe_regex('V.._', data)
         exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
@@ -125,9 +125,9 @@ if __name__ == "__main__":
         param_ode_init = param_exp
         t_model = np.linspace(0., 18., 100)
 
-        x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V{k+1:02d}', data[:-1]), param_ode, calibr_setup, t_model)
+        x_count, obs_platecount_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V{k+1:02d}', data[:-1]), param_ode, calibr_setup, t_model)
         
-        x_count_init, obs_mibi_model_init, obs_maldi_model_init, obs_ngsi_model_init, temps_model_init = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V{k+1:02d}', data[:-1]), param_ode_init, calibr_setup, t_model)
+        x_count_init, obs_platecount_model_init, obs_maldi_model_init, obs_ngsi_model_init, temps_model_init = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V{k+1:02d}', data[:-1]), param_ode_init, calibr_setup, t_model)
         exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
         
         exp_clrs = {}

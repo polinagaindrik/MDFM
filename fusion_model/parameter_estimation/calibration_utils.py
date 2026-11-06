@@ -27,7 +27,7 @@ __all__ = ['load_calibration', 's_x_predefined_from_maldi', 'exp_temps_from_colu
 def load_calibration(path, add_name):
     """Data frames, estimated parameters and the true parameters of in-silico data (None for experimental data)."""
     dfs = []
-    for k in ["mibi", "maldi", "ngs"]:
+    for k in ["platecount", "maldi", "ngs"]:
         f_pre = os.path.join(path, f"dataframe_{k}{add_name}_preprocessed.pkl")
         f_raw = os.path.join(path, f"dataframe_{k}{add_name}.pkl")
         dfs.append(pd.read_pickle(f_pre if os.path.exists(f_pre) else f_raw))
@@ -50,7 +50,7 @@ def s_x_predefined_from_maldi(df_maldi, media):
 
 
 def exp_temps_from_columns(df):
-    """{exp: temperature} parsed from column names like 'V01_M1_02C_00_MRS-mibi'."""
+    """{exp: temperature} parsed from column names like 'V01_M1_02C_00_MRS-platecount'."""
     temps = {}
     for c in df.columns:
         parts = c.split("_")
@@ -135,8 +135,8 @@ def build_calibr_setup(path, add_name, n_cl, n_media, define_setup, objective="n
     dfs, result, true_params = load_calibration(path, add_name)
     if exps is not None:  # the cost function takes the experiments from the columns of the data frames
         dfs = [df[[c for c in df.columns if c.split("_")[0] in exps]] for df in dfs]
-    df_mibi, df_maldi, df_ngs = dfs
-    exps = sorted(list(set([s.split("_")[0] for s in df_mibi.columns])))
+    df_platecount, df_maldi, df_ngs = dfs
+    exps = sorted(list(set([s.split("_")[0] for s in df_platecount.columns])))
     media = sorted(list(set([s.split("_")[-1].split("-")[0] for s in df_maldi.columns])))
     bact = list(df_maldi.index)
     assert len(bact) == n_cl and len(media) == n_media, (bact, media)
@@ -150,7 +150,7 @@ def build_calibr_setup(path, add_name, n_cl, n_media, define_setup, objective="n
         "dfs": dfs,
         "aggregation_func": cost_sum_and_geometric_mean,
         "exps": exps,
-        "exp_temps": exp_temps_from_columns(df_mibi),
+        "exp_temps": exp_temps_from_columns(df_platecount),
         "media": media,
     }
     calibr_setup = define_setup(calibr_presetup, inhib=True, s_x_predefined=s_x_predefined_from_maldi(df_maldi, media),

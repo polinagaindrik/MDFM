@@ -53,7 +53,7 @@ Objective and scale
 -------------------
 The chi2 threshold assumes cost = -2 log L. ``GaussianNeg2LogLik``
 (``make_gaussian_neg2loglik``) gives exactly that for Gaussian noise with one
-unknown variance per data type (NGS, MALDI, MiBi), profiled out analytically:
+unknown variance per data type (NGS, MALDI, plate counts), profiled out analytically:
 
     -2 log L = sum_k n_k * log(SSR_k / n_k) + const
 
@@ -91,7 +91,7 @@ class GaussianNeg2LogLik:
     Aggregation function for ``calibr_setup['aggregation_func']``.
 
     J_vect : list of squared-residual arrays, one per data type, in the order
-             produced by the cost function (cost_withS: [ngs, maldi, mibi]).
+             produced by the cost function (cost_withS: [ngs, maldi, platecount]).
     n_data : number of measured (finite) data points per data type, same order.
 
     Returns sum_k n_k * log(SSR_k / n_k), i.e. -2 log L up to a constant for
@@ -126,7 +126,7 @@ class MultinomialMaldiNeg2LogLik(GaussianNeg2LogLik):
     as in GaussianNeg2LogLik:
         sum_k n_k log(SSR_k / n_k) (Gaussian data types, noise variance estimated) + sum_k D_k (count data types)
     D_k: sum of the squared deviance residuals, already -2 log L up to a constant (no variance to estimate).
-    is_deviance: per data type of J_vect, default [ngs, maldi, mibi] = (False, True, False).
+    is_deviance: per data type of J_vect, default [ngs, maldi, platecount] = (False, True, False).
     """
 
     def __init__(self, n_data, is_deviance=(False, True, False)):
@@ -151,8 +151,8 @@ class MultinomialMaldiNeg2LogLik(GaussianNeg2LogLik):
 def make_gaussian_neg2loglik(data_array, noise_model="absolute", maldi_n=None, ngs_dm=None):
     """
     Build a GaussianNeg2LogLik from ``calibr_setup['data_array']``
-    (= extract_observables_from_df(dfs) -> (days, [obs_mibi, obs_maldi, obs_ngs])).
-    The residual order of cost_withS / squared_differences is [ngs, maldi, mibi].
+    (= extract_observables_from_df(dfs) -> (days, [obs_platecount, obs_maldi, obs_ngs])).
+    The residual order of cost_withS / squared_differences is [ngs, maldi, platecount].
     noise_model: as calibr_setup['noise_model'] ('relative': degrees of freedom of the log residuals).
     maldi_n: as calibr_setup['maldi_n'], gives a MultinomialMaldiNeg2LogLik (MALDI multinomial, N colonies per plate).
     ngs_dm: as calibr_setup['ngs_dm'], the same with NGS Dirichlet-multinomial ((N, A): N reads, concentration A).
@@ -199,7 +199,7 @@ class KnownNoiseNeg2LogLik(GaussianNeg2LogLik):
     """
     -2 log L for a KNOWN noise level (no variance estimated from the residuals):
         sum_k SSR_k / sigma_k^2      (+ constant)
-    sigma: one value or one per data type [ngs, maldi, mibi], in the units of the residuals
+    sigma: one value or one per data type [ngs, maldi, platecount], in the units of the residuals
     (noise_model='relative': standard deviation of the log residuals, e.g. 0.1 for 10 % noise).
     Use it for noise-free (or simulated 'expected') data: the variance-estimating objectives
     (GaussianNeg2LogLik, GeometricMeanNeg2LogLik) diverge to -inf when the residuals go to 0, while
@@ -211,7 +211,7 @@ class KnownNoiseNeg2LogLik(GaussianNeg2LogLik):
         s = np.atleast_1d(np.asarray(sigma, dtype=float))
         self.sigma = [float(v) for v in (np.repeat(s, len(self.n_data)) if len(s) == 1 else s)]
         if len(self.sigma) != len(self.n_data) or min(self.sigma) <= 0:
-            raise ValueError("sigma: one positive value or one per data type [ngs, maldi, mibi]")
+            raise ValueError("sigma: one positive value or one per data type [ngs, maldi, platecount]")
 
     def __call__(self, J_vect):
         total = 0.
@@ -809,7 +809,7 @@ def count_data_points(cost_func, param, calibr_setup, jac_spasity=None):
     """
     Number of residual terms feeding into cost_func(), counted by temporarily
     swapping in a counting aggregation_func. Every entry
-    of J_vect is data in fusion_model's cost functions ([ngs, maldi, mibi]),
+    of J_vect is data in fusion_model's cost functions ([ngs, maldi, platecount]),
     so all are counted (NaN = missing data excluded).
     """
     counting_setup = dict(calibr_setup)

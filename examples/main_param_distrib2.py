@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from scipy import stats
 
 def extract_observables_from_df(dfs):
-    (df_mibi, df_maldi, df_ngs, df_x ) = dfs
+    (df_platecount, df_maldi, df_ngs, df_x ) = dfs
     exps = sorted(list(set([s.split('_')[0] for s in df_x.columns])))
     days_x = sorted(set([float(f.split('_')[3]) for f in df_x.columns]))
     x = fm.dtf.extract_observables_from_df_x(df_x, days_x, exps)
@@ -39,7 +39,7 @@ def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
     s_x = np.array(param)[-n_cl*n_media:].reshape((n_media, n_cl))
     x0_vals = param[:n_cl]
 
-    (df_mibi, df_maldi, df_ngs, df_x) = calibr_setup['dfs']
+    (df_platecount, df_maldi, df_ngs, df_x) = calibr_setup['dfs']
     _, [obs_x] = calibr_setup['data_array']
     n_cl = np.shape(obs_x)[1] #np.shape(df_maldi)[0]
     exps = sorted(list(set([s.split('_')[0] for s in df_x.columns])))
@@ -71,14 +71,14 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, x_max):
 def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name='', exp_start_offset=0):
     data = insilico_model(n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name, exp_start_offset=exp_start_offset)
     dfs = data[:-1]
-    (df_mibi, df_maldi, df_ngs) = dfs
+    (df_platecount, df_maldi, df_ngs) = dfs
     df_ngs, bact_ngs = fm.dtf.preprocess_dataframe(df_ngs, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
     df_maldi, bact_maldi = fm.dtf.preprocess_dataframe(df_maldi, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
     # Take union of ngs and maldi bacteria
     df_maldi, df_ngs, T_x, s_x_predefined = fm.dtf.make_df_maldi_ngs_compatible(df_maldi, df_ngs, cutoff=0.001, media=media)
     bact_all = sorted(set(list(bact_maldi) + list(bact_ngs)))
-    fm.data.save_all_dfs([df_mibi, df_maldi, df_ngs], names=[f'mibi{add_name}_preprocessed', f'maldi{add_name}_preprocessed', f'ngs{add_name}_preprocessed'], path=path)
+    fm.data.save_all_dfs([df_platecount, df_maldi, df_ngs], names=[f'platecount{add_name}_preprocessed', f'maldi{add_name}_preprocessed', f'ngs{add_name}_preprocessed'], path=path)
     return data, bact_all, T_x, s_x_predefined
 
 def model_2media_gensel(n_cl, temps, ntr, S_matrix_setup, **kwargs):
@@ -100,14 +100,14 @@ def model_wotemp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, pa
         x0 = fm.data.set_initial_vals(x10, temps, n_cl)
     else:
         x10, x0 = fm.data.get_random_initial_vals(temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, _ = fm.data.generate_data_dfs(fm.mdl.fusion_model_distr, t, param_model, x0, temps, n_cl, n_traj=ntr, noise=noise, rel_noise=rel_noise, media=media, exp_start_offset=exp_start_offset)
-    fm.data.save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
+    df_platecount, df_maldi, df_ngs, df_realx, _ = fm.data.generate_data_dfs(fm.mdl.fusion_model_distr, t, param_model, x0, temps, n_cl, n_traj=ntr, noise=noise, rel_noise=rel_noise, media=media, exp_start_offset=exp_start_offset)
+    fm.data.save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=[f'platecount{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
     print(add_name, param_ode, '\n')
     fm.data.json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, f'Result_real_paramdistrib{add_name}.json', dir=path)
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 def data_generation_distribution(n_exps, n_cl, param_ode_templ, s_x, path=''):
-    dfs_mibi, dfs_maldi, dfs_ngs, dfs_x, smpl_alph = [], [], [], [], []
+    dfs_platecount, dfs_maldi, dfs_ngs, dfs_x, smpl_alph = [], [], [], [], []
     for i in range (n_exps):
         np.random.seed(46987*(i+1))
         add_name = f'_{i}'
@@ -123,14 +123,14 @@ def data_generation_distribution(n_exps, n_cl, param_ode_templ, s_x, path=''):
             "T_x": np.array([1. for _ in range (n_cl)]),
         }
         dfs_calibr, bact_all, T_x, s_x_predefined = prepare_insilico_data(model_2media_gensel, n_cl, temps, ntr, S_matrix_setup, param_ode=param_init, x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name, exp_start_offset=i*ntr)
-        (df_mibi, df_maldi, df_ngs, df_x) = dfs_calibr
-        dfs_mibi.append(df_mibi)
+        (df_platecount, df_maldi, df_ngs, df_x) = dfs_calibr
+        dfs_platecount.append(df_platecount)
         dfs_maldi.append(df_maldi)
         dfs_ngs.append(df_ngs)
         dfs_x.append(df_x)
         smpl_alph.append(alph_sampled)
     plot_sampled_parameter(0.5, 0.5, smpl_alph, path=path)
-    return [fm.dtf.merge_dfs(dfs_mibi), fm.dtf.merge_dfs(dfs_maldi), fm.dtf.merge_dfs(dfs_ngs), fm.dtf.merge_dfs(dfs_x)], smpl_alph
+    return [fm.dtf.merge_dfs(dfs_platecount), fm.dtf.merge_dfs(dfs_maldi), fm.dtf.merge_dfs(dfs_ngs), fm.dtf.merge_dfs(dfs_x)], smpl_alph
 
 def plot_sampled_parameter(mu, sigma, smpl_p, path=''):
     smpl_p = np.array(smpl_p)
@@ -152,7 +152,7 @@ def plot_sampled_parameter(mu, sigma, smpl_p, path=''):
 
 
 def data_calibration_distribution(dfs, path=''):
-    (df_mibi, df_maldi, df_ngs, df_x) = dfs
+    (df_platecount, df_maldi, df_ngs, df_x) = dfs
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
     exps_calibr = sorted(list(set([s.split('_')[0] for s in dfs[0].columns])))
 
@@ -200,7 +200,7 @@ def estimate_parameter_set(param_init, s_x, n_cl, add_name='',path=''):
     }
     dfs_calibr, bact_all, T_x, s_x_predefined = prepare_insilico_data(model_2media_gensel, n_cl, temps, ntr, S_matrix_setup, param_ode=param_init, x10=x10, inhib=True, noise=0., rel_noise=relnoise, cutoff=0., cutoff_prop=0., path=path, add_name=add_name)
 
-    (df_mibi, df_maldi, df_ngs) = dfs_calibr
+    (df_platecount, df_maldi, df_ngs) = dfs_calibr
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
     exps_calibr = sorted(list(set([s.split('_')[0] for s in dfs_calibr[0].columns])))
 

@@ -15,14 +15,14 @@ def rest(lst1, lst2):
 
 
 # Create dataframes for lnown days and observables
-def create_df_mibi(days, obs, name_part, bact_name, media=['MRS', 'PC'], stds=None):
-    """Build a MiBi dataframe with means, standard deviations, and replicate values."""
+def create_df_platecount(days, obs, name_part, bact_name, media=['MRS', 'PC'], stds=None):
+    """Build a plate count dataframe with means, standard deviations, and replicate values."""
     if stds is None:
         stds = np.zeros(np.shape(obs))
     data = {'Properties': ['Average', 'Standard deviation', 'Replicas']}
     for d, o, std in zip(days, obs.T, stds.T):
         for med, o_med, std_med in zip(media, o, std):
-            data["_".join(name_part + [f'{int(d):02d}', f'{med}-mibi'])] = [o_med, std_med, [o_med]]
+            data["_".join(name_part + [f'{int(d):02d}', f'{med}-platecount'])] = [o_med, std_med, [o_med]]
     return pd.DataFrame(data=data).groupby('Properties').sum()
 
 
@@ -201,21 +201,21 @@ def extract_observables_from_df_ngs(df_ngs, days, exps):
     return obs_ngs
     
 
-def extract_observables_from_df_mibi(df_mibi, days, exps, media):
-    """Extract MiBi means and standard deviations into experiment-by-medium arrays."""
-    obs_mibi = np.zeros((len(exps), len(media), len(days)))
-    std_mibi = np.zeros((len(exps), len(media), len(days)))
+def extract_observables_from_df_platecount(df_platecount, days, exps, media):
+    """Extract plate counts means and standard deviations into experiment-by-medium arrays."""
+    obs_platecount = np.zeros((len(exps), len(media), len(days)))
+    std_platecount = np.zeros((len(exps), len(media), len(days)))
     for i, exp in enumerate(exps):
         for j, med in enumerate(media):
             for k, d in enumerate(days):
-                df0 = df_mibi.filter(like=exp+'_').filter(like=med).filter(like=f'_{int(d):02d}_')
+                df0 = df_platecount.filter(like=exp+'_').filter(like=med).filter(like=f'_{int(d):02d}_')
                 if np.shape(df0)[-1] != 0.:
-                    obs_mibi[i, j, k] = np.mean(df0.T['Average'])
+                    obs_platecount[i, j, k] = np.mean(df0.T['Average'])
                     # np.mean (like 'Average' above): float() on a 1-element array fails in numpy >= 2.x
-                    std_mibi[i, j, k] = np.mean(df0.T['Standard deviation'].astype(float))
+                    std_platecount[i, j, k] = np.mean(df0.T['Standard deviation'].astype(float))
                 else:
-                    obs_mibi[i, j, k], std_mibi[i, j, k] = np.nan, np.nan
-    return obs_mibi, std_mibi
+                    obs_platecount[i, j, k], std_platecount[i, j, k] = np.nan, np.nan
+    return obs_platecount, std_platecount
 
 
 def extract_observables_from_df_x(df_x, days, exps, media=None):
@@ -233,19 +233,19 @@ def extract_observables_from_df_x(df_x, days, exps, media=None):
 
 def extract_observables_from_df(dfs):
     """Extract all observation types and return their shared day grid and data arrays."""
-    (df_mibi, df_maldi, df_ngs, ) = dfs
-    exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))
+    (df_platecount, df_maldi, df_ngs, ) = dfs
+    exps = sorted(list(set([s.split('_')[0] for s in df_platecount.columns])))
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns]))) # ['MRS', 'PC']
 
     days_maldi = sorted(set([float(f.split('_')[3]) for f in df_maldi.columns]))
     days_ngs = sorted(set([float(f.split('_')[3]) for f in df_ngs.columns]))
-    days_mibi = sorted(set([float(f.split('_')[3]) for f in df_mibi.columns]))
-    days_total = sorted(set(days_mibi + days_maldi + days_ngs))
+    days_platecount = sorted(set([float(f.split('_')[3]) for f in df_platecount.columns]))
+    days_total = sorted(set(days_platecount + days_maldi + days_ngs))
 
-    mibi = extract_observables_from_df_mibi(df_mibi, days_total, exps, media)
+    platecount = extract_observables_from_df_platecount(df_platecount, days_total, exps, media)
     maldi = extract_observables_from_df_maldi(df_maldi, days_total, exps, media)
     ngs = extract_observables_from_df_ngs(df_ngs, days_total, exps)
-    return days_total , [mibi[0], maldi, ngs]
+    return days_total , [platecount[0], maldi, ngs]
 
 def add_rest_bacteria(df, bact_all):
     """Add an Others row for abundance not represented by the listed bacteria."""

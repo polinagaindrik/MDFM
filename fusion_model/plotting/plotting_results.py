@@ -41,13 +41,13 @@ def define_bacteria_colors(df_ngs, df_maldi):
 
 def plot_filteringS2(dfs, opt_param, T_x, exps, path='', clrs=None):
     """Plot the fitted media-filtering weights for each bacterium and experiment."""
-    (df_mibi, df_maldi, df_ngs) = dfs
+    (df_platecount, df_maldi, df_ngs) = dfs
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
-    days_total, [obs_mibi, obs_maldi, obs_ngs] = dtf.extract_observables_from_df(dfs)
-    mibi_max = np.nanmax(obs_mibi, axis=(0, 1))
+    days_total, [obs_platecount, obs_maldi, obs_ngs] = dtf.extract_observables_from_df(dfs)
+    platecount_max = np.nanmax(obs_platecount, axis=(0, 1))
     for k, exp in enumerate(exps):
         rhs1, lhs1 = Scost_ngsterm(days_total, obs_maldi[k], obs_ngs[k], opt_param, T_x)
-        rhs2, lhs2 = Scost_mediarelation(days_total, obs_mibi[k]/mibi_max, obs_maldi[k], opt_param)
+        rhs2, lhs2 = Scost_mediarelation(days_total, obs_platecount[k]/platecount_max, obs_maldi[k], opt_param)
         for i, med in enumerate (media):
             fig, ax = plt.subplots(figsize=(5, 5))
             for j, bact in enumerate(df_maldi.T.columns):
@@ -115,22 +115,22 @@ def species_label(bact):
 
 
 def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=[''], clrs=None, path='', add_name='',
-                       relnoise=0.1, maldi_n=None, mibi_log10_sd=None, ngs_dm=None):
+                       relnoise=0.1, maldi_n=None, platecount_log10_sd=None, ngs_dm=None):
     """Plot one experiment's predicted bacterial counts and observation types
-    (error bars: relnoise * data of MiBi, MALDI and NGS; maldi_n: MALDI as N identified colonies per plate,
-    see plot_opt_res_maldi; mibi_log10_sd: MiBi noise on log10 of the counts, see plot_opt_res_mibi;
+    (error bars: relnoise * data of plate counts, MALDI and NGS; maldi_n: MALDI as N identified colonies per plate,
+    see plot_opt_res_maldi; platecount_log10_sd: plate count noise on log10 of the counts, see plot_opt_res_platecount;
     ngs_dm: NGS as (reads N, concentration A), see plot_opt_res_ngs)."""
     data = prediction_setup['dfs']
     n_cl = np.shape(data[1])[0]
 
     if len(data) == 3:
-        (df_mibi0, df_maldi0, df_ngs0, ) = dtf.filter_dataframe(exp+'_', data)
+        (df_platecount0, df_maldi0, df_ngs0, ) = dtf.filter_dataframe(exp+'_', data)
         df_x0 = df_ngs0
     elif len(data) == 4:
-        (df_mibi0, df_maldi0, df_ngs0, df_x0, ) = dtf.filter_dataframe(exp+'_', data)
-    #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
+        (df_platecount0, df_maldi0, df_ngs0, df_x0, ) = dtf.filter_dataframe(exp+'_', data)
+    #temp = float(df_platecount0.columns[0].split("_")[2][:-1])
     temp = prediction_setup['exp_temps'][exp]
-    days = dtf.get_meas_days(df_mibi0, exp)
+    days = dtf.get_meas_days(df_platecount0, exp)
     t_model = np.linspace(0., np.max(days)+0.7, 100)
     const = [[temp], n_cl, media]
     C0_opt = np.concatenate((L0, np.ones((n_cl+1))))
@@ -141,7 +141,7 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
 
     days_ngs, obs_ngs = mdl.observable_NGS(t_model, n_C, prediction_setup['T_x'], n_C0, const, t_model)
     days_maldi, obs_maldi = mdl.observable_MALDI(t_model, n_C, prediction_setup['s_x'], n_C0, const, t_model)
-    days_mibi, obs_mibi = mdl.observable_MiBi(t_model, n_C, prediction_setup['s_x'], n_C0, const, t_model)
+    days_platecount, obs_platecount = mdl.observable_platecount(t_model, n_C, prediction_setup['s_x'], n_C0, const, t_model)
 
     #f_x = mdl.media_filtering(t_model, n_C, prediction_setup['s_x'], n_C0, const)
 
@@ -155,8 +155,8 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
                      relnoise=relnoise, ngs_dm=ngs_dm, title=f'NGS, {where}')
     plot_opt_res_maldi(df_maldi0, days_maldi, obs_maldi, exp, media=media, path=path+'Param_estim_', clrs=clrs,
                        add_name=add_name, relnoise=relnoise, maldi_n=maldi_n, title=where)
-    plot_opt_res_mibi(df_mibi0, days_mibi, obs_mibi, exp, media=media, path=path+'Param_estim_', add_name=add_name,
-                      relnoise=relnoise, log10_sd=mibi_log10_sd, title=f'Plate counts, {where}')
+    plot_opt_res_platecount(df_platecount0, days_platecount, obs_platecount, exp, media=media, path=path+'Param_estim_', add_name=add_name,
+                      relnoise=relnoise, log10_sd=platecount_log10_sd, title=f'Plate counts, {where}')
 
 
 def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None, relnoise=0.1,
@@ -254,18 +254,18 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
         plt.close(fig)
     
 
-def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=[''], path='', add_name='', clrs=None,
+def plot_opt_res_platecount(df_platecount0, days_model, obs_model, exp, std=None, media=[''], path='', add_name='', clrs=None,
                       relnoise=0.1, log10_sd=None, title=None):
-    """Plot modeled MiBi counts against measurements for one experiment (error bars relnoise * data;
+    """Plot modeled plate counts counts against measurements for one experiment (error bars relnoise * data;
     log10_sd: noise on log10 of the counts, error bars +- log10_sd in log10 units)."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     lines = []
     for j, med in enumerate(media):
         med_label = medium_label(med)
-        days_meas = [float(f.split('_')[3]) for f in df_mibi0.filter(like=med).columns]
-        obs_meas = np.array([df_mibi0.filter(like=med)[f]['Average'] for f in df_mibi0.filter(like=med).columns])
-        stds = np.array([df_mibi0.filter(like=med)[f]['Standard deviation'] for f in df_mibi0.filter(like=med).columns])
+        days_meas = [float(f.split('_')[3]) for f in df_platecount0.filter(like=med).columns]
+        obs_meas = np.array([df_platecount0.filter(like=med)[f]['Average'] for f in df_platecount0.filter(like=med).columns])
+        stds = np.array([df_platecount0.filter(like=med)[f]['Standard deviation'] for f in df_platecount0.filter(like=med).columns])
         stds = relnoise*obs_meas
         days_meas, obs_meas, stds = zip(*sorted(zip(days_meas, obs_meas, stds)))
         if log10_sd is not None:
@@ -283,7 +283,7 @@ def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=['']
     ax.legend()#, handles=lines)
     if title is not None:
         ax.set_title(title, fontsize=13)
-    plt.savefig(path+exp+add_name+'_mibi.pdf', bbox_inches='tight')
+    plt.savefig(path+exp+add_name+'_platecount.pdf', bbox_inches='tight')
     plt.close(fig)
 
 

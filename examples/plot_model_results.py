@@ -38,7 +38,7 @@ if __name__ == "__main__":
     alph_opt_vals = []
     for k in range (n_exps):
         add_name = f'_{k}'
-        df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
+        df_names = [f'dataframe_platecount{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
         data = [pd.read_pickle(path2+df_name) for df_name in df_names]
         data = fm.dtf.filter_dataframe_regex('V.._', data)
         exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
@@ -66,7 +66,7 @@ if __name__ == "__main__":
         param_ode = np.concatenate((x0_vals, lambd_opt, alph_opt[k*n_cl:(k+1)*n_cl], rest_ode_param))
         t_model = np.linspace(0., 18., 100)
 
-        x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V0{k+1}', data), param_ode, calibr_setup, t_model)
+        x_count, obs_platecount_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V0{k+1}', data), param_ode, calibr_setup, t_model)
         exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
         
         '''
@@ -91,13 +91,13 @@ if __name__ == "__main__":
         '''
         for j, med in enumerate(media):
             fm.plotting.plot_all([2., 6., 10.], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med), clrs=exp_clrs,
-                    temps=temps_model, mtimes=t_model, mestim=obs_mibi_model[:,j, : ], dir=path2, add_name=f'MiBi_{med}_const_model'+add_name, time_lim=[17.5, 17.5, 17.5])
+                    temps=temps_model, mtimes=t_model, mestim=obs_platecount_model[:,j, : ], dir=path2, add_name=f'platecount_{med}_const_model'+add_name, time_lim=[17.5, 17.5, 17.5])
         '''
 
         for j, med in enumerate(media):
             for i, temp in enumerate([2.,]):
-                obs_mibi = obs_mibi_model[3*i:3*i+3,j,:]
-                fm.plotting.plot_all([temp], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med).filter(like=f'_{int(temp):02d}C_'), clrs=exp_clrs,temps=temps_model, mtimes=t_model, mestim=obs_mibi, dir=path2, add_name=f'MiBi_{med}_const_model_{int(temp)}Grad'+add_name, time_lim=[17.5])
+                obs_platecount = obs_platecount_model[3*i:3*i+3,j,:]
+                fm.plotting.plot_all([temp], labels, templ_meas=fm.plotting.plot_measurements_insilico, df=data[0].filter(like=med).filter(like=f'_{int(temp):02d}C_'), clrs=exp_clrs,temps=temps_model, mtimes=t_model, mestim=obs_platecount, dir=path2, add_name=f'platecount_{med}_const_model_{int(temp)}Grad'+add_name, time_lim=[17.5])
 
     # Plot alphas distribution:
     fig, ax = plt.subplots()

@@ -16,7 +16,7 @@ if __name__ == "__main__":
     path = f'out/main_param_distrib2_{int(n_exps)}exp/'
     path2 = path
     add_name = '_0'
-    df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
+    df_names = [f'dataframe_platecount{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
     data = fm.dtf.filter_dataframe_regex('V.._', data)
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))

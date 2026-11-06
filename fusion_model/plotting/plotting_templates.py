@@ -222,7 +222,7 @@ def make_barplot2(ax, times, obs_data, species):
 
 
 def plot_measurement(ax0, df0, exp, c, lst, scatter_marker):
-    """Plot one experiment's MiBi measurements with error bars."""
+    """Plot one experiment's plate count measurements with error bars."""
     days_meas = [float(f.split('_')[3]) for f in df0.columns]
     obs_meas = [df0[f]['Average'] for f in df0.columns]
     std_meas = [df0[f]['Standard deviation'] for f in df0.columns]

@@ -2,7 +2,7 @@
 JAX backend: cost, exact gradient and residual Jacobian of cost_withS
 ====================================================================
 
-Same model (fusion_model2, constant temperature per experiment), observables (MiBi, MALDI,
+Same model (fusion_model2, constant temperature per experiment), observables (plate counts, MALDI,
 NGS), noise models ('absolute' / 'relative'), aggregations (cost_sum_and_geometric_mean,
 GaussianNeg2LogLik, GeometricMeanNeg2LogLik, SelectedDataTypes) and s_max penalty as
 cost_function.cost_withS / residuals_withS, but written in JAX and solved with diffrax, so that
@@ -38,7 +38,7 @@ from .cost_function import (cost_sum_and_geometric_mean, relative_mask, _noise_m
 # aggregation of the per-data-type sums of squares, in JAX
 # ----------------------------------------------------------------------
 def _jax_aggregation(agg):
-    """JAX function of the list [SSR_ngs, SSR_maldi, SSR_mibi] equal to the numpy aggregation agg."""
+    """JAX function of the list [SSR_ngs, SSR_maldi, SSR_platecount] equal to the numpy aggregation agg."""
     use = None
     if isinstance(agg, SelectedDataTypes):
         agg, use = agg.aggregation_func, list(agg.use)
@@ -90,9 +90,9 @@ class JaxCost:
     """
     def __init__(self, calibr_setup, rtol=1e-8, atol=1e-8, solver="Tsit5", max_steps=100000,
                  structured_jacobian=False):
-        days, (obs_mibi, obs_maldi, obs_ngs) = calibr_setup["data_array"]
-        df_mibi = calibr_setup["dfs"][0]
-        self.exps = sorted(set(s.split("_")[0] for s in df_mibi.columns))
+        days, (obs_platecount, obs_maldi, obs_ngs) = calibr_setup["data_array"]
+        df_platecount = calibr_setup["dfs"][0]
+        self.exps = sorted(set(s.split("_")[0] for s in df_platecount.columns))
         self.n_cl = int(np.shape(obs_maldi)[2])
         self.n_media = int(calibr_setup["n_media"])
         self.n_exps = len(self.exps)
@@ -100,7 +100,7 @@ class JaxCost:
         self.temps = np.array([float(calibr_setup["exp_temps"][e]) for e in self.exps])
         self.T_x = np.asarray(calibr_setup["T_x"], dtype=float)
         self.noise_model = _noise_model(calibr_setup)
-        self.obs = [np.asarray(o, dtype=float) for o in (obs_ngs, obs_maldi, obs_mibi)]
+        self.obs = [np.asarray(o, dtype=float) for o in (obs_ngs, obs_maldi, obs_platecount)]
         self.kinds = ["composition", "composition", "counts"]
         if self.noise_model == "relative":
             self.masks = [relative_mask(o, k) for o, k in zip(self.obs, self.kinds)]
@@ -118,7 +118,7 @@ class JaxCost:
             self.ngs_k = np.where(self.masks[0], multinomial_counts(self.obs[0], self.ngs_dm[0]), 0.)
             self.ngs_sat = dm_saturated(self.ngs_k, *self.ngs_dm)
             self.ngs_c = _dm_rate(*self.ngs_dm)
-        self.mibi_max = np.nanmax(self.obs[2], axis=(0, 1))
+        self.platecount_max = np.nanmax(self.obs[2], axis=(0, 1))
         self.agg = _jax_aggregation(calibr_setup["aggregation_func"])
         self.penalty_w = float(calibr_setup.get("s_max_penalty") or 0.)
         self.n_total = _n_total_points(calibr_setup["aggregation_func"])
@@ -183,8 +183,8 @@ class JaxCost:
         f_maldi = s_x.reshape(1, m, n, 1) * counts[:, None, :, :]          # (exps, media, n_cl, days)
         f_maldi = jnp.where(f_maldi <= 0.005, 0.0, f_maldi)
         m_maldi = f_maldi / jnp.sum(f_maldi, axis=2, keepdims=True)
-        m_mibi = jnp.sum(s_x.reshape(1, m, n, 1) * counts[:, None, :, :], axis=2)  # (exps, media, days)
-        return m_ngs, m_maldi, m_mibi
+        m_platecount = jnp.sum(s_x.reshape(1, m, n, 1) * counts[:, None, :, :], axis=2)  # (exps, media, days)
+        return m_ngs, m_maldi, m_platecount
 
     # --- residuals ---------------------------------------------------------
     def _residual_groups(self, p, adjoint):
@@ -193,7 +193,7 @@ class JaxCost:
     def _groups_of_models(self, models):
         out = []
         for i, (obs, mod, mask, kind, scale) in enumerate(zip(self.obs, models, self.masks, self.kinds,
-                                                              (1.0, 1.0, self.mibi_max))):
+                                                              (1.0, 1.0, self.platecount_max))):
             obs_safe = np.where(mask, obs, 1.0)
             if i == 0 and self.ngs_dm:
                 r = dm_deviance_residuals(self.ngs_k, jnp.where(mask, mod, 1.0) * self.ngs_dm[1], self.ngs_sat, self.ngs_c,

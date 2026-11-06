@@ -18,21 +18,21 @@ if __name__ == "__main__":
     dfs, bact_all, T_x, s_x_predefined = fm.data.prepare_insilico_data(fm.data.model_13sp_2media_inhib, temps, ntr, inhib=False, noise=0., rel_noise=.0,
                                                                path=path+'13_dim/', cutoff=0., cutoff_prop=0.)
     # Read already geberated dfs from pkl
-    #dfs = [pd.read_pickle(path_new+df_name) for df_name in ['dataframe_mibi.pkl', 'dataframe_maldi.pkl', 'dataframe_ngs.pkl']]
+    #dfs = [pd.read_pickle(path_new+df_name) for df_name in ['dataframe_platecount.pkl', 'dataframe_maldi.pkl', 'dataframe_ngs.pkl']]
 
-    (df_mibi, df_maldi, df_ngs) = dfs
+    (df_platecount, df_maldi, df_ngs) = dfs
     n_cl = np.shape(dfs[1])[0]
     path_new = path+f'{int(n_cl)}_dim/'
     exps = sorted(list(set([s.split('_')[0] for s in dfs[0].columns])))
     n_media = 2
 
     start_S = time.time()
-    s_x = fm.pest.calc_Smatrix([df_mibi, df_maldi, df_ngs], T_x, s_x_predefined, path=path_new, workers=workers)
+    s_x = fm.pest.calc_Smatrix([df_platecount, df_maldi, df_ngs], T_x, s_x_predefined, path=path_new, workers=workers)
     print('S calc time: ', (time.time()-start_S)/60., 'min')
     # Save generated data and S matrix
     fm.output.json_dump(s_x.astype(list), 'S_matrix.json', dir=path_new)
     s_x = fm.output.read_from_json(path_new+'S_matrix.json')
-    #plot_filteringS2([df_mibi, df_maldi, df_ngs], np.array(s_x), T_x, exps, path=path_new)
+    #plot_filteringS2([df_platecount, df_maldi, df_ngs], np.array(s_x), T_x, exps, path=path_new)
 
     #s_x = read_from_json(path_new+'S_matrix_true.json')['s_x']
 
@@ -82,7 +82,7 @@ if __name__ == "__main__":
         }
 
     # Save estimated P and S matrices: 
-    #param_opt = calculate_model_prob_withP(log_likelihood_withP, [df_mibi, df_maldi, df_ngs], calibr_setup)
+    #param_opt = calculate_model_prob_withP(log_likelihood_withP, [df_platecount, df_maldi, df_ngs], calibr_setup)
 
 
     start = time.time()

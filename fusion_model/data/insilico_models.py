@@ -122,26 +122,26 @@ def save_all_dfs(dfs, names=[''], path=''):
 
 
 def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name='', t_meas=None,
-                          maldi_n=None, mibi_log10_sd=None, ngs_dm=None):
+                          maldi_n=None, platecount_log10_sd=None, ngs_dm=None):
     """Generate synthetic observations and align their MALDI and NGS bacteria.
     t_meas: measurement days (whole days; default: module attribute t = 0, 1, ..., 17); only for the
     model_exp based generators (model_1media_exp_*, model_2media_exp*).
     maldi_n: None (default): MALDI with relative Gaussian noise; N: MALDI as N identified colonies per plate
     (multinomial, see insilico_traj_dataframe); only for the model_exp based generators.
-    mibi_log10_sd: None (default): MiBi with relative Gaussian noise; sigma: Gaussian noise with standard deviation
+    platecount_log10_sd: None (default): plate counts with relative Gaussian noise; sigma: Gaussian noise with standard deviation
     sigma on log10 of the plate counts; only for the model_exp based generators.
     ngs_dm: None (default): NGS with relative Gaussian noise; (N, A): NGS as N reads per sample, Dirichlet-multinomial
     with concentration A (see insilico_traj_dataframe); only for the model_exp based generators."""
     extra = {} if t_meas is None else {'t_meas': np.asarray(t_meas, dtype=float)}
     if maldi_n is not None:
         extra['maldi_n'] = int(maldi_n)
-    if mibi_log10_sd is not None:
-        extra['mibi_log10_sd'] = float(mibi_log10_sd)
+    if platecount_log10_sd is not None:
+        extra['platecount_log10_sd'] = float(platecount_log10_sd)
     if ngs_dm is not None:
         extra['ngs_dm'] = (int(ngs_dm[0]), float(ngs_dm[1]))
     data = insilico_model(n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name, **extra)
     dfs = data[:-1]
-    (df_mibi, df_maldi, df_ngs) = dfs
+    (df_platecount, df_maldi, df_ngs) = dfs
     df_ngs, bact_ngs = dtf.preprocess_dataframe(df_ngs, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
     df_maldi, bact_maldi = dtf.preprocess_dataframe(df_maldi, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
@@ -160,8 +160,8 @@ def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, para
     # Take union of ngs and maldi bacteria
     df_maldi, df_ngs, T_x, s_x_predefined = dtf.make_df_maldi_ngs_compatible(df_maldi, df_ngs, cutoff=0.001, media=media)
     bact_all = sorted(set(list(bact_maldi) + list(bact_ngs)))
-    save_all_dfs([df_mibi, df_maldi, df_ngs], names=[f'mibi{add_name}_preprocessed', f'maldi{add_name}_preprocessed', f'ngs{add_name}_preprocessed'], path=path)
-    return [df_mibi, df_maldi, df_ngs], bact_all, T_x, s_x_predefined
+    save_all_dfs([df_platecount, df_maldi, df_ngs], names=[f'platecount{add_name}_preprocessed', f'maldi{add_name}_preprocessed', f'ngs{add_name}_preprocessed'], path=path)
+    return [df_platecount, df_maldi, df_ngs], bact_all, T_x, s_x_predefined
   
 '''
 def model_2sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
@@ -186,12 +186,12 @@ def model_2sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.,
                  .5,   .3,   # alpha1
                  7.,]  + kij_list
     param_model = param_ode + s_x + T_x
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx, df_fullx],
-                 names=['mibi', 'maldi', 'ngs', 'x', 'fullx'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx, df_fullx],
+                 names=['platecount', 'maldi', 'ngs', 'x', 'fullx'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_3sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
@@ -216,12 +216,12 @@ def model_3sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.,
                  .5,   .3, .4,  # alpha1
                  7.,]  + kij_list
     param_model = param_ode + s_x + T_x
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx, df_fullx],
-                 names=['mibi', 'maldi', 'ngs', 'x', 'fullx'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx, df_fullx],
+                 names=['platecount', 'maldi', 'ngs', 'x', 'fullx'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_4sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
@@ -246,11 +246,11 @@ def model_4sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise
                  .5,   .3,   .4,    0.,   # alpha1
                  7.,] + kij_list
     param_model = param_ode + s_x + T_x
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_6sp_2media_inhib(temps, ntr, x10=None, inhib=False, noise=0., rel_noise=0., path=''):
@@ -276,12 +276,12 @@ def model_6sp_2media_inhib(temps, ntr, x10=None, inhib=False, noise=0., rel_nois
     param_model = param_ode + s_x + T_x
     x10 = [[1., 2., 1., 5., 2., 1.] for _ in range (len(temps))]
     x0 = set_initial_vals(x10, temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path_new, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 def model_6sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
     """Generate six-cluster, two-medium synthetic data with exponential temperature effects."""
@@ -306,12 +306,12 @@ def model_6sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., r
     param_model = param_ode + s_x + T_x
     x10 = [[1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.] for _ in range (len(temps))]
     x0 = set_initial_vals(x10, temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_10sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
@@ -336,12 +336,12 @@ def model_10sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
     param_model = param_ode + s_x + T_x
     x10 = [[1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.] for _ in range (len(temps))]
     x0 = set_initial_vals(x10, temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_10sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
@@ -367,12 +367,12 @@ def model_10sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., 
     param_model = param_ode + s_x + T_x
     x10 =  [[1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.] for _ in range (len(temps))]
     x0 = set_initial_vals(x10, temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_13sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
@@ -397,12 +397,12 @@ def model_13sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
     param_model = param_ode + s_x + T_x
     x10 = [[1., 2., 1., 5., 2., 1., 2., 1., 2., 1., 4., 1., 2.] for _ in range (len(temps))]
     x0 = set_initial_vals(x10, temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 '''
 
 # Measurement days of the generated data
@@ -426,7 +426,7 @@ def read_exp_temps(dir, df=None):
     """
     Temperature of each experiment of the run in dir (exp_temps_model_paper.json saved there by the
     calibration). If the file does not exist (results from before), the temperatures are taken from the
-    column names of the data frame df (e.g. 'V01_M1_02C_00_MRS-mibi' -> 2.0).
+    column names of the data frame df (e.g. 'V01_M1_02C_00_MRS-platecount' -> 2.0).
     """
     import os
     if os.path.exists(os.path.join(dir, EXP_TEMPS_FILE)):
@@ -441,10 +441,10 @@ def read_exp_temps(dir, df=None):
 
 
 def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name='', t_meas=None,
-              maldi_n=None, mibi_log10_sd=None, ngs_dm=None):
+              maldi_n=None, platecount_log10_sd=None, ngs_dm=None):
     """Generate synthetic observations using the exponential temperature-dependent model.
     maldi_n: None: MALDI with relative Gaussian noise; N: multinomial MALDI with N colonies per plate.
-    mibi_log10_sd: None: MiBi with relative Gaussian noise; sigma: Gaussian noise on log10 of the plate counts.
+    platecount_log10_sd: None: plate counts with relative Gaussian noise; sigma: Gaussian noise on log10 of the plate counts.
     ngs_dm: None: NGS with relative Gaussian noise; (N, A): Dirichlet-multinomial NGS, N reads, concentration A."""
     np.random.seed(46987)
     if param_ode is None:
@@ -458,11 +458,11 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path=
         x10, x0 = get_random_initial_vals(temps, n_cl)
     if t_meas is not None and np.any(np.asarray(t_meas) != np.round(t_meas)):
         raise ValueError('t_meas must be whole days (the data column names contain the day as an integer)')
-    df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t if t_meas is None else t_meas, param_model, x0, temps, n_cl, n_traj=ntr,
-                                                                 noise=noise, rel_noise=rel_noise, media=media, maldi_n=maldi_n, mibi_log10_sd=mibi_log10_sd, ngs_dm=ngs_dm)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
+    df_platecount, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t if t_meas is None else t_meas, param_model, x0, temps, n_cl, n_traj=ntr,
+                                                                 noise=noise, rel_noise=rel_noise, media=media, maldi_n=maldi_n, platecount_log10_sd=platecount_log10_sd, ngs_dm=ngs_dm)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=[f'platecount{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, f'Result_real{add_name}.json', dir=path)
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 ############################ For experiments with different number of species ############################

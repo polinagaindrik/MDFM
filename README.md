@@ -223,15 +223,17 @@ param_opt, cost_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_
 
 | Path | Content |
 |---|---|
-| `fusion_model/data` | OpenBIS download, reading of the ZL2030 data, in-silico data generators, JSON output |
+| `fusion_model/data` | In-silico data generation, reading and writing of results |
 | `fusion_model/model` | ODE models and observables |
 | `fusion_model/parameter_estimation` | Cost functions and likelihoods, global and local optimization, media matrix, profile likelihood, JAX backend |
 | `fusion_model/plotting` | Figures of data, fits and parameters |
 | `fusion_model/dimensionality_reduction` | Projection and clustering of species |
 | `fusion_model/analysis` | Spectral expansion |
 | `fusion_model/tools` | Data frame helpers |
+| `fusion_model/zl2030` | Everything specific to the ZL2030 experiments: OpenBIS download, reading of the data, temperatures, bounds, figures, in-silico data from a ZL2030 fit |
 | `main.py` | Complete example on in-silico data |
 | `examples/main_ZL2030_*.py` | Calibration and prediction on the ZL2030 data (need the measurement data) |
+| `examples/zl2030/` | Multistart fit of the 12-species model to the ZL2030 data, its progress and figures (results in `out/zl2030/`) |
 | `examples/main_param_distrib*.py`, `examples/plot_*.py` | Parameter distribution studies, plots of saved results |
 | `plot_results/` | Further plotting scripts |
 

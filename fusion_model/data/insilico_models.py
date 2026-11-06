@@ -49,10 +49,6 @@ def sample_selective_media(n_media=3, n_cl=12, n_targets=3, target=(0.6, 0.95), 
    return np.round(s, 2), groups
 
 
-
-
-
-
 def sample_general_media(n_media=3, base=None, n_cl=12, decimals=2, min_value=0.15, max_tries=10000):
    """General media from a measured general medium base (default: ZL2030 plate count agar, zl2030_general_medium):
    gen0 = base, rounded to decimals, values below min_value raised to min_value (every species is recovered);
@@ -412,61 +408,13 @@ def model_13sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
     return df_mibi, df_maldi, df_ngs, df_realx
 '''
 
-############################# Models for fusion mode paper ##################################
+# Measurement days of the generated data
 #n_cl_max = 12
 #S_general = np.round(np.random.uniform(0.0, 1.0, size=(3, n_cl_max)), 1)
 #S_selective = np.round(np.random.uniform(0.0, 05.0, size=(n_cl_max, n_cl_max)) + np.random.uniform(0.6, 0.95, n_cl_max)*np.eye(n_cl_max), 1)
 #t = np.array([0., 1., 3., 6., 10., 13.,])
 t = np.linspace(0., 17., 18)
 #np.random.seed(4698517)
-
-# ----------------------------------------------------------------------
-# True parameters of the in-silico data (setup folder of the project that generates the data)
-# ----------------------------------------------------------------------
-_setup_dir = 'setup/'  # relative to the working directory; a project sets its own folder with set_setup_dir
-
-
-def set_setup_dir(dir):
-    """Folder of the setup files of the in-silico data, used by all functions below when no dir is given."""
-    global _setup_dir
-    _setup_dir = dir
-
-
-def get_setup_dir():
-    """Folder of the setup files of the in-silico data (see set_setup_dir)."""
-    return _setup_dir
-
-
-X0_DISTRIBUTIONS = ('uniform', 'lognormal')  # see sample_log10_x0
-X0_DISTRIBUTION = 'lognormal'  # default initial-value distribution of the setup files
-INITIAL_VALUES_FILE = f'Initial_values_x0_paper_{X0_DISTRIBUTION}.json'
-TRUE_PARAMETERS_FILE = f'True_parameters_paper_{X0_DISTRIBUTION}.json'
-
-
-def initial_values_file(distribution=X0_DISTRIBUTION):
-    """Setup file of the initial values sampled from distribution: Initial_values_x0_paper_<distribution>.json."""
-    if distribution not in X0_DISTRIBUTIONS:
-        raise ValueError(f'unknown x0 distribution {distribution!r}, expected one of {X0_DISTRIBUTIONS}')
-    return f'Initial_values_x0_paper_{distribution}.json'
-
-
-def true_parameters_file(distribution=X0_DISTRIBUTION):
-    """Setup file of the true parameters with the initial values of distribution: True_parameters_paper_<distribution>.json."""
-    if distribution not in X0_DISTRIBUTIONS:
-        raise ValueError(f'unknown x0 distribution {distribution!r}, expected one of {X0_DISTRIBUTIONS}')
-    return f'True_parameters_paper_{distribution}.json'
-
-
-def read_initial_values(distribution=X0_DISTRIBUTION, n_exps=None, n_cl=None, dir=None):
-    """log10 initial values (experiments x species) of the setup file of distribution, first n_exps
-    experiments and n_cl species (None: all); dir None: the setup folder (set_setup_dir)."""
-    dir = _setup_dir if dir is None else dir
-    file = initial_values_file(distribution)
-    x10 = np.array(read_from_json(file, dir=dir)['x0'], dtype=float)
-    if n_exps is not None and n_exps > len(x10):
-        raise ValueError(f'{dir}{file} has initial values for {len(x10)} experiments, {n_exps} requested')
-    return x10[:n_exps, :n_cl]
-MEDIA_MATRIX_FILE = 'Media_matrix_S_paper.json'
 
 
 EXP_TEMPS_FILE = 'exp_temps_model_paper.json'  # experiment -> temperature, saved next to the calibration results
@@ -492,75 +440,6 @@ def read_exp_temps(dir, df=None):
     return {c.split('_')[0]: float(c.split('_')[2].rstrip('C')) for c in df.columns}
 
 
-def _split_true_param_ode(param_ode, n_cl_file):
-    """[x0 (n_exps x n_cl) | lambda_1 | lambda_exp | alpha_0 | alpha_exp | N_1, N_exp | k (n_cl x n_cl)] -> parts."""
-    p = np.asarray(param_ode, dtype=float)
-    n = n_cl_file
-    n_ode = 4*n + 2 + n*n
-    n_x0 = len(p) - n_ode
-    if n_x0 < 0 or n_x0 % n:
-        raise ValueError(f'param_ode of length {len(p)} does not fit {n} species')
-    x0 = p[:n_x0].reshape(-1, n)
-    o = p[n_x0:]
-    return x0, o[:n], o[n:2*n], o[2*n:3*n], o[3*n:4*n], o[4*n:4*n+2], o[4*n+2:].reshape(n, n)
-
-
-def read_true_parameters(n_cl, file=None, dir=None, distribution=X0_DISTRIBUTION):
-    """
-    True parameters of the in-silico model for the first n_cl species, from the setup JSON
-    (param_ode = [x0 | ODE] of all species, s_x = media x species, T_x); file None: the file of the
-    initial-value distribution, True_parameters_paper_<distribution>.json (the ODE parameters, s_x and T_x
-    are the same for all distributions, only x0 differs). Returns a dict:
-      'param_ode': ODE parameters for n_cl species [lambda_1, lambda_exp, alpha_0, alpha_exp, N_1, N_exp, k_ij]
-                   (the layout fusion_model2 / model_exp expects)
-      'x10'      : log10 initial values, experiments x n_cl
-      's_x'      : media x n_cl, 'T_x': n_cl
-    dir None: the setup folder (set_setup_dir).
-    """
-    dir = _setup_dir if dir is None else dir
-    if file is None:
-        file = true_parameters_file(distribution)
-    res = read_from_json(file, dir=dir)
-    n_file = len(res['T_x'])
-    if n_cl > n_file:
-        raise ValueError(f'{dir}{file} has {n_file} species, {n_cl} requested')
-    x0, lam1, lamexp, alph0, alphexp, nmax, k = _split_true_param_ode(res['param_ode'], n_file)
-    param_ode = np.concatenate([lam1[:n_cl], lamexp[:n_cl], alph0[:n_cl], alphexp[:n_cl], nmax,
-                                k[:n_cl, :n_cl].ravel()])
-    s_x = np.asarray(res['s_x'], dtype=float).reshape(-1, n_file)[:, :n_cl]
-    return {'param_ode': param_ode, 'x10': x0[:, :n_cl], 's_x': s_x,
-            'T_x': np.asarray(res['T_x'], dtype=float)[:n_cl]}
-
-
-def true_parameters_for_distribution(distribution, source='uniform', n_exps=None, setup_dir=None,
-                                     media_file=MEDIA_MATRIX_FILE):
-    """
-    True-parameter JSON content (see read_true_parameters) for the initial values of distribution: ODE
-    parameters copied from the frozen file of source (True_parameters_paper_<source>.json),
-    x0 = first n_exps experiments (None: as many as in the source file) of
-    Initial_values_x0_paper_<distribution>.json, s_x = [sel1, gen0] and T_x of the media matrix
-    (Media_matrix_S_paper.json). setup_dir None: the setup folder (set_setup_dir).
-    """
-    setup_dir = _setup_dir if setup_dir is None else setup_dir
-    file = true_parameters_file(source)
-    res = read_from_json(file, dir=setup_dir)
-    n_file = len(res['T_x'])
-    p = np.asarray(res['param_ode'], dtype=float)
-    n_x0 = len(p) - (4*n_file + 2 + n_file*n_file)
-    if n_x0 < 0 or n_x0 % n_file:
-        raise ValueError(f'param_ode of {setup_dir}{file} (length {len(p)}) does not fit {n_file} species')
-    if n_exps is None:
-        n_exps = n_x0 // n_file
-    x10 = read_initial_values(distribution, n_exps, n_file, dir=setup_dir)
-    S = read_from_json(media_file, dir=setup_dir)
-    s_x = np.concatenate([np.asarray(S['s_selective'][0][:n_file], dtype=float),
-                          np.asarray(S['s_general0'][:n_file], dtype=float)])
-    return {'param_ode': list(np.concatenate([x10.ravel(), p[n_x0:]])), 's_x': list(s_x),
-            'T_x': list(np.asarray(S['T_x'][:n_file], dtype=float))}
-
-
-
-
 # 10 species models (linear model)
 
 
@@ -571,9 +450,8 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path=
     mibi_log10_sd: None: MiBi with relative Gaussian noise; sigma: Gaussian noise on log10 of the plate counts.
     ngs_dm: None: NGS with relative Gaussian noise; (N, A): Dirichlet-multinomial NGS, N reads, concentration A."""
     np.random.seed(46987)
-    if param_ode is None:  # true ODE parameters from the setup folder (see read_true_parameters)
-        param_ode = read_true_parameters(n_cl)['param_ode']
-        print(f'model_exp: true ODE parameters of {n_cl} species from {_setup_dir}{TRUE_PARAMETERS_FILE}')
+    if param_ode is None:
+        raise ValueError('model_exp needs param_ode, the true ODE parameters of the in-silico model')
     if not inhib:
         param_ode[-n_cl*n_cl:] = 0.
     param_model = np.concatenate([param_ode, s_x, T_x])
@@ -608,96 +486,6 @@ def model_2media_expgensel(n_cl, temps, ntr, S_matrix_setup, **kwargs):
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 
-def model_2media_expgen1sel1(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for general medium 1 and selective medium 1."""
-    s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_general"][0][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel1', 'gen1']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_2media_expgen2sel2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for general medium 2 and selective medium 2."""
-    s_x = np.array(S_matrix_setup["s_selective"][1][:n_cl]+S_matrix_setup["s_general"][1][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel2', 'gen2']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_2media_expgen3sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for general medium 3 and selective medium 3."""
-    s_x = np.array(S_matrix_setup["s_selective"][2][:n_cl]+S_matrix_setup["s_general"][2][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel3', 'gen3']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_2media_expsel2sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for selective media 2 and 3."""
-    s_x = np.array(S_matrix_setup["s_selective"][1][:n_cl]+S_matrix_setup["s_selective"][2][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel2', 'sel3']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_2media_expsel1sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for selective media 1 and 3."""
-    s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_selective"][2][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel1', 'sel3']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_2media_expsel1sel2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for selective media 1 and 2."""
-    s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_selective"][1][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel1', 'sel2']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-
 ################### Experiments with different media (6 species) #######################
-def model_1media_exp_sel1(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data using selective medium 1."""
-    s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel1']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_1media_exp_sel2(n_cl, temps, ntr, S_matrix_setup,  **kwargs):
-    """Generate exponential-model data using selective medium 2."""
-    s_x = np.array(S_matrix_setup["s_selective"][1][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel2']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_1media_exp_sel3(n_cl, temps, ntr, S_matrix_setup,  **kwargs):
-    """Generate exponential-model data using selective medium 3."""
-    s_x = np.array(S_matrix_setup["s_selective"][2][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel3']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_1media_exp_gen0(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data using general medium 0 (ZL2030 plate count agar, key 's_general0')."""
-    s_x = np.array(_s_general0(S_matrix_setup, n_cl))
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['gen0']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 
-def model_1media_exp_gen1(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data using general medium 1."""
-    s_x = np.array(S_matrix_setup["s_general"][0][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['gen1']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_1media_exp_gen2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data using general medium 2."""
-    s_x = np.array(S_matrix_setup["s_general"][1][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['gen2']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_1media_exp_gen3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data using general medium 3."""
-    s_x = np.array(S_matrix_setup["s_general"][2][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['gen3']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)

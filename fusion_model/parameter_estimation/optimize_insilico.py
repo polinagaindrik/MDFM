@@ -10,7 +10,7 @@ def param_bnds_insilico_tempexponent(n_cl, inhib=True):
     else:
         inhib_bnds = [(0., 0.) for _ in range (n_cl*n_cl)]
     param_ode_bnds = tuple([(-8., -1.)  for _ in range (n_cl)]  + # lambd_1
-                            [(0., 5.)    for _ in range (n_cl)] + # lambd_exp
+                            [(0., 3.)    for _ in range (n_cl)] + # lambd_exp
                             [(.001,  2.)  for _ in range (n_cl)] +  # alph_0
                             [(.0,  2.)  for _ in range (n_cl)] +  # alph_exp
                             [(7.5, 14.)] + [(0., 2.)]           + # N_1 and N_exp

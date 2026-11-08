@@ -154,13 +154,15 @@ def make_gaussian_neg2loglik(data_array, noise_model="absolute", maldi_n=None, n
     (= extract_observables_from_df(dfs) -> (days, [obs_platecount, obs_maldi, obs_ngs])).
     The residual order of cost_withS / squared_differences is [ngs, maldi, platecount].
     noise_model: as calibr_setup['noise_model'] ('relative': degrees of freedom of the log residuals).
-    maldi_n: as calibr_setup['maldi_n'], gives a MultinomialMaldiNeg2LogLik (MALDI multinomial, N colonies per plate).
+    maldi_n: as calibr_setup['maldi_n'], gives a MultinomialMaldiNeg2LogLik (MALDI multinomial, N colonies per plate;
+             one number, or an array of N per composition as in calibr_setup['maldi_n']).
     ngs_dm: as calibr_setup['ngs_dm'], the same with NGS Dirichlet-multinomial ((N, A): N reads, concentration A).
     """
     from .cost_function import count_data_points_noise
-    if maldi_n or ngs_dm:
+    from .cost_function import count_setting_on
+    if count_setting_on(maldi_n) or count_setting_on(ngs_dm):
         return MultinomialMaldiNeg2LogLik(count_data_points_noise(data_array, noise_model, maldi_n, ngs_dm),
-                                          is_deviance=(bool(ngs_dm), bool(maldi_n), False))
+                                          is_deviance=(count_setting_on(ngs_dm), count_setting_on(maldi_n), False))
     return GaussianNeg2LogLik(count_data_points_noise(data_array, noise_model))
 
 

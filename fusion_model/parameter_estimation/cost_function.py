@@ -22,11 +22,12 @@ from fusion_model.parameter_estimation.media_matrix import S_squared_difference
 #   (count_data_points_noise), which -2 log L objectives must use as the number of data points.
 # ----------------------------------------------------------------------
 #
-# calibr_setup['maldi_n'] = N (None: off, needs noise_model 'relative' and pl.make_gaussian_neg2loglik(..., maldi_n=N)):
+# calibr_setup['maldi_n'] = N, one number or an array of N per composition (shape of the MALDI data with a species axis
+#   of length 1, e.g. the colonies identified on each plate; None: off, needs noise_model 'relative' and pl.make_gaussian_neg2loglik(..., maldi_n=N)):
 #   MALDI as N identified colonies per plate, counts k_j = N * measured ~ Multinomial(N, p_j(model)). Residuals
 #   are the deviance residuals of the counts (multinomial_deviance_residuals), one per species incl. the undetected
 #   ones (k_j = 0); their sum of squares is -2 log L of the multinomial up to a constant, with no noise level to estimate.
-# calibr_setup['ngs_dm'] = (N, A) (None: off, needs noise_model 'relative' and pl.make_gaussian_neg2loglik(..., ngs_dm=(N, A))):
+# calibr_setup['ngs_dm'] = (N, A), N one number or an array of the reads of each sample as for maldi_n (None: off, needs noise_model 'relative' and pl.make_gaussian_neg2loglik(..., ngs_dm=(N, A))):
 #   NGS as N reads per sample with species counts k ~ Dirichlet-multinomial(N, A p), including k_j = 0. The residuals
 #   are dm_deviance_residuals; their sum of squares is -2 log L up to a constant, with N and A known.
 # ----------------------------------------------------------------------
@@ -40,6 +41,25 @@ def _noise_model(calibr_setup):
     return nm
 
 
+def count_setting_on(x):
+    """True if a count setting (calibr_setup['maldi_n'] or ['ngs_dm']) is given: a number, an array of numbers per
+    composition, or a tuple (N, A) with N one of these."""
+    if x is None:
+        return False
+    if isinstance(x, (tuple, list)) and len(x) == 2 and np.ndim(x[1]) == 0:  # (N, A)
+        return count_setting_on(x[0])
+    return not (np.ndim(x) == 0 and not x)
+
+
+def _counts_per_composition(n):
+    """N as given: int for one number (as before), else a float array of N per composition (species axis of length 1,
+    broadcast against the data); missing compositions (NaN) get 1, they are masked out anyway."""
+    if np.ndim(n) == 0:
+        return int(n)
+    n = np.asarray(n, dtype=float)
+    return np.where(np.isfinite(n) & (n > 0), n, 1.)
+
+
 def maldi_n_of(calibr_setup):
     """Number of identified colonies per plate if MALDI is fitted with the multinomial likelihood, else None;
     checks that the noise model and the objective fit to it."""
@@ -47,7 +67,7 @@ def maldi_n_of(calibr_setup):
     agg = calibr_setup.get('aggregation_func')
     agg = getattr(agg, 'aggregation_func', agg)  # inside SelectedDataTypes
     is_multinomial = bool(getattr(agg, 'is_deviance', (False, False, False))[1])
-    if not n:
+    if not count_setting_on(n):
         if is_multinomial:
             raise ValueError("aggregation MultinomialMaldiNeg2LogLik needs calibr_setup['maldi_n']")
         return None
@@ -56,7 +76,7 @@ def maldi_n_of(calibr_setup):
     if not is_multinomial:
         raise ValueError("calibr_setup['maldi_n'] needs the objective pl.make_gaussian_neg2loglik(..., maldi_n=N) "
                          f"('neg2logL'), got {type(agg).__name__ if agg is not None else None}")
-    return int(n)
+    return _counts_per_composition(n)
 
 
 def ngs_dm_of(calibr_setup):
@@ -66,7 +86,7 @@ def ngs_dm_of(calibr_setup):
     agg = calibr_setup.get('aggregation_func')
     agg = getattr(agg, 'aggregation_func', agg)  # inside SelectedDataTypes
     is_dm = bool(getattr(agg, 'is_deviance', (False, False, False))[0])
-    if not dm:
+    if not count_setting_on(dm):
         if is_dm:
             raise ValueError("this aggregation has NGS as deviance and needs calibr_setup['ngs_dm']")
         return None
@@ -75,7 +95,7 @@ def ngs_dm_of(calibr_setup):
     if not is_dm:
         raise ValueError("calibr_setup['ngs_dm'] needs the objective pl.make_gaussian_neg2loglik(..., ngs_dm=(N, A)) "
                          f"('neg2logL'), got {type(agg).__name__ if agg is not None else None}")
-    return int(dm[0]), float(dm[1])
+    return _counts_per_composition(dm[0]), float(dm[1])
 
 
 def multinomial_counts(meas, n):
@@ -83,7 +103,8 @@ def multinomial_counts(meas, n):
     not come from n identified colonies per plate (MALDI) or n reads per sample (NGS)."""
     k = np.asarray(meas, dtype=float) * n
     if np.nanmax(np.abs(k - np.round(k)), initial=0.) > 1e-6:
-        raise ValueError(f'proportions are not multiples of 1/{n}: the data do not have {n} counts per composition')
+        what = n if np.ndim(n) == 0 else 'N (one per composition)'
+        raise ValueError(f'proportions are not multiples of 1/{what}: the data do not have these counts per composition')
     return np.round(k)
 
 
@@ -111,8 +132,10 @@ def multinomial_residuals(meas, model, n):
 
 
 def _dm_rate(n, conc):
-    """Lagrange multiplier c = log(1 + N / A) of the Dirichlet-multinomial residuals (dm_deviance_residuals)."""
-    return float(np.log1p(n / conc))
+    """Lagrange multiplier c = log(1 + N / A) of the Dirichlet-multinomial residuals (dm_deviance_residuals);
+    an array for N per composition."""
+    c = np.log1p(np.asarray(n, dtype=float) / conc)
+    return float(c) if np.ndim(c) == 0 else c
 
 
 def dm_saturated(k, n, conc):
@@ -122,10 +145,12 @@ def dm_saturated(k, n, conc):
     Returns arrays of the shape of k: a*, g*, s2 = sqrt(-g''(a*)) and s3 = g'''(a*) / (6 g''(a*)) (series near a*).
     """
     k = np.asarray(k, dtype=float)
-    c = _dm_rate(n, conc)
-    values, inverse = np.unique(k, return_inverse=True)
+    c_all = np.broadcast_to(np.asarray(_dm_rate(n, conc), dtype=float), k.shape)
+    pairs, inverse = np.unique(np.stack([k.ravel(), c_all.ravel()], axis=1), axis=0, return_inverse=True)
+    inverse = np.ravel(inverse)
+    values = pairs[:, 0]
     a_star, g_star, s2, s3 = np.zeros(values.shape), np.zeros(values.shape), np.ones(values.shape), np.zeros(values.shape)
-    for i, v in enumerate(values):
+    for i, (v, c) in enumerate(pairs):
         if v <= 0:
             continue
         lo = v / np.expm1(c)  # sum_i 1 / (a + i) >= log(1 + k / a), so a* >= k / (exp(c) - 1)
@@ -144,7 +169,10 @@ def dm_saturated(k, n, conc):
 
 @lru_cache(maxsize=32)
 def _dm_saturated_cached(k_bytes, shape, n, conc):
-    """dm_saturated for the numpy cost: the counts are fixed during a fit, so it is computed once per dataset."""
+    """dm_saturated for the numpy cost: the counts are fixed during a fit, so it is computed once per dataset.
+    n: a number, or (bytes, shape) of an array of N per composition."""
+    if isinstance(n, tuple):
+        n = np.frombuffer(n[0]).reshape(n[1])
     return dm_saturated(np.frombuffer(k_bytes).reshape(shape), n, conc)
 
 
@@ -172,7 +200,8 @@ def dm_residuals(meas, model, n, conc):
     k = multinomial_counts(meas, n)
     use = np.isfinite(k)
     k0 = np.where(use, k, 0.)
-    sat = _dm_saturated_cached(k0.tobytes(), k0.shape, n, conc)
+    n_key = n if np.ndim(n) == 0 else (np.ascontiguousarray(n, dtype=float).tobytes(), np.shape(n))
+    sat = _dm_saturated_cached(k0.tobytes(), k0.shape, n_key, conc)
     r = dm_deviance_residuals(k0, np.where(use, np.asarray(model, dtype=float), 1.) * conc, sat, _dm_rate(n, conc))
     return np.where(use, r, np.nan)
 
@@ -208,9 +237,9 @@ def count_data_points_noise(data_array, noise_model='absolute', maldi_n=None, ng
         def comp_dof(obs):
             use = relative_mask(obs, 'composition')
             return int(np.sum(np.maximum(use.sum(axis=-2) - 1, 0)))
-        dof_maldi = (int(np.sum(np.maximum(np.isfinite(obs_maldi).sum(axis=-2) - 1, 0))) if maldi_n
+        dof_maldi = (int(np.sum(np.maximum(np.isfinite(obs_maldi).sum(axis=-2) - 1, 0))) if count_setting_on(maldi_n)
                      else comp_dof(obs_maldi))
-        dof_ngs = (int(np.sum(np.maximum(np.isfinite(obs_ngs).sum(axis=-2) - 1, 0))) if ngs_dm
+        dof_ngs = (int(np.sum(np.maximum(np.isfinite(obs_ngs).sum(axis=-2) - 1, 0))) if count_setting_on(ngs_dm)
                    else comp_dof(obs_ngs))
         return [dof_ngs, dof_maldi, int(relative_mask(obs_platecount, 'counts').sum())]
     return [int(np.count_nonzero(np.isfinite(o))) for o in (obs_ngs, obs_maldi, obs_platecount)]
@@ -251,14 +280,19 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, platecount_ma
     if _noise_model(calibr_setup) == 'relative':
         n_maldi = maldi_n_of(calibr_setup)
         dm_ngs = ngs_dm_of(calibr_setup)
-        sq = [None if dm_ngs else relative_residuals(obs_ngs_meas[i], obs_ngs, 'composition')**2,
-              None if n_maldi else relative_residuals(obs_maldi_meas[i], obs_maldi, 'composition')**2,
+        # counts per composition: this experiment's entries
+        if n_maldi is not None and np.ndim(n_maldi) > 0:
+            n_maldi = n_maldi[i]
+        if dm_ngs is not None and np.ndim(dm_ngs[0]) > 0:
+            dm_ngs = (dm_ngs[0][i], dm_ngs[1])
+        sq = [None if dm_ngs is not None else relative_residuals(obs_ngs_meas[i], obs_ngs, 'composition')**2,
+              None if n_maldi is not None else relative_residuals(obs_maldi_meas[i], obs_maldi, 'composition')**2,
               relative_residuals(obs_platecount_meas[i], obs_platecount, 'counts')**2]
         sq = [None if q is None else np.where(np.isnan(q), 0., q) for q in sq]  # unused entries: 0 (dropped later)
-        if n_maldi:  # failed solve (NaN model) -> inf -> PENALTY in the aggregation
+        if n_maldi is not None:  # failed solve (NaN model) -> inf -> PENALTY in the aggregation
             q = multinomial_residuals(obs_maldi_meas[i], obs_maldi, n_maldi)**2
             sq[1] = np.where(np.isfinite(obs_maldi_meas[i]), np.nan_to_num(q, nan=np.inf, posinf=np.inf), 0.)
-        if dm_ngs:
+        if dm_ngs is not None:
             q = dm_residuals(obs_ngs_meas[i], obs_ngs, *dm_ngs)**2
             sq[0] = np.where(np.isfinite(obs_ngs_meas[i]), np.nan_to_num(q, nan=np.inf, posinf=np.inf), 0.)
         return tuple(sq)
@@ -331,10 +365,10 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
                                       (obs_maldi_meas, m_maldi, 1., 'composition'),
                                       (obs_platecount_meas, m_platecount, platecount_max, 'counts')):
         obs = np.asarray(obs, dtype=float)
-        if n_maldi and mdl_obs is m_maldi:
+        if n_maldi is not None and mdl_obs is m_maldi:
             mask = np.isfinite(obs)
             r = multinomial_residuals(obs, mdl_obs, n_maldi)
-        elif dm_ngs and mdl_obs is m_ngs:
+        elif dm_ngs is not None and mdl_obs is m_ngs:
             mask = np.isfinite(obs)
             r = dm_residuals(obs, mdl_obs, *dm_ngs)
         elif relative:

@@ -108,12 +108,12 @@ class JaxCost:
             self.masks = [~np.isnan(o) for o in self.obs]
         # MALDI with the multinomial likelihood: all measured entries incl. zeros (undetected species)
         self.maldi_n = maldi_n_of(calibr_setup)
-        if self.maldi_n:
+        if self.maldi_n is not None:
             self.masks[1] = np.isfinite(self.obs[1])
             self.maldi_k = np.where(self.masks[1], multinomial_counts(self.obs[1], self.maldi_n), 0.)
         # NGS with the Dirichlet-multinomial likelihood: all measured entries incl. zeros (undetected species)
         self.ngs_dm = ngs_dm_of(calibr_setup)
-        if self.ngs_dm:
+        if self.ngs_dm is not None:
             self.masks[0] = np.isfinite(self.obs[0])
             self.ngs_k = np.where(self.masks[0], multinomial_counts(self.obs[0], self.ngs_dm[0]), 0.)
             self.ngs_sat = dm_saturated(self.ngs_k, *self.ngs_dm)
@@ -195,10 +195,10 @@ class JaxCost:
         for i, (obs, mod, mask, kind, scale) in enumerate(zip(self.obs, models, self.masks, self.kinds,
                                                               (1.0, 1.0, self.platecount_max))):
             obs_safe = np.where(mask, obs, 1.0)
-            if i == 0 and self.ngs_dm:
+            if i == 0 and self.ngs_dm is not None:
                 r = dm_deviance_residuals(self.ngs_k, jnp.where(mask, mod, 1.0) * self.ngs_dm[1], self.ngs_sat, self.ngs_c,
                                           xp=jnp, lgamma=jax.scipy.special.gammaln)
-            elif i == 1 and self.maldi_n:
+            elif i == 1 and self.maldi_n is not None:
                 r = multinomial_deviance_residuals(self.maldi_k, jnp.where(mask, mod, 1.0) * self.maldi_n, xp=jnp)
             elif self.noise_model == "relative":
                 d = jnp.log(obs_safe) - jnp.log(jnp.maximum(jnp.where(mask, mod, 1.0), 1e-300))
@@ -330,13 +330,23 @@ def _register():
 _register()
 
 
+def _hashable(x):
+    """Cache key of a count setting: a number, an array of N per composition, or a tuple (N, A)."""
+    if isinstance(x, (tuple, list)):
+        return tuple(_hashable(v) for v in x)
+    if np.ndim(x) > 0:
+        a = np.ascontiguousarray(x, dtype=float)
+        return (a.shape, a.tobytes())
+    return x
+
+
 def jax_cost_for(calibr_setup, **kwargs):
     """JaxCost cached per calibr_setup object and its bounds / objective / noise model / penalty.
     Options of JaxCost: keyword arguments here, or calibr_setup['jax_options'] (default: none)."""
     kwargs = {**(calibr_setup.get("jax_options") or {}), **kwargs}
     s_x = calibr_setup.get("s_x")
     key = (id(calibr_setup), id(calibr_setup.get("aggregation_func")), calibr_setup.get("noise_model"),
-           calibr_setup.get("maldi_n"), None if not calibr_setup.get("ngs_dm") else tuple(calibr_setup["ngs_dm"]),
+           _hashable(calibr_setup.get("maldi_n")), _hashable(calibr_setup.get("ngs_dm")),
            None if s_x is None else tuple(np.ravel(np.asarray(s_x, dtype=float))),
            calibr_setup.get("s_max_penalty"), tuple(map(tuple, calibr_setup["param_bnds"])),
            tuple(np.ravel(calibr_setup.get("lambda_tref", ()))),

@@ -409,13 +409,13 @@ class TotalCostFromResiduals:
         return apply_s_max_penalty(self.agg(sq_groups[:-1]), self.calibr_setup, float(np.sum(sq_groups[-1])))
 
 
-def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
-    """Evaluate the calibration cost with experiment-specific alpha parameters and fitted media weights."""
+def cost_withS_withdiffmu(param, calibr_setup, jac_spasity):
+    """Evaluate the calibration cost with experiment-specific mu parameters and fitted media weights."""
     n_cl = calibr_setup['n_cl']
     n_media = calibr_setup['n_media']
     exps = calibr_setup['exps']
     lambd  = param[n_cl*len(exps):n_cl*len(exps)+n_cl]
-    alph = param[n_cl*len(exps)+n_cl:n_cl*len(exps)+n_cl + n_cl*len(exps)]
+    mu = param[n_cl*len(exps)+n_cl:n_cl*len(exps)+n_cl + n_cl*len(exps)]
     rest_ode_param = param[n_cl*len(exps)+n_cl + n_cl*len(exps):-n_cl*n_media]
     s_x = np.array(param)[-n_cl*n_media:].reshape((n_media, n_cl))
     x0_vals = param[:n_cl*len(exps)]
@@ -427,7 +427,7 @@ def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
     platecount_max = np.nanmax(obs_platecount_meas, axis=(0, 1))**2
     ll_ngs, ll_maldi, ll_platecount = np.zeros(np.shape(obs_ngs_meas)), np.zeros(np.shape(obs_maldi_meas)), np.zeros(np.shape(obs_platecount_meas))
     for i, exp in enumerate(exps):
-        param_ode = np.concatenate((lambd, alph[n_cl*i:n_cl*(i+1)], rest_ode_param))
+        param_ode = np.concatenate((lambd, mu[n_cl*i:n_cl*(i+1)], rest_ode_param))
         ll_ngs[i], ll_maldi[i], ll_platecount[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals[n_cl*i:n_cl*(i+1)], param_ode, s_x, platecount_max)
     ll_ngs = ll_ngs[ll_ngs!=0]
     ll_maldi = ll_maldi[ll_maldi!=0]

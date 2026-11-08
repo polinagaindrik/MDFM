@@ -57,7 +57,7 @@ The mathematical model will be described in a forthcoming paper. In short, the m
 The parameter vector of a calibration with `fm.pest.cost_withS` and `fusion_model2` is:
 
 ```
-[ x0 (n_cl per experiment, log10) | lambda_1 (n_cl) | lambda_exp (n_cl) | alpha_0 (n_cl) | alpha_exp (n_cl) | N_1 | N_exp | k_ij (n_cl x n_cl) | S (n_media x n_cl) ]
+[ x0 (n_cl per experiment, log10) | lambda_1 (n_cl) | lambda_exp (n_cl) | mu_0 (n_cl) | mu_exp (n_cl) | N_1 | N_exp | k_ij (n_cl x n_cl) | S (n_media x n_cl) ]
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>

@@ -11,8 +11,8 @@ def param_bnds_insilico_tempexponent(n_cl, inhib=True, lambda_exp_max=5.):
         inhib_bnds = [(0., 0.) for _ in range (n_cl*n_cl)]
     param_ode_bnds = tuple([(-8., -1.)  for _ in range (n_cl)]  + # lambd_1
                             [(0., lambda_exp_max)    for _ in range (n_cl)] + # lambd_exp
-                            [(.001,  2.)  for _ in range (n_cl)] +  # alph_0
-                            [(.0,  2.)  for _ in range (n_cl)] +  # alph_exp
+                            [(.001,  2.)  for _ in range (n_cl)] +  # mu_0
+                            [(.0,  2.)  for _ in range (n_cl)] +  # mu_exp
                             [(7.5, 14.)] + [(0., 2.)]           + # N_1 and N_exp
                             inhib_bnds)
     
@@ -28,8 +28,8 @@ def param_bnds_insilico_templinear(n_cl, inhib=True):
     else:
         inhib_bnds = [(0., 0.) for _ in range (n_cl*n_cl)]
     param_ode_bnds = tuple([(-7., -2.)  for _ in range (n_cl)] + # lambd_1
-                            [(.01,  1.) for _ in range (n_cl)] + # alph_0 
-                            [(.1 ,  .6) for _ in range (n_cl)] + # alph_1 
+                            [(.01,  1.) for _ in range (n_cl)] + # mu_0
+                            [(.1 ,  .6) for _ in range (n_cl)] + # mu_1
                             [(7.5, 14.)] +      
                             inhib_bnds)
     return param_ode_bnds

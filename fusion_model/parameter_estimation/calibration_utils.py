@@ -3,7 +3,7 @@ Helpers around a calibration that work the same for experimental (ZL2030) and in
 parameter vector, information read from the data frames, fixed parameters and reloading a saved calibration.
 
 Parameter vector layout (cost_withS, model fusion_model2):
-    [ x0 (n_cl per experiment, log10) | lambda_1 (n_cl) | lambda_exp (n_cl) | alpha_0 (n_cl) | alpha_exp (n_cl) |
+    [ x0 (n_cl per experiment, log10) | lambda_1 (n_cl) | lambda_exp (n_cl) | mu_0 (n_cl) | mu_exp (n_cl) |
       N_1 | N_exp | k_ij (n_cl x n_cl) | S (n_media x n_cl) ]
 """
 import glob
@@ -65,8 +65,8 @@ def make_param_names(exps, bact, media):
     names = [rf"$x_{{0,{bi}}}^{{{e}}}$" for e in exps for bi in b]
     names += [rf"$\lambda_{{1,{bi}}}$" for bi in b]
     names += [rf"$\lambda_{{exp,{bi}}}$" for bi in b]
-    names += [rf"$\alpha_{{0,{bi}}}$" for bi in b]
-    names += [rf"$\alpha_{{exp,{bi}}}$" for bi in b]
+    names += [rf"$\mu_{{0,{bi}}}$" for bi in b]
+    names += [rf"$\mu_{{exp,{bi}}}$" for bi in b]
     names += [r"$N_1$", r"$N_{exp}$"]
     names += [rf"$k_{{{b[i]},{b[j]}}}$" for i in range(n_cl) for j in range(n_cl)]
     names += [rf"$S_{{{m},{bi}}}$" for m in media for bi in b]
@@ -75,7 +75,7 @@ def make_param_names(exps, bact, media):
 
 def resolve_fixed_values(fix, names):
     """{index: value} from a dict whose keys are indices or parameter names (as in make_param_names,
-    with or without the LaTeX $ \\ { }), e.g. {17: 0.} or {'k_00,01': 0., 'alpha_exp,00': 0.}."""
+    with or without the LaTeX $ \\ { }), e.g. {17: 0.} or {'k_00,01': 0., 'mu_exp,00': 0.}."""
     return {pl._resolve_param_index(k, names): float(v) for k, v in (fix or {}).items()}
 
 

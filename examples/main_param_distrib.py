@@ -7,12 +7,12 @@ import fusion_model as fm
 import pandas as pd
 import numpy as np
 
-def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
+def cost_withS_withdiffmu(param, calibr_setup, jac_spasity):
     n_cl = calibr_setup['n_cl']
     n_media = calibr_setup['n_media']
     exps = calibr_setup['exps']
     lambd  = param[n_cl:n_cl+n_cl]
-    alph = param[n_cl+n_cl:n_cl+n_cl + n_cl*len(exps)]
+    mu = param[n_cl+n_cl:n_cl+n_cl + n_cl*len(exps)]
     rest_ode_param = param[n_cl+n_cl + n_cl*len(exps):-n_cl*n_media]
     s_x = np.array(param)[-n_cl*n_media:].reshape((n_media, n_cl))
     x0_vals = param[:n_cl]#*len(exps)]
@@ -24,7 +24,7 @@ def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
     platecount_max = np.nanmax(obs_platecount_meas, axis=(0, 1))**2
     ll_ngs, ll_maldi, ll_platecount = np.zeros(np.shape(obs_ngs_meas)), np.zeros(np.shape(obs_maldi_meas)), np.zeros(np.shape(obs_platecount_meas))
     for i, exp in enumerate(exps):
-        param_ode = np.concatenate((lambd, alph[n_cl*i:n_cl*(i+1)], rest_ode_param))
+        param_ode = np.concatenate((lambd, mu[n_cl*i:n_cl*(i+1)], rest_ode_param))
         ll_ngs[i], ll_maldi[i], ll_platecount[i] = fm.pest.sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals, param_ode, s_x, platecount_max)
     ll_ngs = ll_ngs[ll_ngs!=0]
     ll_maldi = ll_maldi[ll_maldi!=0]
@@ -76,8 +76,8 @@ def data_generation_distribution(n_exps, n_cl, param_ode_templ, s_x, path=''):
     for i in range (n_exps):
         np.random.seed(46987*(i+1))
         add_name = f'_{i}'
-        alph_sampled = np.random.lognormal(mean=0., sigma=0.5, size=n_cl)
-        param_ode_templ[n_cl:n_cl*2] = alph_sampled
+        mu_sampled = np.random.lognormal(mean=0., sigma=0.5, size=n_cl)
+        param_ode_templ[n_cl:n_cl*2] = mu_sampled
         param_init = param_ode_templ
 
         temps = [2.,]
@@ -117,7 +117,7 @@ def data_calibration_distribution(dfs, path=''):
     x0_bnds_all = tuple([(1., 4.5) for _ in range (calibr_presetup['n_cl'])])
     inhib_bnds = [(0.02, 3.) for _ in range (n_cl*(n_cl-1))]
     param_ode_bnds = tuple([(1e-6, 1e-2) for _ in range (n_cl)] + # lambd
-                            [(.01,  4.) for _ in range (n_cl) for _ in range (len(calibr_presetup['exps']))]  + # alph
+                            [(.01,  4.) for _ in range (n_cl) for _ in range (len(calibr_presetup['exps']))]  + # mu
                             [(6., 12.)]                         + # N_max
                             inhib_bnds)
     S_bnds = tuple([(0.01, 1.) for _ in range (calibr_presetup['n_cl']*n_media)])
@@ -125,7 +125,7 @@ def data_calibration_distribution(dfs, path=''):
     calibr_setup['param_bnds'] =  x0_bnds_all + param_ode_bnds + S_bnds
 
     print('Start optimization...')
-    param_opt = fm.pest.calculate_model_params(cost_withS_withdiffalpha, calibr_setup)[0]
+    param_opt = fm.pest.calculate_model_params(cost_withS_withdiffmu, calibr_setup)[0]
     s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
     calibr_setup['s_x'] = s_x
     fm.output.json_dump({'param_ode': param_opt[:-n_cl*n_media].astype(list), 's_x': s_x.flatten(), 'T_x': T_x}, 'Result_calibration.json', dir=path_new)
@@ -164,7 +164,7 @@ def estimate_parameter_set(param_init, s_x, n_cl, add_name='',path=''):
     x0_bnds_all = tuple([(1., 4.5) for _ in range (calibr_presetup['n_cl']) for _ in range (len(calibr_presetup['exps']))])
     inhib_bnds = [(0.02, 3.) for _ in range (n_cl*(n_cl-1))]
     param_ode_bnds = tuple([(1e-6, 1e-2) for _ in range (n_cl)] + # lambd
-                           [(.01,  4.) for _ in range (n_cl)]   +  # alph
+                           [(.01,  4.) for _ in range (n_cl)]   +  # mu
                            [(6., 12.)]                         + # N_max
                             inhib_bnds)
     S_bnds = tuple([(0.01, 1.) for _ in range (calibr_presetup['n_cl']*n_media)])

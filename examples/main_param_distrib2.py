@@ -29,12 +29,12 @@ def calculate_model_params(cost_func, calibr_setup):
                                             workers=calibr_setup['workers'])
     return np.array(optim_output.x), optim_output.fun
 
-def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
+def cost_withS_withdiffmu(param, calibr_setup, jac_spasity):
     n_cl = calibr_setup['n_cl']
     n_media = calibr_setup['n_media']
     exps = calibr_setup['exps']
     lambd  = param[n_cl:n_cl+n_cl]
-    alph = param[n_cl+n_cl:n_cl+n_cl + n_cl*len(exps)]
+    mu = param[n_cl+n_cl:n_cl+n_cl + n_cl*len(exps)]
     rest_ode_param = param[n_cl+n_cl + n_cl*len(exps):-n_cl*n_media]
     s_x = np.array(param)[-n_cl*n_media:].reshape((n_media, n_cl))
     x0_vals = param[:n_cl]
@@ -47,7 +47,7 @@ def cost_withS_withdiffalpha(param, calibr_setup, jac_spasity):
     x_max = obs_x**2
     ll_x = np.zeros(np.shape(obs_x))
     for i, exp in enumerate(exps):
-        param_ode = np.concatenate((lambd, alph[n_cl*i:n_cl*(i+1)], rest_ode_param))
+        param_ode = np.concatenate((lambd, mu[n_cl*i:n_cl*(i+1)], rest_ode_param))
         ll_x[i] = sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0_vals, param_ode, s_x, x_max[i])
     ll_x_1sp = ll_x[:, 0]
     ll_x_2sp = ll_x[:, 1]
@@ -107,12 +107,12 @@ def model_wotemp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, pa
     return df_platecount, df_maldi, df_ngs, df_realx
 
 def data_generation_distribution(n_exps, n_cl, param_ode_templ, s_x, path=''):
-    dfs_platecount, dfs_maldi, dfs_ngs, dfs_x, smpl_alph = [], [], [], [], []
+    dfs_platecount, dfs_maldi, dfs_ngs, dfs_x, smpl_mu = [], [], [], [], []
     for i in range (n_exps):
         np.random.seed(46987*(i+1))
         add_name = f'_{i}'
-        alph_sampled = np.random.lognormal(mean=0.5, sigma=0.5, size=n_cl)
-        param_ode_templ[n_cl:n_cl*2] = alph_sampled
+        mu_sampled = np.random.lognormal(mean=0.5, sigma=0.5, size=n_cl)
+        param_ode_templ[n_cl:n_cl*2] = mu_sampled
         param_init = param_ode_templ
 
         temps = [2.,]
@@ -128,26 +128,26 @@ def data_generation_distribution(n_exps, n_cl, param_ode_templ, s_x, path=''):
         dfs_maldi.append(df_maldi)
         dfs_ngs.append(df_ngs)
         dfs_x.append(df_x)
-        smpl_alph.append(alph_sampled)
-    plot_sampled_parameter(0.5, 0.5, smpl_alph, path=path)
-    return [fm.dtf.merge_dfs(dfs_platecount), fm.dtf.merge_dfs(dfs_maldi), fm.dtf.merge_dfs(dfs_ngs), fm.dtf.merge_dfs(dfs_x)], smpl_alph
+        smpl_mu.append(mu_sampled)
+    plot_sampled_parameter(0.5, 0.5, smpl_mu, path=path)
+    return [fm.dtf.merge_dfs(dfs_platecount), fm.dtf.merge_dfs(dfs_maldi), fm.dtf.merge_dfs(dfs_ngs), fm.dtf.merge_dfs(dfs_x)], smpl_mu
 
-def plot_sampled_parameter(mu, sigma, smpl_p, path=''):
+def plot_sampled_parameter(mean, sigma, smpl_p, path=''):
     smpl_p = np.array(smpl_p)
     fig, ax = plt.subplots()
     x = np.linspace(0., 6, 100)
-    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
-    ax.plot(x, pdf, label=f'Initial distribution\n (mu={mu:.2f}, sigma={sigma:.2f})', color=fm.plotting.green_colors[2])
-    #pdf2 = stats.lognorm.pdf(smpl_p.flatten(), s=sigma, scale=np.exp(mu))
+    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mean))
+    ax.plot(x, pdf, label=f'Initial distribution\n (mean={mean:.2f}, sigma={sigma:.2f})', color=fm.plotting.green_colors[2])
+    #pdf2 = stats.lognorm.pdf(smpl_p.flatten(), s=sigma, scale=np.exp(mean))
     colors = [fm.plotting.blue_colors[2], fm.plotting.red_colors[2]]
     for i in range (len(smpl_p.T)):
-        pdf2 = stats.lognorm.pdf(smpl_p[:, i], s=sigma, scale=np.exp(mu))
+        pdf2 = stats.lognorm.pdf(smpl_p[:, i], s=sigma, scale=np.exp(mean))
         ax.scatter(smpl_p[:, i], pdf2, color=colors[i], label=f'Sampled value (Species {i+1})')
     ax.set_xlim(0, 5)
-    ax.set_xlabel(r'Growth rate $\alpha$')
-    ax.set_ylabel(r'Probability distribution $P(\alpha)$')
+    ax.set_xlabel(r'Growth rate $\mu$')
+    ax.set_ylabel(r'Probability distribution $P(\mu)$')
     plt.legend()
-    plt.savefig(path+'alph_distribution_sampled_values.png', bbox_inches='tight')
+    plt.savefig(path+'mu_distribution_sampled_values.png', bbox_inches='tight')
     plt.close(fig)
 
 
@@ -175,7 +175,7 @@ def data_calibration_distribution(dfs, path=''):
     x0_bnds_all = tuple([(1., 4.5) for _ in range (calibr_presetup['n_cl'])])
     inhib_bnds = [(0.02, 3.) for _ in range (n_cl*(n_cl-1))]
     param_ode_bnds = tuple([(1e-6, 1e-2) for _ in range (n_cl)] + # lambd
-                            [(.01,  5.) for _ in range (n_cl) for _ in range (len(calibr_presetup['exps']))]  + # alph
+                            [(.01,  5.) for _ in range (n_cl) for _ in range (len(calibr_presetup['exps']))]  + # mu
                             [(6., 12.)]                         + # N_max
                             inhib_bnds)
     S_bnds = tuple([(0.01, 1.) for _ in range (calibr_presetup['n_cl']*n_media)])
@@ -183,7 +183,7 @@ def data_calibration_distribution(dfs, path=''):
     calibr_setup['param_bnds'] =  x0_bnds_all + param_ode_bnds + S_bnds
 
     print('Start optimization...')
-    param_opt = calculate_model_params(cost_withS_withdiffalpha, calibr_setup)[0]
+    param_opt = calculate_model_params(cost_withS_withdiffmu, calibr_setup)[0]
     s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
     calibr_setup['s_x'] = s_x
     fm.output.json_dump({'param_ode': param_opt[:-n_cl*n_media].astype(list), 's_x': s_x.flatten(), 'T_x': T_x}, 'Result_calibration.json', dir=path_new)
@@ -225,7 +225,7 @@ def estimate_parameter_set(param_init, s_x, n_cl, add_name='',path=''):
     #              for j in range (n_cl)]
     inhib_bnds = [(0.02, 3.) for _ in range (n_cl*(n_cl-1))]
     param_ode_bnds = tuple([(1e-6, 1e-2) for _ in range (n_cl)] + # lambd
-                           [(.01,  5.) for _ in range (n_cl)]   +  # alph
+                           [(.01,  5.) for _ in range (n_cl)]   +  # mu
                            [(6., 12.)]                          + # N_max
                             inhib_bnds)
     #S_bnds = tuple([(0.01, 1.) for _ in range (calibr_presetup['n_cl']*n_media)])
@@ -269,8 +269,8 @@ if __name__ == "__main__":
     '''
     for i in range (n_exps):
         add_name = f'_{i}'
-        alph_sampled = np.random.lognormal(mean=0., sigma=0.5, size=n_cl)
-        param_ode[n_cl:n_cl*2] = alph_sampled
+        mu_sampled = np.random.lognormal(mean=0., sigma=0.5, size=n_cl)
+        param_ode[n_cl:n_cl*2] = mu_sampled
         param_init = param_ode
         param_opt, calibr_setup = estimate_parameter_set(param_init, s_x, n_cl, add_name=add_name, path=path_new)
 
@@ -280,6 +280,6 @@ if __name__ == "__main__":
         fm.output.json_dump({'param_ode': param_opt[:-n_cl*n_media].astype(list), 's_x': s_x.flatten(), 'T_x': T_x}, f'Result_calibration{add_name}.json', dir=path_new)
         #param_opt = fm.output.read_from_json(''+f'Result_calibration{add_name}.json', dir=path_new)['param_ode']
 
-        # TODO: Consider: Now we estimate the whole parameter set for each run, but only alpha changes. Maybe estimate all exps together but with multiple alpha params.
-        # e.g param_estim = (x0, alph_1_exp1, alph_2_exp1, ..., alph_1_exp2, alph_2_exp2, ... , param_ode_other)
+        # TODO: Consider: Now we estimate the whole parameter set for each run, but only mu changes. Maybe estimate all exps together but with multiple mu params.
+        # e.g param_estim = (x0, mu_1_exp1, mu_2_exp1, ..., mu_1_exp2, mu_2_exp2, ... , param_ode_other)
     '''

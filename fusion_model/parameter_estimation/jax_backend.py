@@ -147,12 +147,12 @@ class JaxCost:
         ode, temp = args
         n = self.n_cl
         lambd = 10.0 ** ode[:n] * temp ** ode[n:2 * n]
-        alph = ode[2 * n:3 * n] * temp ** ode[3 * n:4 * n]
+        mu = ode[2 * n:3 * n] * temp ** ode[3 * n:4 * n]
         nmax = 10.0 ** ode[4 * n] * temp ** ode[4 * n + 1]
         kij = ode[4 * n + 2:].reshape(n, n) * 5e-8
         lag, act, res = y[:n], y[n:2 * n], y[-1]
         b = kij @ act
-        growth = alph * res * act / (1.0 + b)
+        growth = mu * res * act / (1.0 + b)
         return jnp.concatenate([-lag * res * lambd, lag * res * lambd + growth,
                                 jnp.array([-(1.0 / nmax) * jnp.sum(growth)])])
 

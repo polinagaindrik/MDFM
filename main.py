@@ -30,8 +30,8 @@ TEMPS_PREDICT = [8.]
 # "True" parameters of the in-silico data
 PARAM_ODE_TRUE = np.array([-3.6, -4.8,          # lambda_1 (log10)
                            1.7, 1.9,            # lambda_exp
-                           0.8, 0.8,            # alpha_0
-                           0.4, 0.8,            # alpha_exp
+                           0.8, 0.8,            # mu_0
+                           0.4, 0.8,            # mu_exp
                            9.9, 0.7,            # N_1 (log10), N_exp
                            0.0, 0.5, 1.9, 0.0]) # k_ij (N_CL x N_CL)
 X10_CALIBR = [[1.8, 3.3], [2.0, 3.3], [3.0, 2.8]]  # log10 initial values, experiments x species

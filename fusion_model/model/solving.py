@@ -54,12 +54,12 @@ try:
     def _fusion_model2_rhs_nb(x, temp, n_cl, param):
         """Compute fusion_model2 derivatives in a Numba-compiled function."""
         lambd = 10.0**param[:n_cl] * temp**param[n_cl:2*n_cl]
-        alph = param[2*n_cl:3*n_cl] * temp**param[3*n_cl:4*n_cl]
+        mu = param[2*n_cl:3*n_cl] * temp**param[3*n_cl:4*n_cl]
         nmax = 10.0**param[4*n_cl] * temp**param[4*n_cl+1]
         kij = param[4*n_cl+2:4*n_cl+2+n_cl*n_cl].reshape(n_cl, n_cl) * 5e-8
         xa = x[n_cl:2*n_cl]
         b = kij @ xa
-        growth = alph * x[-1] * xa / (1.0 + b)
+        growth = mu * x[-1] * xa / (1.0 + b)
         out = np.empty_like(x)
         out[:n_cl] = -x[:n_cl] * x[-1] * lambd
         out[n_cl:2*n_cl] = x[:n_cl] * x[-1] * lambd + growth

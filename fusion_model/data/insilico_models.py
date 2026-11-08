@@ -182,8 +182,8 @@ def model_2sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.,
     else:
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [.001, .003, # lambda
-                 .2,   .5,   # alpha0
-                 .5,   .3,   # alpha1
+                 .2,   .5,   # mu0
+                 .5,   .3,   # mu1
                  7.,]  + kij_list
     param_model = param_ode + s_x + T_x
     df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
@@ -212,8 +212,8 @@ def model_3sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.,
     else:
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [.001, .003, .005, # lambda
-                 .2,   .5, .5,  # alpha0
-                 .5,   .3, .4,  # alpha1
+                 .2,   .5, .5,  # mu0
+                 .5,   .3, .4,  # mu1
                  7.,]  + kij_list
     param_model = param_ode + s_x + T_x
     df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
@@ -242,8 +242,8 @@ def model_4sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise
     else:
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [.001, .003, .005, .002, # lambda
-                 .2,   .5,   .5,    .9,   # alpha0
-                 .5,   .3,   .4,    0.,   # alpha1
+                 .2,   .5,   .5,    .9,   # mu0
+                 .5,   .3,   .4,    0.,   # mu1
                  7.,] + kij_list
     param_model = param_ode + s_x + T_x
     df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
@@ -266,8 +266,8 @@ def model_6sp_2media_inhib(temps, ntr, x10=None, inhib=False, noise=0., rel_nois
     else:
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [.003, .005,  .001, .003, .005, .003,  # lambda
-                   .5, .5,  .3, .4, .3, .4,  # alpha0
-                   .3, .4, .2, .5, .6, .3,   # alpha1
+                   .5, .5,  .3, .4, .3, .4,  # mu0
+                   .3, .4, .2, .5, .6, .3,   # mu1
                     7.,] + kij_list 
     s_x = [.0, .4,  .6, .8, 1., .1,  # s_PC
            1., .1, 0., .5, 0., .5]  # s_MRS
@@ -297,8 +297,8 @@ def model_6sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., r
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [-5., -3., -2., -3., -6., -3., # lambda_1
                   0.,  1.,  2.,  3., 1.5, 2.5, # lambda_exp
-                  .2,  .5,  .5,  .5,  .3,  .4, # alpha0
-                  .6,  .3,  .4,  .5,  .2,  .5, # alpha1
+                  .2,  .5,  .5,  .5,  .3,  .4, # mu0
+                  .6,  .3,  .4,  .5,  .2,  .5, # mu1
                   8., 0.5] + kij_list
     s_x = [ .6, .0, .4, .2, .6, .8, 1., .1, 0., .4,   # s_PC
             0., 1., .1, .3, 0., .5, 0., .5, 1., .1]  # s_MRS
@@ -327,8 +327,8 @@ def model_10sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
     else:
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [-5., -3., -2., -3., -6., -3., -2., -4., -5., -3.3, # lambda
-                  .2,  .5,  .5,  .5,  .3,  .4,  .3,  .4,  .2,   .5, # alpha0
-                  .6,  .3,  .4,  .5,  .2,  .5,  .6,  .3,  .6,   .3, # alpha1
+                  .2,  .5,  .5,  .5,  .3,  .4,  .3,  .4,  .2,   .5, # mu0
+                  .6,  .3,  .4,  .5,  .2,  .5,  .6,  .3,  .6,   .3, # mu1
                   8.,] + kij_list
     s_x = [.6, .0, .4, .2, .6, .8, 1., .1, 0., .4,   # s_PC
             0., 1., .1, .3, 0., .5, 0., .5, 1., .1]  # s_MRS
@@ -358,8 +358,8 @@ def model_10sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., 
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [-5., -3., -2., -3., -6., -3., -2., -4., -5., -3.3, # lambda_1
                   0.,  1.,  2.,  3., 1.5, 2.5,  1., 0.5, 0.8,  0.2, # lambda_exp
-                  .2,  .5,  .5,  .5,  .3,  .4,  .3,  .4,  .2,   .1, # alpha0
-                  .6,  .3,  .4,  .5,  .2,  .5,  .6,  .3,  .6,  1.3, # alpha1
+                  .2,  .5,  .5,  .5,  .3,  .4,  .3,  .4,  .2,   .1, # mu0
+                  .6,  .3,  .4,  .5,  .2,  .5,  .6,  .3,  .6,  1.3, # mu1
                   8., 0.5] + kij_list
     s_x = [ .6, .0, .4, .2, .6, .8, 1., .1, 0., .4,  # s_PC
             0., 1., .1, .3, 0., .5, 0., .5, 1., .1]  # s_MRS
@@ -388,8 +388,8 @@ def model_13sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
     else:
         kij_list = [0. for _ in range(n_cl*n_cl)]
     param_ode = [.001, .003, .005, .003, .001, .003, .005, .003, .001, .003, .001, .003, .0005, # lambda
-                   .1,   .4,   .4,   .4,   .2,  .04,   .2,   .3,   .1,   .4,   .1,   .4,    .7, # alpha0
-                   .5,   .2,   .3,   .4,   .1,  .4,    .5,   .2,   .5,   .2,   .2,   .4,   .01, # alpha1
+                   .1,   .4,   .4,   .4,   .2,  .04,   .2,   .3,   .1,   .4,   .1,   .4,    .7, # mu0
+                   .5,   .2,   .3,   .4,   .1,  .4,    .5,   .2,   .5,   .2,   .2,   .4,   .01, # mu1
                    8.,] + kij_list
     s_x = [.6, .0, .4, .2, .6, .8, 1., .1, 0., .4, .5, 0., .5,   # s_PC
            0., 1., .1, .3, 0., .5, 0., .5, 1., .1, .7, .1, .6]   # s_MRS

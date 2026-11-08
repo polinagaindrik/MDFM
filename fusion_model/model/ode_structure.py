@@ -13,16 +13,16 @@ def fusion_model2(t, x, param, x0, const):
     lambd_exp = param[n_cl:2*n_cl]
     lambd = 10**param[:n_cl]  * temp**lambd_exp
 
-    alph_1 = np.array(param[2*n_cl:3*n_cl])
-    alph_exp = np.array(param[3*n_cl:4*n_cl])
-    alph = alph_1 * temp**alph_exp
+    mu_1 = np.array(param[2*n_cl:3*n_cl])
+    mu_exp = np.array(param[3*n_cl:4*n_cl])
+    mu = mu_1 * temp**mu_exp
 
     nmax = 10**param[4*n_cl] * temp**param[4*n_cl+1]
     kij_matrix = param[4*n_cl+2:].reshape(n_cl, -1)*(5e-8) # kij then are sampled between (5e-9, 1e-7)
     b = np.sum(kij_matrix*x[n_cl:2*n_cl], axis=1)
     return np.concatenate((-x[:n_cl]*x[-1]*lambd,
-                            x[:n_cl]*x[-1]*lambd + alph*x[-1]*x[n_cl:2*n_cl]/(1+b),
-                            [-(1./nmax)*np.sum(alph*x[-1]*x[n_cl:2*n_cl]/(1+b))]))
+                            x[:n_cl]*x[-1]*lambd + mu*x[-1]*x[n_cl:2*n_cl]/(1+b),
+                            [-(1./nmax)*np.sum(mu*x[-1]*x[n_cl:2*n_cl]/(1+b))]))
 
 
 def fusion_model_linear(t, x, param, x0, const):
@@ -36,17 +36,17 @@ def fusion_model_linear(t, x, param, x0, const):
     lambd = 10**param[:n_cl]  * temp
     #lambd_1 = 10**param[:n_cl]
 
-    alph_1 = np.array(param[n_cl:2*n_cl])
-    alph_exp = np.array(param[2*n_cl:3*n_cl])
-    alph = alph_1 + alph_exp*temp
+    mu_1 = np.array(param[n_cl:2*n_cl])
+    mu_exp = np.array(param[2*n_cl:3*n_cl])
+    mu = mu_1 + mu_exp*temp
 
     nmax = 10**param[3*n_cl] * temp
     kij_matrix = param[3*n_cl+1:].reshape(n_cl, -1)*(5e-8) # kij then are sampled between (5e-9, 1e-7)
 
     b = np.sum(kij_matrix*x[n_cl:2*n_cl], axis=1)
     return np.concatenate((-x[:n_cl]*x[-1]*lambd,
-                            x[:n_cl]*x[-1]*lambd + alph*x[-1]*x[n_cl:2*n_cl]/(1+b),
-                            [-(1./nmax)*np.sum(alph*x[-1]*x[n_cl:2*n_cl]/(1+b))]))
+                            x[:n_cl]*x[-1]*lambd + mu*x[-1]*x[n_cl:2*n_cl]/(1+b),
+                            [-(1./nmax)*np.sum(mu*x[-1]*x[n_cl:2*n_cl]/(1+b))]))
 
 
 def fusion_model_woR(t, x, param, x0, const):
@@ -58,12 +58,12 @@ def fusion_model_woR(t, x, param, x0, const):
     #    temp = temp_func(t, temp_cond)
     (temp, ) = temp_cond
     lambd = 1e-3*param[:n_cl] * temp
-    alph = param[n_cl:2*n_cl] + param[2*n_cl:3*n_cl]*temp
+    mu = param[n_cl:2*n_cl] + param[2*n_cl:3*n_cl]*temp
     nmax = 10**param[3*n_cl] * temp
     kij_matrix = param[3*n_cl+1:].reshape(n_cl, -1)*1e-7
     b = np.sum(kij_matrix*x[n_cl:2*n_cl], axis=1)
     R = 1 - np.sum(x[:2*n_cl])/nmax
-    return np.concatenate((-x[:n_cl]*R*lambd, x[:n_cl]*R*lambd + alph*R*x[n_cl:2*n_cl]/(1+b)))
+    return np.concatenate((-x[:n_cl]*R*lambd, x[:n_cl]*R*lambd + mu*R*x[n_cl:2*n_cl]/(1+b)))
 
 
 def fusion_model_distr(t, x, param, x0, ode_args): # t, x, param, x0, const
@@ -71,15 +71,15 @@ def fusion_model_distr(t, x, param, x0, ode_args): # t, x, param, x0, const
     #(temp_cond, n_cl, x0, media, s_x) = ode_args
     (temp_cond, n_cl, media) = ode_args
     lambd = param[:n_cl]
-    alph = param[n_cl:2*n_cl]
+    mu = param[n_cl:2*n_cl]
     nmax = 10**param[2*n_cl]
     k = param[2*n_cl+1:2*n_cl+1+n_cl*(n_cl-1)]
     kij_matrix = np.insert(k, [i*n_cl for i in range(n_cl)], 0).reshape((n_cl, n_cl))*1e-7
     b = np.sum(kij_matrix*x[n_cl:2*n_cl], axis=1)
     arr = [
         -x[:n_cl]*x[-1]*lambd,
-        x[:n_cl]*x[-1]*lambd + x[n_cl:2*n_cl]*x[-1]*alph/(1+b),
-        [-(1./nmax)*np.sum(x[n_cl:2*n_cl]*x[-1]*alph/(1+b))]]
+        x[:n_cl]*x[-1]*lambd + x[n_cl:2*n_cl]*x[-1]*mu/(1+b),
+        [-(1./nmax)*np.sum(x[n_cl:2*n_cl]*x[-1]*mu/(1+b))]]
     return np.concatenate(arr)
 
 # For polynomial T-dependence of the parameters
@@ -89,14 +89,14 @@ def jacobian_fusion_model(t, x, param, x0, const):
     (temp, ) = temp_cond
     #lambd = 1e-3*param[:n_cl] * temp
     lambd = 10**param[:n_cl]  * temp
-    alph = param[n_cl:2*n_cl] + param[2*n_cl:3*n_cl]*temp
+    mu = param[n_cl:2*n_cl] + param[2*n_cl:3*n_cl]*temp
     nmax = 10**param[3*n_cl] * temp
     kij_matrix = param[3*n_cl+1:].reshape(n_cl, -1)*(5e-8) # kij then are sampled between (5e-9, 1e-7)
     #kij_matrix = param[3*n_cl+1:].reshape(n_cl, -1)*(1e-8)
     b = np.sum(kij_matrix*x[n_cl:2*n_cl], axis=1)
     dLdx = np.concatenate((-x[-1]*lambd*np.eye(n_cl), np.zeros((n_cl, n_cl)), [-lambd*x[:n_cl]])).T
-    dGdx = np.concatenate((x[-1]*lambd*np.eye(n_cl), (x[-1]*alph/(1+b))*np.eye(n_cl), [lambd*x[:n_cl]+alph*x[n_cl:2*n_cl]/(1+b)])).T
-    dRdx = np.concatenate((np.zeros((1, n_cl)), [(-x[-1]/nmax)*alph/(1+b)], [[-np.sum(alph*x[n_cl:2*n_cl]/(1+b))/nmax]]), axis=1)
+    dGdx = np.concatenate((x[-1]*lambd*np.eye(n_cl), (x[-1]*mu/(1+b))*np.eye(n_cl), [lambd*x[:n_cl]+mu*x[n_cl:2*n_cl]/(1+b)])).T
+    dRdx = np.concatenate((np.zeros((1, n_cl)), [(-x[-1]/nmax)*mu/(1+b)], [[-np.sum(mu*x[n_cl:2*n_cl]/(1+b))/nmax]]), axis=1)
     return np.concatenate((dLdx, dGdx, dRdx), axis=0)
 
 
@@ -116,15 +116,15 @@ def fusion_model_woT(t, x, param, x0, const):
     (temp_cond, n_cl, media) = const
     n_max = 10**param[2*n_cl]*2
     lambd = [5e-3*param[i] for i in range (n_cl)]
-    alph0 = [param[i+n_cl]*2 for i in range (n_cl)]
+    mu0 = [param[i+n_cl]*2 for i in range (n_cl)]
     return [
         -x[i]*x[-1]*(lambd[i]) for i in range (n_cl)
         ] + [
          x[i]*x[-1]*(lambd[i]) +
-        (alph0[i])*x[-1]*x[i+n_cl]
+        (mu0[i])*x[-1]*x[i+n_cl]
         for i in range (n_cl)
         ] + [
-        -(1./n_max)*np.sum([(alph0[i])*x[-1]*x[i+n_cl]
+        -(1./n_max)*np.sum([(mu0[i])*x[-1]*x[i+n_cl]
         for i in range(n_cl)]),
         ]
 

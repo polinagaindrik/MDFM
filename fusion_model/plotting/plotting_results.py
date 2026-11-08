@@ -171,9 +171,10 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
 
 
 def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None, relnoise=0.1,
-                     title=None, ngs_dm=None, time_label=r'Time, $t$', legend_outside=False):
+                     title=None, ngs_dm=None, relnoise_of_model=False, time_label=r'Time, $t$', legend_outside=False):
     """Plot modeled NGS proportions against measurements for one experiment
-    (error bars std, if None relnoise * data; ngs_dm = (N, A): Dirichlet-multinomial standard deviation)."""
+    (error bars std, if None relnoise * data; ngs_dm = (N, A): Dirichlet-multinomial standard deviation;
+    relnoise_of_model: relnoise * model at the measured days, the SD of data with relative Gaussian noise)."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     days_meas = [float(f.split('_')[3]) for f in df_ngs0.columns]
@@ -184,6 +185,8 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
         err = relnoise*o_meas if std is None else std
         if std is None and ngs_dm is not None:
             err = np.sqrt(o_meas * (1 - o_meas) * (ngs_dm[0] + ngs_dm[1]) / (ngs_dm[0] * (1 + ngs_dm[1])))
+        elif std is None and relnoise_of_model:
+            err = relnoise*np.interp(days_meas, days_model, o_n)
         if clrs is not None:
             clr = clrs[bact]
         else:
@@ -217,9 +220,10 @@ def wilson_error_bars(p, n, z=1.):
 
 
 def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=[' '], path='', add_name='', clrs=None,
-                       relnoise=0.1, maldi_n=None, title=None, time_label=r'Time, $t$', legend_outside=False):
+                       relnoise=0.1, maldi_n=None, title=None, relnoise_of_model=False, time_label=r'Time, $t$', legend_outside=False):
     """Plot modeled MALDI proportions against measurements for one experiment
-    (error bars std, if None relnoise * data; maldi_n = N identified colonies per plate: wilson_error_bars).
+    (error bars std, if None relnoise * data; maldi_n = N identified colonies per plate: wilson_error_bars;
+    relnoise_of_model: relnoise * model at the measured days, the SD of data with relative Gaussian noise).
     title: figure title after 'MALDI, <medium>', each medium has its own figure and panel letter."""
     general = [is_general_medium(m) for m in media]
     for j, med in enumerate(media):
@@ -239,6 +243,8 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
                 err = std
             elif maldi_n is not None:
                 err = wilson_error_bars(o_meas, maldi_n)
+            elif relnoise_of_model:
+                err = relnoise*np.interp(days_meas, days_model, o_m)
             else:
                 err = relnoise*o_meas
             ax.errorbar(days_meas, o_meas, yerr=err, fmt='o', capsize=3, color=clr, label=f'{bact}')
@@ -266,9 +272,10 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
     
 
 def plot_opt_res_platecount(df_platecount0, days_model, obs_model, exp, std=None, media=[''], path='', add_name='', clrs=None,
-                      relnoise=0.1, log10_sd=None, title=None, time_label=r'Time, $t$'):
+                      relnoise=0.1, log10_sd=None, title=None, relnoise_of_model=False, time_label=r'Time, $t$'):
     """Plot modeled plate counts counts against measurements for one experiment (error bars relnoise * data;
-    log10_sd: noise on log10 of the counts, error bars +- log10_sd in log10 units)."""
+    log10_sd: noise on log10 of the counts, error bars +- log10_sd in log10 units;
+    relnoise_of_model: relnoise * model at the measured days, the SD of data with relative Gaussian noise)."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     lines = []
@@ -282,6 +289,8 @@ def plot_opt_res_platecount(df_platecount0, days_model, obs_model, exp, std=None
         if log10_sd is not None:
             stds = np.array([np.array(obs_meas)*(1 - 10.**(-log10_sd)), np.array(obs_meas)*(10.**log10_sd - 1)])
         o_model = obs_model[j]
+        if log10_sd is None and relnoise_of_model:
+            stds = relnoise*np.interp(days_meas, days_model, o_model)
         ax.plot(days_model, o_model, color=plt_templ.colors_ngs[2*j], label=med_label+' (model)')
         ax.errorbar(days_meas, obs_meas, yerr=stds, fmt='o', capsize=3, color=plt_templ.colors_ngs[2*j], label=med_label+' (data)')
         lines.append(mlines.Line2D([], [], color=plt_templ.colors_ngs[2*j], marker='o', label=med_label))

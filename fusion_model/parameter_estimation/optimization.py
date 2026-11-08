@@ -272,7 +272,7 @@ def _local_run(task):
             residual_func=options.get('residual_func'), jac_spasity=objective.jac_spasity, n_jobs=grad_jobs,
             log_scale=options.get('log_scale', 'auto'), maxiter=options['maxiter'],
             max_outer=options.get('max_outer', 8), label=f'[start {r}]', print_every=print_every,
-            history=history, backend=backend, stop_check=stop_check)
+            history=history, backend=backend, stop_check=stop_check, **(options.get('ls_tol') or {}))
         print(f'  [start {r}] cost = {c:.10g}, Jacobians = {njev}, success = {ok} (least_squares)', flush=True)
         return r, np.array(x)[objective.free], float(c), bool(ok), list(history)
 
@@ -347,7 +347,8 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
                        n_restarts=1, jitter_frac=0.02, seed=0, history_file=output_file_local, print_every=10,
                        n_jobs=1, maxfun=None, method='L-BFGS-B', residual_func=None, log_scale='auto',
                        start_points=None, max_outer=8, fixed_values=None, backend='numpy',
-                       checkpoint_func=None, max_minutes=None, stop_file='auto', n_agree=None, agree_rtol=1e-6):
+                       checkpoint_func=None, max_minutes=None, stop_file='auto', n_agree=None, agree_rtol=1e-6,
+                       ls_tol=None):
     """
     L-BFGS-B minimization of cost_func starting from param_init (e.g. the result of
     differential_evolution) to reach the exact local optimum.
@@ -359,6 +360,8 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
                   number of residual evaluations per least-squares solve, max_outer the max.
                   number of reweighting steps. residual_func: signed residuals belonging to
                   cost_func (default: known for fm.pest.cost_withS).
+    ls_tol      : method='least_squares' only: tolerances passed to least_squares_fit, any of ftol, xtol, gtol,
+                  outer_rtol. None: its defaults (ftol, gtol above are the L-BFGS-B ones).
     start_points: additional full start vectors (e.g. Latin hypercube points, see
                   multistart_optimization); start 0 is param_init, then the jittered starts.
     backend     : 'numpy' (finite-difference derivatives, as before) or 'jax' (exact gradient / Jacobian by
@@ -433,7 +436,7 @@ def local_optimization(cost_func, param_init, calibr_setup, jac_spasity=None, ma
     bounds = list(zip(lo[free], hi[free]))
     if method == 'least_squares':
         options = {'method': 'least_squares', 'maxiter': maxiter, 'residual_func': residual_func,
-                   'log_scale': log_scale, 'max_outer': max_outer, 'backend': backend}
+                   'log_scale': log_scale, 'max_outer': max_outer, 'backend': backend, 'ls_tol': ls_tol}
         print(f'Local optimization method: least_squares (trust-region reflective, reweighted, '
               f'log_scale={log_scale})', flush=True)
     elif method == 'L-BFGS-B':

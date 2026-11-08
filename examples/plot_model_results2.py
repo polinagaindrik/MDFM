@@ -30,28 +30,28 @@ rcParams['figure.dpi'] = 500
 
 
 def extract_observables_from_df(dfs):
-    (df_mibi, df_maldi, df_ngs, df_x ) = dfs
+    (df_platecount, df_maldi, df_ngs, df_x ) = dfs
     exps = sorted(list(set([s.split('_')[0] for s in df_x.columns])))
     days_x = sorted(set([float(f.split('_')[3]) for f in df_x.columns]))
     x = fm.dtf.extract_observables_from_df_x(df_x, days_x, exps)
     return days_x , [x]
 
-def plot_sampled_parameter(mu, sigma, smpl_p, path=''):
+def plot_sampled_parameter(mean, sigma, smpl_p, path=''):
     smpl_p = np.array(smpl_p)
     fig, ax = plt.subplots()
     x = np.linspace(0., 5, 100)
-    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
-    ax.plot(x, pdf, label=f'Lognormal({mu:.2f}, {sigma**2:.2f})')#, color=fm.plotting.green_colors[0])
-    #pdf2 = stats.lognorm.pdf(smpl_p.flatten(), s=sigma, scale=np.exp(mu))
+    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mean))
+    ax.plot(x, pdf, label=f'Lognormal({mean:.2f}, {sigma**2:.2f})')#, color=fm.plotting.green_colors[0])
+    #pdf2 = stats.lognorm.pdf(smpl_p.flatten(), s=sigma, scale=np.exp(mean))
     colors = [fm.plotting.blue_colors[2], fm.plotting.red_colors[2]]
     for i in range (len(smpl_p.T)):
-        pdf2 = stats.lognorm.pdf(smpl_p[:, i], s=sigma, scale=np.exp(mu))
+        pdf2 = stats.lognorm.pdf(smpl_p[:, i], s=sigma, scale=np.exp(mean))
         ax.scatter(smpl_p[:, i], pdf2, color=colors[i], label=f'Sampled value (Species {i+1})')
     ax.set_xlim(0, 5)
-    ax.set_xlabel(r'Growth rate $\alpha$')
-    ax.set_ylabel(r'Probability distribution $\pi(\alpha)$')
+    ax.set_xlabel(r'Growth rate $\mu$')
+    ax.set_ylabel(r'Probability distribution $\pi(\mu)$')
     plt.legend()
-    plt.savefig(path+'alph_distribution_sampled_values.pdf', bbox_inches='tight')
+    plt.savefig(path+'mu_distribution_sampled_values.pdf', bbox_inches='tight')
     plt.close(fig)
 
 
@@ -86,19 +86,19 @@ if __name__ == "__main__":
     x0_vals = param_opt[:n_cl]#x0_vals = param_opt[:n_cl]*len(exp_temps)]
     lambd_opt = param_opt[n_cl:n_cl+n_cl] #lambd_opt = param_opt[n_cl*len(exp_temps):n_cl*len(exp_temps)+n_cl]
     print(f"Optimized lambda: {lambd_opt}")
-    alph_opt = param_opt[n_cl + n_cl:2*n_cl + n_cl*len(exp_temps)]
-    #alph_opt = param_opt[n_cl + n_cl*len(exp_temps):n_cl + 2*n_cl*len(exp_temps)]
+    mu_opt = param_opt[n_cl + n_cl:2*n_cl + n_cl*len(exp_temps)]
+    #mu_opt = param_opt[n_cl + n_cl*len(exp_temps):n_cl + 2*n_cl*len(exp_temps)]
     rest_ode_param = param_opt[2*n_cl + n_cl*len(exp_temps):]
     #rest_ode_param = param_opt[n_cl + 2*n_cl*len(exp_temps):]
-    print(f"Optimized alpha: {alph_opt}")
+    print(f"Optimized mu: {mu_opt}")
     print(f"n_max: {rest_ode_param[0]}")
 
     n_exps = len(exp_temps)
-    alph_exps = []
-    alph_opt_vals = []
+    mu_exps = []
+    mu_opt_vals = []
     for k in range (n_exps):
         add_name = f'_{k}'
-        df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl', f'dataframe_x{add_name}.pkl']
+        df_names = [f'dataframe_platecount{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl', f'dataframe_x{add_name}.pkl']
         data = [pd.read_pickle(path2+df_name) for df_name in df_names]
         data = fm.dtf.filter_dataframe_regex('V.._', data)
         exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
@@ -106,10 +106,10 @@ if __name__ == "__main__":
 
         res_exp = fm.output.read_from_json(f'Result_real_paramdistrib_{k}.json', dir=path2)
         param_exp = np.array(res_exp['param_ode'])
-        alph_exps.append(param_exp[2*n_cl:2*n_cl+n_cl])
+        mu_exps.append(param_exp[2*n_cl:2*n_cl+n_cl])
         lambd_exp = param_exp[n_cl:2*n_cl]
         rest_ode_param_exp = param_exp[2*n_cl+n_cl:]
-        alph_opt_vals.append(alph_opt[k*n_cl:(k+1)*n_cl])
+        mu_opt_vals.append(mu_opt[k*n_cl:(k+1)*n_cl])
 
         # Plot resulting model
         calibr_setup={
@@ -121,13 +121,13 @@ if __name__ == "__main__":
                 'media': media, 
         }
 
-        param_ode = np.concatenate((x0_vals, lambd_opt, alph_opt[k*n_cl:(k+1)*n_cl], rest_ode_param))
+        param_ode = np.concatenate((x0_vals, lambd_opt, mu_opt[k*n_cl:(k+1)*n_cl], rest_ode_param))
         param_ode_init = param_exp
         t_model = np.linspace(0., 18., 100)
 
-        x_count, obs_mibi_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V{k+1:02d}', data[:-1]), param_ode, calibr_setup, t_model)
+        x_count, obs_platecount_model, obs_maldi_model, obs_ngsi_model, temps_model = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V{k+1:02d}', data[:-1]), param_ode, calibr_setup, t_model)
         
-        x_count_init, obs_mibi_model_init, obs_maldi_model_init, obs_ngsi_model_init, temps_model_init = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V{k+1:02d}', data[:-1]), param_ode_init, calibr_setup, t_model)
+        x_count_init, obs_platecount_model_init, obs_maldi_model_init, obs_ngsi_model_init, temps_model_init = fm.mdl.calc_obs_model(fm.dtf.filter_dataframe(f'V{k+1:02d}', data[:-1]), param_ode_init, calibr_setup, t_model)
         exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
         
         exp_clrs = {}
@@ -162,40 +162,40 @@ if __name__ == "__main__":
         plt.savefig(path2+f'Data_generation_paramdistrib_x_count_{k}exp.pdf', bbox_inches='tight')
         plt.close(fig) 
         
-    # Plot alphas distribution:
+    # Plot mu distribution:
     fig, ax = plt.subplots()
-    ax.hist(alph_opt, bins=20)  # arguments are passed to np.histogram
-    plt.savefig(path2+'alph_opt_histogram.png', bbox_inches='tight')
+    ax.hist(mu_opt, bins=20)  # arguments are passed to np.histogram
+    plt.savefig(path2+'mu_opt_histogram.png', bbox_inches='tight')
     plt.close(fig)
 
-    # Plot Histograms of alpha values:
+    # Plot Histograms of mu values:
     fig, ax = plt.subplots()
-    ax.hist(np.array(alph_exps).flatten(), bins=20)  # arguments are passed to np.histogram
-    plt.savefig(path2+'alph_exps_histogram.png', bbox_inches='tight')
+    ax.hist(np.array(mu_exps).flatten(), bins=20)  # arguments are passed to np.histogram
+    plt.savefig(path2+'mu_exps_histogram.png', bbox_inches='tight')
     plt.close(fig)
 
-    # Calculate mu sigma for alpha distributions
-    shape, loc, scale = stats.lognorm.fit(alph_opt, floc=0)
-    mu_opt, sigma_opt = np.log(scale), shape
-    print(f"Optimized: Mu: {mu_opt}, Sigma: {sigma_opt}")
+    # Calculate mean and sigma of the mu distribution
+    shape, loc, scale = stats.lognorm.fit(mu_opt, floc=0)
+    mean_opt, sigma_opt = np.log(scale), shape
+    print(f"Optimized: Mean: {mean_opt}, Sigma: {sigma_opt}")
 
-    # Calculate mu sigma for alpha distributions
-    shape, loc, scale = stats.lognorm.fit(np.array(alph_exps).flatten(), floc=0)
-    mu, sigma = np.log(scale), shape
-    print(f"Data: Mu: {mu}, Sigma: {sigma}")
+    # Calculate mean and sigma of the mu distribution
+    shape, loc, scale = stats.lognorm.fit(np.array(mu_exps).flatten(), floc=0)
+    mean, sigma = np.log(scale), shape
+    print(f"Data: Mean: {mean}, Sigma: {sigma}")
 
-    # Plot initial and estimated alpha distriution
+    # Plot initial and estimated mu distriution
     fig, ax = plt.subplots()
     x = np.linspace(0., 5, 100)
-    pdf = stats.lognorm.pdf(x, s=sigma_opt, scale=np.exp(mu_opt))
-    ax.plot(x, pdf, label=f'Estimated distribution\n (mu={mu_opt:.2f}, sigma={sigma_opt:.2f})')
-    mu, sigma = 0.5, 0.5
+    pdf = stats.lognorm.pdf(x, s=sigma_opt, scale=np.exp(mean_opt))
+    ax.plot(x, pdf, label=f'Estimated distribution\n (mean={mean_opt:.2f}, sigma={sigma_opt:.2f})')
+    mean, sigma = 0.5, 0.5
     x = np.linspace(0., 5, 100)
-    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
-    ax.plot(x, pdf, label=f'"Real" distribution\n (mu={mu:.2f}, sigma={sigma:.2f})')
-    plt.xlabel('Alpha')
+    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mean))
+    ax.plot(x, pdf, label=f'"Real" distribution\n (mean={mean:.2f}, sigma={sigma:.2f})')
+    plt.xlabel(r'Growth rate $\mu$')
     plt.legend()
-    plt.savefig(path2+'alph_distribution.png', bbox_inches='tight')
+    plt.savefig(path2+'mu_distribution.png', bbox_inches='tight')
     plt.close(fig)
 
     # Plot comparisom of initial and estimated parameters:
@@ -215,25 +215,25 @@ if __name__ == "__main__":
     plt.savefig(path2+'param_opt_vs_exps.png', bbox_inches='tight')
     plt.close(fig)
 
-    alph_exps = np.array(alph_exps)
-    alph_opt_vals = np.array(alph_opt_vals)
+    mu_exps = np.array(mu_exps)
+    mu_opt_vals = np.array(mu_opt_vals)
     fig, ax = plt.subplots()
     for i in range (n_cl):
-        ax.scatter(np.linspace(1, n_exps, n_exps), alph_opt_vals[:, i], marker=sct_mrk[i], label=f'Optimized {i+1} Sp.')
-        ax.scatter(np.linspace(1, n_exps, n_exps), alph_exps[:, i], marker=sct_mrk[i], label=f'Exps {i+1} Sp.')
+        ax.scatter(np.linspace(1, n_exps, n_exps), mu_opt_vals[:, i], marker=sct_mrk[i], label=f'Optimized {i+1} Sp.')
+        ax.scatter(np.linspace(1, n_exps, n_exps), mu_exps[:, i], marker=sct_mrk[i], label=f'Exps {i+1} Sp.')
     ax.set_yscale('log')
-    plt.ylabel('Alpha value')
+    plt.ylabel(r'Growth rate $\mu$')
     plt.xlabel('Experiment Number')
     ticks_val = np.linspace(1, n_exps, n_exps)
     ax.set_xticks(ticks_val)
     plt.legend(framealpha=0.5, bbox_to_anchor=(1, 1.05))
-    plt.savefig(path2+'alpha_comparison_opt_vs_exps.png', bbox_inches='tight')
+    plt.savefig(path2+'mu_comparison_opt_vs_exps.png', bbox_inches='tight')
     plt.close(fig)
 
-    # Plot alpha distribution with sampled values
-    plot_sampled_parameter(mu, sigma, [alph_exps[1]], path=path2)
+    # Plot mu distribution with sampled values
+    plot_sampled_parameter(mean, sigma, [mu_exps[1]], path=path2)
 
-    ## Plot comparison for different curves of alpha distribution:
+    ## Plot comparison for different curves of mu distribution:
     n_exps_vals = [3, 5, 10, 20, 30]#, 50]
     fig, ax = plt.subplots()
     x = np.linspace(0., 6, 100)
@@ -247,23 +247,23 @@ if __name__ == "__main__":
         df_optim2 = pd.read_csv(path2+"optimization_history1.csv")
         param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1-n_cl*n_media]
 
-        alph_opt = param_opt[n_cl + n_cl:2*n_cl + n_cl*len(exp_temps)]
+        mu_opt = param_opt[n_cl + n_cl:2*n_cl + n_cl*len(exp_temps)]
 
-        # Calculate mu sigma for alpha distributions
-        shape, loc, scale = stats.lognorm.fit(alph_opt, floc=0)
-        mu_opt, sigma_opt = np.log(scale), shape
-        print(f"Optimized: Mu: {mu_opt}, Sigma: {sigma_opt}")
+        # Calculate mean and sigma of the mu distribution
+        shape, loc, scale = stats.lognorm.fit(mu_opt, floc=0)
+        mean_opt, sigma_opt = np.log(scale), shape
+        print(f"Optimized: Mean: {mean_opt}, Sigma: {sigma_opt}")
 
-        pdf = stats.lognorm.pdf(x, s=sigma_opt, scale=np.exp(mu_opt))
+        pdf = stats.lognorm.pdf(x, s=sigma_opt, scale=np.exp(mean_opt))
         ax.plot(x, pdf, label=f'Estimation ({n} experiments)', linestyle='dashed')
-    mu, sigma = 0.5, 0.5
-    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mu))
-    ax.plot(x, pdf, label=f'Initial Lognormal({mu:.2f}, {sigma**2:.2f})', color='k', linewidth=3)
+    mean, sigma = 0.5, 0.5
+    pdf = stats.lognorm.pdf(x, s=sigma, scale=np.exp(mean))
+    ax.plot(x, pdf, label=f'Initial Lognormal({mean:.2f}, {sigma**2:.2f})', color='k', linewidth=3)
 
-    ax.set_xlabel(r'Growth rate $\alpha$')
-    ax.set_ylabel(r'Probability distribution $\pi(\alpha)$')
+    ax.set_xlabel(r'Growth rate $\mu$')
+    ax.set_ylabel(r'Probability distribution $\pi(\mu)$')
     ax.set_xlim(0, 6)
     plt.legend()
-    plt.savefig('out/'+'alph_distribution_comparison_n_exps.png', bbox_inches='tight')
+    plt.savefig('out/'+'mu_distribution_comparison_n_exps.png', bbox_inches='tight')
     plt.close(fig)
 

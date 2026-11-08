@@ -2,7 +2,7 @@
 JAX backend: cost, exact gradient and residual Jacobian of cost_withS
 ====================================================================
 
-Same model (fusion_model2, constant temperature per experiment), observables (MiBi, MALDI,
+Same model (fusion_model2, constant temperature per experiment), observables (plate counts, MALDI,
 NGS), noise models ('absolute' / 'relative'), aggregations (cost_sum_and_geometric_mean,
 GaussianNeg2LogLik, GeometricMeanNeg2LogLik, SelectedDataTypes) and s_max penalty as
 cost_function.cost_withS / residuals_withS, but written in JAX and solved with diffrax, so that
@@ -31,14 +31,14 @@ jax.config.update("jax_enable_x64", True)  # the fit needs double precision
 
 from .cost_function import (cost_sum_and_geometric_mean, relative_mask, _noise_model, SelectedDataTypes,
                             _n_total_points, maldi_n_of, multinomial_counts, multinomial_deviance_residuals,
-                            ngs_dm_of, dm_saturated, dm_deviance_residuals, _dm_rate)
+                            ngs_dm_of, dm_saturated, dm_deviance_residuals, _dm_rate, ode_params_for_model)
 
 
 # ----------------------------------------------------------------------
 # aggregation of the per-data-type sums of squares, in JAX
 # ----------------------------------------------------------------------
 def _jax_aggregation(agg):
-    """JAX function of the list [SSR_ngs, SSR_maldi, SSR_mibi] equal to the numpy aggregation agg."""
+    """JAX function of the list [SSR_ngs, SSR_maldi, SSR_platecount] equal to the numpy aggregation agg."""
     use = None
     if isinstance(agg, SelectedDataTypes):
         agg, use = agg.aggregation_func, list(agg.use)
@@ -83,11 +83,16 @@ class JaxCost:
     cost_withS and its derivatives for one calibr_setup (data, bounds layout, objective, noise model,
     s_max_penalty). Parameter vector layout as in cost_withS: [x0 (n_exps x n_cl) | ODE | S].
     rtol, atol: tolerances of the adaptive ODE solver (diffrax), solver: 'Tsit5' or 'Kvaerno5' (stiff).
+    structured_jacobian: residual_jacobian solves the ODE sensitivities only for the directions that reach each
+    experiment (its own x0 and the free ODE parameters) and adds S and the other x0 afterwards, without an ODE solve.
+    Same Jacobian in the free columns; the columns of fixed ODE parameters are 0 (they are not used by the fits).
+    calibr_setup['jax_options'] = {...} sets these options through jax_cost_for.
     """
-    def __init__(self, calibr_setup, rtol=1e-8, atol=1e-8, solver="Tsit5", max_steps=100000):
-        days, (obs_mibi, obs_maldi, obs_ngs) = calibr_setup["data_array"]
-        df_mibi = calibr_setup["dfs"][0]
-        self.exps = sorted(set(s.split("_")[0] for s in df_mibi.columns))
+    def __init__(self, calibr_setup, rtol=1e-8, atol=1e-8, solver="Tsit5", max_steps=100000,
+                 structured_jacobian=False):
+        days, (obs_platecount, obs_maldi, obs_ngs) = calibr_setup["data_array"]
+        df_platecount = calibr_setup["dfs"][0]
+        self.exps = sorted(set(s.split("_")[0] for s in df_platecount.columns))
         self.n_cl = int(np.shape(obs_maldi)[2])
         self.n_media = int(calibr_setup["n_media"])
         self.n_exps = len(self.exps)
@@ -95,7 +100,7 @@ class JaxCost:
         self.temps = np.array([float(calibr_setup["exp_temps"][e]) for e in self.exps])
         self.T_x = np.asarray(calibr_setup["T_x"], dtype=float)
         self.noise_model = _noise_model(calibr_setup)
-        self.obs = [np.asarray(o, dtype=float) for o in (obs_ngs, obs_maldi, obs_mibi)]
+        self.obs = [np.asarray(o, dtype=float) for o in (obs_ngs, obs_maldi, obs_platecount)]
         self.kinds = ["composition", "composition", "counts"]
         if self.noise_model == "relative":
             self.masks = [relative_mask(o, k) for o, k in zip(self.obs, self.kinds)]
@@ -103,20 +108,21 @@ class JaxCost:
             self.masks = [~np.isnan(o) for o in self.obs]
         # MALDI with the multinomial likelihood: all measured entries incl. zeros (undetected species)
         self.maldi_n = maldi_n_of(calibr_setup)
-        if self.maldi_n:
+        if self.maldi_n is not None:
             self.masks[1] = np.isfinite(self.obs[1])
             self.maldi_k = np.where(self.masks[1], multinomial_counts(self.obs[1], self.maldi_n), 0.)
         # NGS with the Dirichlet-multinomial likelihood: all measured entries incl. zeros (undetected species)
         self.ngs_dm = ngs_dm_of(calibr_setup)
-        if self.ngs_dm:
+        if self.ngs_dm is not None:
             self.masks[0] = np.isfinite(self.obs[0])
             self.ngs_k = np.where(self.masks[0], multinomial_counts(self.obs[0], self.ngs_dm[0]), 0.)
             self.ngs_sat = dm_saturated(self.ngs_k, *self.ngs_dm)
             self.ngs_c = _dm_rate(*self.ngs_dm)
-        self.mibi_max = np.nanmax(self.obs[2], axis=(0, 1))
+        self.platecount_max = np.nanmax(self.obs[2], axis=(0, 1))
         self.agg = _jax_aggregation(calibr_setup["aggregation_func"])
         self.penalty_w = float(calibr_setup.get("s_max_penalty") or 0.)
         self.n_total = _n_total_points(calibr_setup["aggregation_func"])
+        self.lambda_tref = calibr_setup.get("lambda_tref")  # see cost_function.ode_params_for_model
         self.rtol, self.atol, self.max_steps = rtol, atol, max_steps
         self.solver = {"Tsit5": diffrax.Tsit5, "Kvaerno5": diffrax.Kvaerno5, "Dopri8": diffrax.Dopri8}[solver]()
         n_x0 = self.n_cl * self.n_exps
@@ -129,7 +135,11 @@ class JaxCost:
         self._cost = jax.jit(self._cost_fn)
         self._vg = jax.jit(jax.value_and_grad(self._cost_fn))
         self._res = jax.jit(lambda p: self._residuals_fn(p, adjoint="reverse"))
-        self._jac = jax.jit(jax.jacfwd(lambda p: self._residual_vector(p, adjoint="forward")))
+        # free ODE parameters; explicit end, because param_bnds has no S entries when S is fixed (cost_direct)
+        bnds_ode = np.array(calibr_setup["param_bnds"], dtype=float)[n_x0:self.n_without_S]
+        self.ode_free = np.where(bnds_ode[:, 1] > bnds_ode[:, 0])[0]
+        self._jac = jax.jit(self._structured_jacobian if structured_jacobian
+                            else jax.jacfwd(lambda p: self._residual_vector(p, adjoint="forward")))
         self._res_vec = jax.jit(lambda p: self._residual_vector(p, adjoint="forward"))
 
     # --- model -------------------------------------------------------------
@@ -137,12 +147,12 @@ class JaxCost:
         ode, temp = args
         n = self.n_cl
         lambd = 10.0 ** ode[:n] * temp ** ode[n:2 * n]
-        alph = ode[2 * n:3 * n] * temp ** ode[3 * n:4 * n]
+        mu = ode[2 * n:3 * n] * temp ** ode[3 * n:4 * n]
         nmax = 10.0 ** ode[4 * n] * temp ** ode[4 * n + 1]
         kij = ode[4 * n + 2:].reshape(n, n) * 5e-8
         lag, act, res = y[:n], y[n:2 * n], y[-1]
         b = kij @ act
-        growth = alph * res * act / (1.0 + b)
+        growth = mu * res * act / (1.0 + b)
         return jnp.concatenate([-lag * res * lambd, lag * res * lambd + growth,
                                 jnp.array([-(1.0 / nmax) * jnp.sum(growth)])])
 
@@ -160,29 +170,35 @@ class JaxCost:
     def _observables(self, p, adjoint):
         n, m = self.n_cl, self.n_media
         x0 = p[self.slices[0]].reshape(self.n_exps, n)
-        ode = p[self.slices[1]]
+        ode = ode_params_for_model(p[self.slices[1]], {"lambda_tref": self.lambda_tref, "n_cl": n}, xp=jnp)
         s_x = p[-n * m:].reshape(m, n)
         counts = jax.vmap(lambda x, T: self._solve_one(x, T, ode, adjoint))(x0, jnp.asarray(self.temps))
-        # counts: (n_exps, n_cl, n_days)
+        return self._observables_of_counts(counts, s_x)
+
+    def _observables_of_counts(self, counts, s_x):
+        """Observables from the bacterial counts (n_exps, n_cl, n_days) and S (n_media, n_cl)."""
+        n, m = self.n_cl, self.n_media
         f_ngs = jnp.asarray(self.T_x).reshape(1, n, 1) * counts
         m_ngs = f_ngs / jnp.sum(f_ngs, axis=1, keepdims=True)
         f_maldi = s_x.reshape(1, m, n, 1) * counts[:, None, :, :]          # (exps, media, n_cl, days)
         f_maldi = jnp.where(f_maldi <= 0.005, 0.0, f_maldi)
         m_maldi = f_maldi / jnp.sum(f_maldi, axis=2, keepdims=True)
-        m_mibi = jnp.sum(s_x.reshape(1, m, n, 1) * counts[:, None, :, :], axis=2)  # (exps, media, days)
-        return m_ngs, m_maldi, m_mibi
+        m_platecount = jnp.sum(s_x.reshape(1, m, n, 1) * counts[:, None, :, :], axis=2)  # (exps, media, days)
+        return m_ngs, m_maldi, m_platecount
 
     # --- residuals ---------------------------------------------------------
     def _residual_groups(self, p, adjoint):
-        models = self._observables(p, adjoint)
+        return self._groups_of_models(self._observables(p, adjoint))
+
+    def _groups_of_models(self, models):
         out = []
         for i, (obs, mod, mask, kind, scale) in enumerate(zip(self.obs, models, self.masks, self.kinds,
-                                                              (1.0, 1.0, self.mibi_max))):
+                                                              (1.0, 1.0, self.platecount_max))):
             obs_safe = np.where(mask, obs, 1.0)
-            if i == 0 and self.ngs_dm:
+            if i == 0 and self.ngs_dm is not None:
                 r = dm_deviance_residuals(self.ngs_k, jnp.where(mask, mod, 1.0) * self.ngs_dm[1], self.ngs_sat, self.ngs_c,
                                           xp=jnp, lgamma=jax.scipy.special.gammaln)
-            elif i == 1 and self.maldi_n:
+            elif i == 1 and self.maldi_n is not None:
                 r = multinomial_deviance_residuals(self.maldi_k, jnp.where(mask, mod, 1.0) * self.maldi_n, xp=jnp)
             elif self.noise_model == "relative":
                 d = jnp.log(obs_safe) - jnp.log(jnp.maximum(jnp.where(mask, mod, 1.0), 1e-300))
@@ -207,6 +223,39 @@ class JaxCost:
 
     def _residual_vector(self, p, adjoint):
         return jnp.concatenate(self._residuals_fn(p, adjoint))
+
+    def _structured_jacobian(self, p):
+        """d residual_vector / d p: ODE sensitivities per experiment, then the chain rule through the observables."""
+        n, m = self.n_cl, self.n_media
+        raw = p[self.slices[1]]
+        idx = jnp.asarray(self.ode_free)
+        x0 = p[self.slices[0]].reshape(self.n_exps, n)
+
+        def sens(x, temp):
+            def f(theta):
+                ode = ode_params_for_model(raw.at[idx].set(theta[n:]), {"lambda_tref": self.lambda_tref, "n_cl": n}, xp=jnp)
+                c = self._solve_one(theta[:n], temp, ode, "forward")
+                return c, c
+            return jax.jacfwd(f, has_aux=True)(jnp.concatenate([x, raw[idx]]))
+
+        dc, counts = jax.vmap(sens)(x0, jnp.asarray(self.temps))  # dc: (n_exps, n_cl, n_days, n + n_free_ode)
+        s_flat = p[-n * m:]
+
+        def res(c, s):
+            groups = self._groups_of_models(self._observables_of_counts(c, s.reshape(m, n)))
+            if self.penalty_w:
+                groups = groups + [jnp.atleast_1d(jnp.max(s) - 1.0)]
+            return jnp.concatenate(groups)
+
+        r, lin = jax.linearize(res, counts, s_flat)
+        zero_c, zero_s = jnp.zeros_like(counts), jnp.zeros_like(s_flat)
+        j_ode = jax.vmap(lambda t: lin(t, zero_s), in_axes=-1, out_axes=-1)(dc[..., n:])
+        es, sp = jnp.divmod(jnp.arange(self.n_exps * n), n)
+        j_x0 = jax.vmap(lambda e, i: lin(zero_c.at[e].set(dc[e, :, :, i]), zero_s), out_axes=-1)(es, sp)
+        j_s = jax.vmap(lambda d: lin(zero_c, d), out_axes=-1)(jnp.eye(s_flat.size))
+        n_x0 = self.n_exps * n
+        return (jnp.zeros((r.size, p.size)).at[:, :n_x0].set(j_x0).at[:, n_x0 + idx].set(j_ode)
+                .at[:, p.size - s_flat.size:].set(j_s))
 
     def _cost_fn(self, p):
         groups = self._residual_groups(p, "reverse")
@@ -281,13 +330,26 @@ def _register():
 _register()
 
 
+def _hashable(x):
+    """Cache key of a count setting: a number, an array of N per composition, or a tuple (N, A)."""
+    if isinstance(x, (tuple, list)):
+        return tuple(_hashable(v) for v in x)
+    if np.ndim(x) > 0:
+        a = np.ascontiguousarray(x, dtype=float)
+        return (a.shape, a.tobytes())
+    return x
+
+
 def jax_cost_for(calibr_setup, **kwargs):
-    """JaxCost cached per calibr_setup object and its bounds / objective / noise model / penalty."""
+    """JaxCost cached per calibr_setup object and its bounds / objective / noise model / penalty.
+    Options of JaxCost: keyword arguments here, or calibr_setup['jax_options'] (default: none)."""
+    kwargs = {**(calibr_setup.get("jax_options") or {}), **kwargs}
     s_x = calibr_setup.get("s_x")
     key = (id(calibr_setup), id(calibr_setup.get("aggregation_func")), calibr_setup.get("noise_model"),
-           calibr_setup.get("maldi_n"), None if not calibr_setup.get("ngs_dm") else tuple(calibr_setup["ngs_dm"]),
+           _hashable(calibr_setup.get("maldi_n")), _hashable(calibr_setup.get("ngs_dm")),
            None if s_x is None else tuple(np.ravel(np.asarray(s_x, dtype=float))),
            calibr_setup.get("s_max_penalty"), tuple(map(tuple, calibr_setup["param_bnds"])),
+           tuple(np.ravel(calibr_setup.get("lambda_tref", ()))),
            tuple(sorted(kwargs.items())))
     if key not in _CACHE:
         _CACHE.clear()

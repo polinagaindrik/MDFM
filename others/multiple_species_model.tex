@@ -29,7 +29,7 @@
 \begin{itemize}
     \item NGS: diversity in the meat sample
     
-    \item MiBi: bacterial count in a certain AGAR\\
+    \item plate counts: bacterial count in a certain AGAR\\
         - PCA (Plate Count Agar): non-selective media, aerobic bacteria growth\\
         - MRS: selective media, lactic acid bacteria growth\\
         - VRBD: Enterobacteria
@@ -41,17 +41,17 @@
 \subsection{Bacterial key players}
 \textbf{From NGS data:}
 \begin{itemize}
-    \item Leuconostoc (Can measure in MiBi in MRS)
+    \item Leuconostoc (Can measure in plate counts in MRS)
     \item Lactobacillus (In MRS, for higher temperatures)
-    \item \textit{Lactococcus} (Not quantative through MiBi, Exp2, 10Grad)
-    \item Brochothrix  (Measure in MiBi in PC)
-    \item Carnobacterium (Measure in MiBi in PC)
+    \item \textit{Lactococcus} (Not quantative through plate counts, Exp2, 10Grad)
+    \item Brochothrix  (Measure in plate counts in PC)
+    \item Carnobacterium (Measure in plate counts in PC)
     \item Pseudomonas (Noticable in 14 Grad in PC, but not in 2Grad, can be mistake in NGS?)
     \item Enterobacteriaceae (e.g. Serratia, Can measure in PC and/or VRBD)
 \end{itemize}
 
 
-\textbf{In MiBI + MALDI-ToF:}
+\textbf{In plate counts + MALDI-ToF:}
 \begin{itemize}
     \item Brochothric thermospacta (in PC)
     \item Carnibacterium divergens (LAB)(in PC)
@@ -139,7 +139,7 @@ Then \textbf{PCA Model}:\\
 \subsection{Observables}
 Assume initial / real-life system of $N$ bacterial species.
 The bacterial count (colony forming units, cfu) of each bacterial species described with vector $\mathbf{x} = (x^1, ... x^N)^T$.
-Observables of the systems obtained with 3 different methods: MiBi (standard microbiology), MALDI-TOF and NGS (diversity measurement variables).
+Observables of the systems obtained with 3 different methods: plate counts (standard microbiology), MALDI-TOF and NGS (diversity measurement variables).
 The mathematical description of the variables:
 \begin{itemize}
     \item \textbf{NGS:} Observable vector $(N\times1)$.\\
@@ -153,28 +153,28 @@ The mathematical description of the variables:
     \end{equation}
     where $\mathbf{1}$ is unit vector of size $(N\times1)$.
 
-    \item \textbf{MiBi:} Observable vector $(M\times1)$, where $M$ is the number of different media used for MiBi measurement.\\
-    To get the MiBi observables the sample is planted to a specific media either selective (e.g. MRS) or allowing the majority of bacteria to grow (e.g. PC).
+    \item \textbf{plate counts:} Observable vector $(M\times1)$, where $M$ is the number of different media used for plate count measurement.\\
+    To get the plate counts observables the sample is planted to a specific media either selective (e.g. MRS) or allowing the majority of bacteria to grow (e.g. PC).
     Hence, bacteria is subjected to some sort of media filtering described by function $\mathbf{f}(\mathbf{x})$. 
     Then the element of the observable vector:
     \begin{equation}
-        (y_\text{MiBi})^m = \sum_i f^m_i
+        (y_\text{plate counts})^m = \sum_i f^m_i
     \end{equation}
     Where $f^m_i$ is an element of the matrix $F (M \times N)$ describing the number of bacteria grown in media.
-    The MiBi observable vector is then will be:
+    The plate counts observable vector is then will be:
     \begin{equation}
-        \mathbf{y}_\text{MiBi} = \sum_i \begin{pmatrix}
+        \mathbf{y}_\text{plate counts} = \sum_i \begin{pmatrix}
             f^1_i \\ \vdots \\ f^M_i
         \end{pmatrix} = F \mathbf{1}
     \end{equation}
     If we assume that media filtering is a linear function of bacteria in meat: $f^m_i=s^m_i \cdot x^i$.\\
     Then the element of the observable vector is
     \begin{equation}
-        (y_\text{MiBi})^m = \sum_i s^m_i x^i
+        (y_\text{plate counts})^m = \sum_i s^m_i x^i
     \end{equation}
     And the observable vector is described as:
     \begin{equation}
-        \boxed{\mathbf{y}_\text{MiBi} = S \mathbf{x}}
+        \boxed{\mathbf{y}_\text{plate counts} = S \mathbf{x}}
     \end{equation}
     Where $S$ is a $(M \times N)$ matrix whose element $s^m_n$ describes the probability of the colony forming of the species $n$ in media $m$.
 
@@ -222,8 +222,8 @@ Or in matrix form:
 \end{equation}
 where $\mathbf{C}$ is $(K \times 1)$ vector of cluster values.
 $R$ is the $(K \times N)$ transition matrix from bacterial species to bacterial clusters with elements $p_n^k$ corresponding to species $n$ and cluster $k$.
-The built clusters should be still able to reproduce the observables as MiBi and MALDI.\\
-E.g., constraint due to MiBi observable:
+The built clusters should be still able to reproduce the observables as plate counts and MALDI.\\
+E.g., constraint due to plate counts observable:
 \begin{equation}
     \sum_i s_i^m x^i = \sum_k C^k \tilde{s^m_k} = \sum_k  \tilde{s^m_k} \sum_i x^i p_i^k = \sum_i x^i \sum_k \tilde{s^m_k} p_i^k
 \end{equation}
@@ -232,7 +232,7 @@ That follows:
 \begin{equation}
     \boxed{s_i^m = \sum_k \tilde{s^m_k} p_i^k}
 \end{equation}
-And in matrix form constraint on clustering procedure due to MiBi measurements:
+And in matrix form constraint on clustering procedure due to plate count measurements:
 \begin{equation}
     \boxed{S = \tilde{S} P}, \hspace{1cm} \text{or} \hspace{1cm}  \boxed{P = \tilde{S}^{-1} S}
 \end{equation}
@@ -283,7 +283,7 @@ Recalculating $x$ variables into cluster variables $C$:
 \end{equation}
 
 \begin{equation}
-    (y^C_\text{mibi})^m = (y_\text{mibi})^m = \sum_j^N s^m_j x_j = \sum_l^K  \tilde s^m_l C^l
+    (y^C_\text{platecount})^m = (y_\text{platecount})^m = \sum_j^N s^m_j x_j = \sum_l^K  \tilde s^m_l C^l
 \end{equation}
 
 
@@ -343,17 +343,17 @@ Note that the MALDI-ToF scaling factor $A(t)$:
 \begin{equation}
     A(t) = \frac{\sum_j x^j}{\sum_j^N s^m_j x^j} = \frac{1}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert}
 \end{equation}
-Using that MiBi observables are known and y definition for media $m$:
+Using that plate counts observables are known and y definition for media $m$:
 \begin{equation}
-    (y_\text{mibi})^m = \sum_j^N s^m_j x^j = \lVert S^m_\text{filt} \mathbf{x} \rVert
+    (y_\text{platecount})^m = \sum_j^N s^m_j x^j = \lVert S^m_\text{filt} \mathbf{x} \rVert
 \end{equation}
 We get that:
 \begin{equation}
-    \sum_j x^j = \frac{y_\text{mibi}^m}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert}
+    \sum_j x^j = \frac{y_\text{platecount}^m}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert}
 \end{equation}
 And the real bacterial values without media filtering are:
 \begin{equation}
-    \boxed{\mathbf{x}_\text{data} = \mathbf{y}_\text{NGS} \sum_j x^j = \frac{\mathbf{y}_\text{NGS} y_\text{mibi}^m}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert}}
+    \boxed{\mathbf{x}_\text{data} = \mathbf{y}_\text{NGS} \sum_j x^j = \frac{\mathbf{y}_\text{NGS} y_\text{platecount}^m}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert}}
     \label{eq:X_real}
 \end{equation}
 
@@ -363,7 +363,7 @@ Clustered measurement points are then:
 \end{equation} 
 The cost function is 
 \begin{equation}
-    ll = \frac{(\mathbf{C}_\text{data} - \mathbf{C}_\text{model})^2}{2 \sigma^2} \propto \bigg (P \frac{\mathbf{y}_\text{NGS} y_\text{mibi}^m}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert} - \mathbf{C}_\text{model} (t, p) \bigg )^2
+    ll = \frac{(\mathbf{C}_\text{data} - \mathbf{C}_\text{model})^2}{2 \sigma^2} \propto \bigg (P \frac{\mathbf{y}_\text{NGS} y_\text{platecount}^m}{\lVert S^m_\text{filt} \mathbf{y}_\text{NGS} \rVert} - \mathbf{C}_\text{model} (t, p) \bigg )^2
 \end{equation}
 
 So we estimate parameters $p$ and get model prediction $ \mathbf{C}_\text{model} (t, p)$
@@ -431,15 +431,15 @@ Assuming that the real $S$ matrix for each media $m_k$ can be written with scali
 Then the ratio between MALDI-ToF measurements in two different media $m_i$ and $m_j$:
 \begin{equation}
     \frac{\mathbf{y}^{m_k}_\text{MALDI}}{\mathbf{y}^{m_l}_\text{MALDI}} = \frac{ \tilde S^{m_k} \mathbf{x}}{ \tilde S^{m_l} \mathbf{x}} \frac{\lVert S^{m_l} \mathbf{x} \rVert}{\lVert S^{m_k} \mathbf{x} \rVert} =
-    \frac{s^{m_k}_0 S^{m_k} }{s^{m_l} S^{m_l}} \frac{y^{m_l}_\text{MiBi}}{y^{m_k}_\text{MiBi}} =
-    s_0^{kl} \frac{S^{m_k} }{S^{m_l}} \frac{y^{m_l}_\text{MiBi}}{y^{m_k}_\text{MiBi}}
+    \frac{s^{m_k}_0 S^{m_k} }{s^{m_l} S^{m_l}} \frac{y^{m_l}_\text{plate counts}}{y^{m_k}_\text{plate counts}} =
+    s_0^{kl} \frac{S^{m_k} }{S^{m_l}} \frac{y^{m_l}_\text{plate counts}}{y^{m_k}_\text{plate counts}}
 \end{equation}
 allows to estimate the ratio between two scaling constants in different media $s_0^kl$.
 The cost function to estimate scaling constants:
 
 \begin{equation}\boxed{
-    cost2 = \frac{1}{N_{meas2}} \Big \lVert S^{m_k} \mathbf{y}^{m_l}_\text{MALDI} y^{m_l}_\text{MiBi} 
-     -  s_0^{kl} S^{m_l} \mathbf{y}^{m_k}_\text{MALDI} y^{m_k}_\text{MiBi}  \Big \rVert _2}
+    cost2 = \frac{1}{N_{meas2}} \Big \lVert S^{m_k} \mathbf{y}^{m_l}_\text{MALDI} y^{m_l}_\text{plate counts} 
+     -  s_0^{kl} S^{m_l} \mathbf{y}^{m_k}_\text{MALDI} y^{m_k}_\text{plate counts}  \Big \rVert _2}
 \end{equation}
 where norm is the squared sum over all experiments, bacterial species and media $l$.
 
@@ -502,7 +502,7 @@ One iteration step to calculate log-likelihood is the following:
     \begin{equation}
         \mathbf{x} (t) = P^{-1} \mathbf{C} (t)
     \end{equation}
-    \item Calculate observables for the "big" model $\mathbf{y}_\text{MiBi}$,  $\mathbf{y}_\text{MALDI}$,  $\mathbf{y}_\text{NGS}$.
+    \item Calculate observables for the "big" model $\mathbf{y}_\text{plate counts}$,  $\mathbf{y}_\text{MALDI}$,  $\mathbf{y}_\text{NGS}$.
     \item Calculate cost function as a sum over all measurement data and corresponding model observables:
     \begin{equation}
         \text{cost} = \sum_i \frac{(y_i^\text{data} - y_i^\text{model})^2}{2 \sigma_i^2}
@@ -514,14 +514,14 @@ The optimizing function aims to find the parameters $\mathbf{p}$ that correspond
 \begin{enumerate}
     \item Daten: \\
         NGS:  $ \mathbf{y}_\text{NGS} = \frac{\mathbf{x}}{\lVert \mathbf{x} \rVert}$\\
-        MiBi: $ \mathbf{x}_\text{filt} = {\lVert S^m \mathbf{x} \rVert}$\\
+        plate counts: $ \mathbf{x}_\text{filt} = {\lVert S^m \mathbf{x} \rVert}$\\
         MALDI-ToF in media $m$: $ \mathbf{y}^m_\text{MALDI} = \frac{ S^m \mathbf{x}}{\lVert S^m \mathbf{x} \rVert}$\\
     \item Model Possibilities:
     \begin{enumerate}
-        \item 1-species model for each temperature and media (need MiBi data)
-        \item \textbf{1-species model for each media} (temperature-dependent model, need MiBi data)
-        \item Multi-species model for each media (temperature-dependent model, more complicated model for smaller uncertinties need Mibi/ MALDI)
-        \item \textbf{Multi-species model} (temperature- and media- dependent model, more complicated model for smaller uncertinties need MiBi/MALDI/NGS)
+        \item 1-species model for each temperature and media (need plate count data)
+        \item \textbf{1-species model for each media} (temperature-dependent model, need plate count data)
+        \item Multi-species model for each media (temperature-dependent model, more complicated model for smaller uncertinties need plate counts/ MALDI)
+        \item \textbf{Multi-species model} (temperature- and media- dependent model, more complicated model for smaller uncertinties need plate counts/MALDI/NGS)
         NGS allows us to determine S matrices and, hence, to connect data for different media.
     \end{enumerate}
     (c) and (d) use diversity data and need dimensionality reduction.

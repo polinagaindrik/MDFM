@@ -16,7 +16,7 @@ if __name__ == "__main__":
     path = f'out/main_param_distrib2_{int(n_exps)}exp/'
     path2 = path
     add_name = '_0'
-    df_names = [f'dataframe_mibi{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
+    df_names = [f'dataframe_platecount{add_name}.pkl', f'dataframe_maldi{add_name}.pkl', f'dataframe_ngs{add_name}.pkl']
     data = [pd.read_pickle(path2+df_name) for df_name in df_names]
     data = fm.dtf.filter_dataframe_regex('V.._', data)
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     param_opt = df_optim2.T[df_optim2.T.columns[-1]].values[1:-1]
     x0_vals = param_opt[:n_cl*len(exps)]
     lambd_opt = param_opt[n_cl*len(exps):n_cl*len(exps)+n_cl]
-    alph_opt = param_opt[n_cl + n_cl*len(exps):n_cl + 2*n_cl*len(exps)]
+    mu_opt = param_opt[n_cl + n_cl*len(exps):n_cl + 2*n_cl*len(exps)]
     rest_ode_param = param_opt[n_cl + 2*n_cl*len(exps):]
     s_x = np.array(param_opt)[-n_cl*n_media:].reshape((n_media, n_cl))
     param_ode = param_opt[:-n_cl*n_media]
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     '''
     for i in range(n_exps):
         calibr_setup['dfs'] = fm.dtf.filter_dataframe(f'V{i:02d}', data)
-        param_ode = np.concatenate([x0_vals, lambd_opt, alph_opt[n_cl*i:n_cl*(i+1)], rest_ode_param])
+        param_ode = np.concatenate([x0_vals, lambd_opt, mu_opt[n_cl*i:n_cl*(i+1)], rest_ode_param])
         fm.plotting.plot_optimization_result(np.array(param_ode), calibr_setup, np.linspace(0, 17, 100),
                                              path=path2, clrs=clrs1, add_name=add_name+'_calibration'+f'_{i}')
     '''

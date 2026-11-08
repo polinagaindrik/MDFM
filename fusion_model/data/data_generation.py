@@ -5,27 +5,27 @@ import fusion_model.tools.dataframe_functions as dtf
 
 def generate_data_dfs(model, t, param, x0, temps, n_cl, n_traj=1, jac_func=None, media=['media1', 'media2'], exp_start_offset=0, **kwargs):
     """Generate and combine synthetic observation tables for several temperatures."""
-    df_mibi, df_maldi, df_ngs, df_real, df_fullx = [], [], [], [], []
+    df_platecount, df_maldi, df_ngs, df_real, df_fullx = [], [], [], [], []
     for j, temp in enumerate(temps):
         exp_start = exp_start_offset + 1 + j #1+n_traj*j
         if jac_func is not None:
             jac = jac_func#lambda t, x: jac_func(t, x, param[:n_cl*(3+n_cl)+1], x0, [[temp], n_cl])
         else:
             jac = None
-        df_mibi0, df_maldi0, df_ngs0, df_realx0, df_fullx0 = generate_insilico_df(model, t, param, x0[j], [[temp], n_cl, media], n_traj=n_traj,
+        df_platecount0, df_maldi0, df_ngs0, df_realx0, df_fullx0 = generate_insilico_df(model, t, param, x0[j], [[temp], n_cl, media], n_traj=n_traj,
                                                                                   exp_start_num=exp_start, jac=jac, **kwargs)
-        df_mibi.append(df_mibi0)
+        df_platecount.append(df_platecount0)
         df_maldi.append(df_maldi0)
         df_ngs.append(df_ngs0)
         df_real.append(df_realx0)
         df_fullx.append(df_fullx0)
-    df_mibi, df_maldi, df_ngs, df_real, df_fullx = [dtf.merge_dfs(df) for df in [df_mibi, df_maldi, df_ngs, df_real, df_fullx]]
+    df_platecount, df_maldi, df_ngs, df_real, df_fullx = [dtf.merge_dfs(df) for df in [df_platecount, df_maldi, df_ngs, df_real, df_fullx]]
     df_maldi = df_maldi.reindex(sorted(df_maldi.columns), axis=1)
-    return df_mibi, df_maldi, df_ngs, df_real, df_fullx
+    return df_platecount, df_maldi, df_ngs, df_real, df_fullx
 
 
 def generate_insilico_df(model, t, param, x0, const,  n_traj=1, exp_start_num=1, n_states=2, jac=None, **kwargs):
-    """Simulate trajectories and return their MiBi, MALDI, NGS, state, and count tables."""
+    """Simulate trajectories and return their plate counts, MALDI, NGS, state, and count tables."""
     n_cl = const[1]
     x0 = np.asarray(x0, dtype=float)
     if model  == mdl.fusion_model_linear:
@@ -34,8 +34,8 @@ def generate_insilico_df(model, t, param, x0, const,  n_traj=1, exp_start_num=1,
         param_ode = np.asarray(param[:n_cl*(4+n_cl)+2])
     x = mdl.model_ODE_solution(model, t, param_ode, x0, const)#, jac=jac)
     count = mdl.get_bacterial_count(x, const[1], n_states)
-    create_df = [dtf.create_df_mibi, dtf.create_df_maldi, dtf.create_df_ngs, dtf.create_df_x]
-    obss = [mdl.observable_MiBi, mdl.observable_MALDI, mdl.observable_NGS, mdl.observable_x]
+    create_df = [dtf.create_df_platecount, dtf.create_df_maldi, dtf.create_df_ngs, dtf.create_df_x]
+    obss = [mdl.observable_platecount, mdl.observable_MALDI, mdl.observable_NGS, mdl.observable_x]
 
     bacteria_name = [f'Bacteria_{i:02d}' for i in range(const[1])]
     df_ode = dtf.merge_dfs([dtf.create_df_fullx(t, x, [f'V{j+exp_start_num:02d}','M1',f'{int(const[0][0]):02d}C'], bacteria_name, stds=0.)
@@ -49,12 +49,12 @@ def generate_insilico_df(model, t, param, x0, const,  n_traj=1, exp_start_num=1,
 
 
 def insilico_traj_dataframe(t, n, param, x0, const, create_df_func, bact_name, name_part=[''], obs_func=None,
-                            noise=.0, rel_noise=.0, maldi_n=None, mibi_log10_sd=None, ngs_dm=None):
+                            noise=.0, rel_noise=.0, maldi_n=None, platecount_log10_sd=None, ngs_dm=None):
     """Generate one synthetic observation table, optionally applying an observation model and noise.
     maldi_n: None: MALDI proportions with Gaussian noise (rel_noise * p + noise) like the other observables;
     integer N: MALDI as identification of N colonies per plate (medium and time point), species counts
     ~ Multinomial(N, p), proportions = counts / N (rare species are often missed, as in real MALDI data).
-    mibi_log10_sd: None: MiBi (plate counts) with Gaussian noise (rel_noise * y + noise); value sigma: Gaussian
+    platecount_log10_sd: None: plate counts with Gaussian noise (rel_noise * y + noise); value sigma: Gaussian
     noise on log10 of the plate counts, log10(y_meas) = log10(y) + N(0, sigma^2) (e.g. 0.1 or 0.3 log10 units).
     ngs_dm: None: NGS proportions with Gaussian noise (rel_noise * p + noise); (N, A): NGS as N reads per sample,
     species counts ~ Dirichlet-multinomial(N, A p), proportions = counts / N; A = concentration, smaller A = larger
@@ -81,9 +81,9 @@ def insilico_traj_dataframe(t, n, param, x0, const, create_df_func, bact_name, n
                         counts[m, :, k] = np.random.multinomial(int(maldi_n), p[m, :, k] / p[m, :, k].sum())
             stds = np.sqrt(p * (1 - p) / maldi_n)
             observables = counts / maldi_n
-        elif obs_func == mdl.observable_MiBi and mibi_log10_sd is not None:
-            stds = observables * np.log(10.) * mibi_log10_sd  # in counts (error bars), from sigma on the log10 scale
-            observables = observables * 10**np.random.normal(0., mibi_log10_sd, size=np.shape(observables))
+        elif obs_func == mdl.observable_platecount and platecount_log10_sd is not None:
+            stds = observables * np.log(10.) * platecount_log10_sd  # in counts (error bars), from sigma on the log10 scale
+            observables = observables * 10**np.random.normal(0., platecount_log10_sd, size=np.shape(observables))
         elif obs_func == mdl.observable_NGS and ngs_dm is not None:
             depth, conc = int(ngs_dm[0]), float(ngs_dm[1])
             p = np.nan_to_num(observables)  # (species, times), proportions per time

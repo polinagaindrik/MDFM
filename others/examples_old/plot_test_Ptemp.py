@@ -2,7 +2,7 @@ import os
 import sys
 sys.path.append(os.getcwd())
 import fusion_model as fm
-
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
@@ -14,13 +14,13 @@ if __name__ == "__main__":
     path = 'out/test_Ptemp/'
 
     # Read saved data and S matrix
-    df_mibi = fm.data.read_pkl('dataframe_mibi.pkl', path)
-    df_maldi = fm.data.read_pkl('dataframe_maldi.pkl', path)
-    df_ngs = fm.data.read_pkl('dataframe_ngs.pkl', path)
+    df_platecount = pd.read_pickle(path + 'dataframe_platecount.pkl')
+    df_maldi = pd.read_pickle(path + 'dataframe_maldi.pkl')
+    df_ngs = pd.read_pickle(path + 'dataframe_ngs.pkl')
     s_x = fm.output.read_from_json('S_matrix.json', dir=path)
     print('S matrix: \n', s_x)
 
-    exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))
+    exps = sorted(list(set([s.split('_')[0] for s in df_platecount.columns])))
 
     ########### Plot P matrx reults
 
@@ -64,14 +64,14 @@ if __name__ == "__main__":
         'model': model_red,
         'P_matrix': res_temp_together['P_matrix'],
         's_x': s_x}
-    plot_optimization_result_withP([df_mibi, df_maldi, df_ngs], res_temp_together['param_ode'], calibr_setup_red,
+    plot_optimization_result_withP([df_platecount, df_maldi, df_ngs], res_temp_together['param_ode'], calibr_setup_red,
                                    s_x, np.linspace(0, 17, 100), path=path)
     
     ########### Plot Optimization results for temps separate:    
     res_temp_separate = read_from_json('Result_temp_separate.json', dir=path)
     calibr_setup2 = calibr_setup_red
     calibr_setup2['P_matrix'] = res_temp_separate['P_matrix']
-    plot_optimization_result_withP_diffT([df_mibi, df_maldi, df_ngs], res_temp_separate['param_ode'], calibr_setup2, s_x,
+    plot_optimization_result_withP_diffT([df_platecount, df_maldi, df_ngs], res_temp_separate['param_ode'], calibr_setup2, s_x,
                                          np.linspace(0, 17, 100), path=path)
     
     '''

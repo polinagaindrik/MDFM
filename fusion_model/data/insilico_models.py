@@ -49,22 +49,13 @@ def sample_selective_media(n_media=3, n_cl=12, n_targets=3, target=(0.6, 0.95), 
    return np.round(s, 2), groups
 
 
-ZL2030_GENERAL_MEDIUM_DIR = 'out/zl2030/exp_model/calibration/'  # Result_calibration_zl2030_copy.json
-
-
-def zl2030_general_medium(n_cl=12, dir=ZL2030_GENERAL_MEDIUM_DIR):
-   """Recovery coefficients of the general medium (plate count agar, PC) estimated from the ZL2030 data
-   (second row of s_x, media order ['MRS', 'PC']), first n_cl species."""
-   return np.asarray(read_from_json('Result_calibration_zl2030_copy.json', dir=dir)['s_x'], dtype=float)[1, :n_cl]
-
-
-def sample_general_media(n_media=3, base=None, n_cl=12, decimals=2, min_value=0.15, max_tries=10000):
-   """General media from a measured general medium base (default: ZL2030 plate count agar, zl2030_general_medium):
+def sample_general_media(base, n_media=3, n_cl=12, decimals=2, min_value=0.15, max_tries=10000):
+   """General media from a measured general medium base:
    gen0 = base, rounded to decimals, values below min_value raised to min_value (every species is recovered);
    gen1..gen<n_media> (n_media x n_cl) = random permutations of gen0 over the species, different from each other
    and from gen0: the realistic value distribution, assigned to other species.
    Returns (gen0, gen1..gen<n_media>)."""
-   base = np.round(zl2030_general_medium(n_cl) if base is None else np.asarray(base, dtype=float)[:n_cl], decimals)
+   base = np.round(np.asarray(base, dtype=float)[:n_cl], decimals)
    base = np.maximum(base, min_value)
    rows = [base]
    for _ in range(max_tries):
@@ -131,26 +122,26 @@ def save_all_dfs(dfs, names=[''], path=''):
 
 
 def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name='', t_meas=None,
-                          maldi_n=None, mibi_log10_sd=None, ngs_dm=None):
+                          maldi_n=None, platecount_log10_sd=None, ngs_dm=None):
     """Generate synthetic observations and align their MALDI and NGS bacteria.
     t_meas: measurement days (whole days; default: module attribute t = 0, 1, ..., 17); only for the
     model_exp based generators (model_1media_exp_*, model_2media_exp*).
     maldi_n: None (default): MALDI with relative Gaussian noise; N: MALDI as N identified colonies per plate
     (multinomial, see insilico_traj_dataframe); only for the model_exp based generators.
-    mibi_log10_sd: None (default): MiBi with relative Gaussian noise; sigma: Gaussian noise with standard deviation
+    platecount_log10_sd: None (default): plate counts with relative Gaussian noise; sigma: Gaussian noise with standard deviation
     sigma on log10 of the plate counts; only for the model_exp based generators.
     ngs_dm: None (default): NGS with relative Gaussian noise; (N, A): NGS as N reads per sample, Dirichlet-multinomial
     with concentration A (see insilico_traj_dataframe); only for the model_exp based generators."""
     extra = {} if t_meas is None else {'t_meas': np.asarray(t_meas, dtype=float)}
     if maldi_n is not None:
         extra['maldi_n'] = int(maldi_n)
-    if mibi_log10_sd is not None:
-        extra['mibi_log10_sd'] = float(mibi_log10_sd)
+    if platecount_log10_sd is not None:
+        extra['platecount_log10_sd'] = float(platecount_log10_sd)
     if ngs_dm is not None:
         extra['ngs_dm'] = (int(ngs_dm[0]), float(ngs_dm[1]))
     data = insilico_model(n_cl, temps, ntr, S_matrix_setup, param_ode=param_ode, path=path, inhib=inhib, noise=noise, rel_noise=rel_noise, x10=x10, add_name=add_name, **extra)
     dfs = data[:-1]
-    (df_mibi, df_maldi, df_ngs) = dfs
+    (df_platecount, df_maldi, df_ngs) = dfs
     df_ngs, bact_ngs = dtf.preprocess_dataframe(df_ngs, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
     df_maldi, bact_maldi = dtf.preprocess_dataframe(df_maldi, cutoff=cutoff, cutoff_prop=cutoff_prop, calc_prop=False)
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
@@ -169,8 +160,8 @@ def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, para
     # Take union of ngs and maldi bacteria
     df_maldi, df_ngs, T_x, s_x_predefined = dtf.make_df_maldi_ngs_compatible(df_maldi, df_ngs, cutoff=0.001, media=media)
     bact_all = sorted(set(list(bact_maldi) + list(bact_ngs)))
-    save_all_dfs([df_mibi, df_maldi, df_ngs], names=[f'mibi{add_name}_preprocessed', f'maldi{add_name}_preprocessed', f'ngs{add_name}_preprocessed'], path=path)
-    return [df_mibi, df_maldi, df_ngs], bact_all, T_x, s_x_predefined
+    save_all_dfs([df_platecount, df_maldi, df_ngs], names=[f'platecount{add_name}_preprocessed', f'maldi{add_name}_preprocessed', f'ngs{add_name}_preprocessed'], path=path)
+    return [df_platecount, df_maldi, df_ngs], bact_all, T_x, s_x_predefined
   
 '''
 def model_2sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
@@ -191,16 +182,16 @@ def model_2sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.,
     else:
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [.001, .003, # lambda
-                 .2,   .5,   # alpha0
-                 .5,   .3,   # alpha1
+                 .2,   .5,   # mu0
+                 .5,   .3,   # mu1
                  7.,]  + kij_list
     param_model = param_ode + s_x + T_x
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx, df_fullx],
-                 names=['mibi', 'maldi', 'ngs', 'x', 'fullx'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx, df_fullx],
+                 names=['platecount', 'maldi', 'ngs', 'x', 'fullx'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_3sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
@@ -221,16 +212,16 @@ def model_3sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.,
     else:
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [.001, .003, .005, # lambda
-                 .2,   .5, .5,  # alpha0
-                 .5,   .3, .4,  # alpha1
+                 .2,   .5, .5,  # mu0
+                 .5,   .3, .4,  # mu1
                  7.,]  + kij_list
     param_model = param_ode + s_x + T_x
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx, df_fullx],
-                 names=['mibi', 'maldi', 'ngs', 'x', 'fullx'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx, df_fullx],
+                 names=['platecount', 'maldi', 'ngs', 'x', 'fullx'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_4sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise=0.):
@@ -251,15 +242,15 @@ def model_4sp_2media_inhib(temps, ntr, path='', inhib=False, noise=0., rel_noise
     else:
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [.001, .003, .005, .002, # lambda
-                 .2,   .5,   .5,    .9,   # alpha0
-                 .5,   .3,   .4,    0.,   # alpha1
+                 .2,   .5,   .5,    .9,   # mu0
+                 .5,   .3,   .4,    0.,   # mu1
                  7.,] + kij_list
     param_model = param_ode + s_x + T_x
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_6sp_2media_inhib(temps, ntr, x10=None, inhib=False, noise=0., rel_noise=0., path=''):
@@ -275,8 +266,8 @@ def model_6sp_2media_inhib(temps, ntr, x10=None, inhib=False, noise=0., rel_nois
     else:
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [.003, .005,  .001, .003, .005, .003,  # lambda
-                   .5, .5,  .3, .4, .3, .4,  # alpha0
-                   .3, .4, .2, .5, .6, .3,   # alpha1
+                   .5, .5,  .3, .4, .3, .4,  # mu0
+                   .3, .4, .2, .5, .6, .3,   # mu1
                     7.,] + kij_list 
     s_x = [.0, .4,  .6, .8, 1., .1,  # s_PC
            1., .1, 0., .5, 0., .5]  # s_MRS
@@ -285,12 +276,12 @@ def model_6sp_2media_inhib(temps, ntr, x10=None, inhib=False, noise=0., rel_nois
     param_model = param_ode + s_x + T_x
     x10 = [[1., 2., 1., 5., 2., 1.] for _ in range (len(temps))]
     x0 = set_initial_vals(x10, temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path_new, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 def model_6sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
     """Generate six-cluster, two-medium synthetic data with exponential temperature effects."""
@@ -306,8 +297,8 @@ def model_6sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., r
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [-5., -3., -2., -3., -6., -3., # lambda_1
                   0.,  1.,  2.,  3., 1.5, 2.5, # lambda_exp
-                  .2,  .5,  .5,  .5,  .3,  .4, # alpha0
-                  .6,  .3,  .4,  .5,  .2,  .5, # alpha1
+                  .2,  .5,  .5,  .5,  .3,  .4, # mu0
+                  .6,  .3,  .4,  .5,  .2,  .5, # mu1
                   8., 0.5] + kij_list
     s_x = [ .6, .0, .4, .2, .6, .8, 1., .1, 0., .4,   # s_PC
             0., 1., .1, .3, 0., .5, 0., .5, 1., .1]  # s_MRS
@@ -315,12 +306,12 @@ def model_6sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., r
     param_model = param_ode + s_x + T_x
     x10 = [[1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.] for _ in range (len(temps))]
     x0 = set_initial_vals(x10, temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_10sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
@@ -336,8 +327,8 @@ def model_10sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
     else:
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [-5., -3., -2., -3., -6., -3., -2., -4., -5., -3.3, # lambda
-                  .2,  .5,  .5,  .5,  .3,  .4,  .3,  .4,  .2,   .5, # alpha0
-                  .6,  .3,  .4,  .5,  .2,  .5,  .6,  .3,  .6,   .3, # alpha1
+                  .2,  .5,  .5,  .5,  .3,  .4,  .3,  .4,  .2,   .5, # mu0
+                  .6,  .3,  .4,  .5,  .2,  .5,  .6,  .3,  .6,   .3, # mu1
                   8.,] + kij_list
     s_x = [.6, .0, .4, .2, .6, .8, 1., .1, 0., .4,   # s_PC
             0., 1., .1, .3, 0., .5, 0., .5, 1., .1]  # s_MRS
@@ -345,12 +336,12 @@ def model_10sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
     param_model = param_ode + s_x + T_x
     x10 = [[1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.] for _ in range (len(temps))]
     x0 = set_initial_vals(x10, temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_10sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
@@ -367,8 +358,8 @@ def model_10sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., 
         kij_list=[0. for _ in range(n_cl*n_cl)]
     param_ode = [-5., -3., -2., -3., -6., -3., -2., -4., -5., -3.3, # lambda_1
                   0.,  1.,  2.,  3., 1.5, 2.5,  1., 0.5, 0.8,  0.2, # lambda_exp
-                  .2,  .5,  .5,  .5,  .3,  .4,  .3,  .4,  .2,   .1, # alpha0
-                  .6,  .3,  .4,  .5,  .2,  .5,  .6,  .3,  .6,  1.3, # alpha1
+                  .2,  .5,  .5,  .5,  .3,  .4,  .3,  .4,  .2,   .1, # mu0
+                  .6,  .3,  .4,  .5,  .2,  .5,  .6,  .3,  .6,  1.3, # mu1
                   8., 0.5] + kij_list
     s_x = [ .6, .0, .4, .2, .6, .8, 1., .1, 0., .4,  # s_PC
             0., 1., .1, .3, 0., .5, 0., .5, 1., .1]  # s_MRS
@@ -376,12 +367,12 @@ def model_10sp_2media_exp(temps, ntr, x10=None, path='', inhib=False, noise=0., 
     param_model = param_ode + s_x + T_x
     x10 =  [[1.1, 2., 1.5, 4., 2., 1.05, 2., 1.7, 2., 3.] for _ in range (len(temps))]
     x0 = set_initial_vals(x10, temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model2, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)#, jac_func=jacobian_fusion_model)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 def model_13sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0., rel_noise=0.):
@@ -397,8 +388,8 @@ def model_13sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
     else:
         kij_list = [0. for _ in range(n_cl*n_cl)]
     param_ode = [.001, .003, .005, .003, .001, .003, .005, .003, .001, .003, .001, .003, .0005, # lambda
-                   .1,   .4,   .4,   .4,   .2,  .04,   .2,   .3,   .1,   .4,   .1,   .4,    .7, # alpha0
-                   .5,   .2,   .3,   .4,   .1,  .4,    .5,   .2,   .5,   .2,   .2,   .4,   .01, # alpha1
+                   .1,   .4,   .4,   .4,   .2,  .04,   .2,   .3,   .1,   .4,   .1,   .4,    .7, # mu0
+                   .5,   .2,   .3,   .4,   .1,  .4,    .5,   .2,   .5,   .2,   .2,   .4,   .01, # mu1
                    8.,] + kij_list
     s_x = [.6, .0, .4, .2, .6, .8, 1., .1, 0., .4, .5, 0., .5,   # s_PC
            0., 1., .1, .3, 0., .5, 0., .5, 1., .1, .7, .1, .6]   # s_MRS
@@ -406,69 +397,21 @@ def model_13sp_2media_inhib(temps, ntr, x10=None, path='', inhib=False, noise=0.
     param_model = param_ode + s_x + T_x
     x10 = [[1., 2., 1., 5., 2., 1., 2., 1., 2., 1., 4., 1., 2.] for _ in range (len(temps))]
     x0 = set_initial_vals(x10, temps, n_cl)
-    df_mibi, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, df_fullx = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                       noise=noise, rel_noise=rel_noise)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=['mibi', 'maldi', 'ngs', 'x'], path=path)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=['platecount', 'maldi', 'ngs', 'x'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+param_ode, 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
     #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 '''
 
-############################# Models for fusion mode paper ##################################
+# Measurement days of the generated data
 #n_cl_max = 12
 #S_general = np.round(np.random.uniform(0.0, 1.0, size=(3, n_cl_max)), 1)
 #S_selective = np.round(np.random.uniform(0.0, 05.0, size=(n_cl_max, n_cl_max)) + np.random.uniform(0.6, 0.95, n_cl_max)*np.eye(n_cl_max), 1)
 #t = np.array([0., 1., 3., 6., 10., 13.,])
 t = np.linspace(0., 17., 18)
 #np.random.seed(4698517)
-
-# ----------------------------------------------------------------------
-# True parameters of the in-silico data (setup folder of the project that generates the data)
-# ----------------------------------------------------------------------
-_setup_dir = 'setup/'  # relative to the working directory; a project sets its own folder with set_setup_dir
-
-
-def set_setup_dir(dir):
-    """Folder of the setup files of the in-silico data, used by all functions below when no dir is given."""
-    global _setup_dir
-    _setup_dir = dir
-
-
-def get_setup_dir():
-    """Folder of the setup files of the in-silico data (see set_setup_dir)."""
-    return _setup_dir
-
-
-X0_DISTRIBUTIONS = ('uniform', 'lognormal')  # see sample_log10_x0
-X0_DISTRIBUTION = 'lognormal'  # default initial-value distribution of the setup files
-INITIAL_VALUES_FILE = f'Initial_values_x0_paper_{X0_DISTRIBUTION}.json'
-TRUE_PARAMETERS_FILE = f'True_parameters_paper_{X0_DISTRIBUTION}.json'
-
-
-def initial_values_file(distribution=X0_DISTRIBUTION):
-    """Setup file of the initial values sampled from distribution: Initial_values_x0_paper_<distribution>.json."""
-    if distribution not in X0_DISTRIBUTIONS:
-        raise ValueError(f'unknown x0 distribution {distribution!r}, expected one of {X0_DISTRIBUTIONS}')
-    return f'Initial_values_x0_paper_{distribution}.json'
-
-
-def true_parameters_file(distribution=X0_DISTRIBUTION):
-    """Setup file of the true parameters with the initial values of distribution: True_parameters_paper_<distribution>.json."""
-    if distribution not in X0_DISTRIBUTIONS:
-        raise ValueError(f'unknown x0 distribution {distribution!r}, expected one of {X0_DISTRIBUTIONS}')
-    return f'True_parameters_paper_{distribution}.json'
-
-
-def read_initial_values(distribution=X0_DISTRIBUTION, n_exps=None, n_cl=None, dir=None):
-    """log10 initial values (experiments x species) of the setup file of distribution, first n_exps
-    experiments and n_cl species (None: all); dir None: the setup folder (set_setup_dir)."""
-    dir = _setup_dir if dir is None else dir
-    file = initial_values_file(distribution)
-    x10 = np.array(read_from_json(file, dir=dir)['x0'], dtype=float)
-    if n_exps is not None and n_exps > len(x10):
-        raise ValueError(f'{dir}{file} has initial values for {len(x10)} experiments, {n_exps} requested')
-    return x10[:n_exps, :n_cl]
-MEDIA_MATRIX_FILE = 'Media_matrix_S_paper.json'
 
 
 EXP_TEMPS_FILE = 'exp_temps_model_paper.json'  # experiment -> temperature, saved next to the calibration results
@@ -483,7 +426,7 @@ def read_exp_temps(dir, df=None):
     """
     Temperature of each experiment of the run in dir (exp_temps_model_paper.json saved there by the
     calibration). If the file does not exist (results from before), the temperatures are taken from the
-    column names of the data frame df (e.g. 'V01_M1_02C_00_MRS-mibi' -> 2.0).
+    column names of the data frame df (e.g. 'V01_M1_02C_00_MRS-platecount' -> 2.0).
     """
     import os
     if os.path.exists(os.path.join(dir, EXP_TEMPS_FILE)):
@@ -494,129 +437,18 @@ def read_exp_temps(dir, df=None):
     return {c.split('_')[0]: float(c.split('_')[2].rstrip('C')) for c in df.columns}
 
 
-def _split_true_param_ode(param_ode, n_cl_file):
-    """[x0 (n_exps x n_cl) | lambda_1 | lambda_exp | alpha_0 | alpha_exp | N_1, N_exp | k (n_cl x n_cl)] -> parts."""
-    p = np.asarray(param_ode, dtype=float)
-    n = n_cl_file
-    n_ode = 4*n + 2 + n*n
-    n_x0 = len(p) - n_ode
-    if n_x0 < 0 or n_x0 % n:
-        raise ValueError(f'param_ode of length {len(p)} does not fit {n} species')
-    x0 = p[:n_x0].reshape(-1, n)
-    o = p[n_x0:]
-    return x0, o[:n], o[n:2*n], o[2*n:3*n], o[3*n:4*n], o[4*n:4*n+2], o[4*n+2:].reshape(n, n)
-
-
-def read_true_parameters(n_cl, file=None, dir=None, distribution=X0_DISTRIBUTION):
-    """
-    True parameters of the in-silico model for the first n_cl species, from the setup JSON
-    (param_ode = [x0 | ODE] of all species, s_x = media x species, T_x); file None: the file of the
-    initial-value distribution, True_parameters_paper_<distribution>.json (the ODE parameters, s_x and T_x
-    are the same for all distributions, only x0 differs). Returns a dict:
-      'param_ode': ODE parameters for n_cl species [lambda_1, lambda_exp, alpha_0, alpha_exp, N_1, N_exp, k_ij]
-                   (the layout fusion_model2 / model_exp expects)
-      'x10'      : log10 initial values, experiments x n_cl
-      's_x'      : media x n_cl, 'T_x': n_cl
-    dir None: the setup folder (set_setup_dir).
-    """
-    dir = _setup_dir if dir is None else dir
-    if file is None:
-        file = true_parameters_file(distribution)
-    res = read_from_json(file, dir=dir)
-    n_file = len(res['T_x'])
-    if n_cl > n_file:
-        raise ValueError(f'{dir}{file} has {n_file} species, {n_cl} requested')
-    x0, lam1, lamexp, alph0, alphexp, nmax, k = _split_true_param_ode(res['param_ode'], n_file)
-    param_ode = np.concatenate([lam1[:n_cl], lamexp[:n_cl], alph0[:n_cl], alphexp[:n_cl], nmax,
-                                k[:n_cl, :n_cl].ravel()])
-    s_x = np.asarray(res['s_x'], dtype=float).reshape(-1, n_file)[:, :n_cl]
-    return {'param_ode': param_ode, 'x10': x0[:, :n_cl], 's_x': s_x,
-            'T_x': np.asarray(res['T_x'], dtype=float)[:n_cl]}
-
-
-def true_parameters_for_distribution(distribution, source='uniform', n_exps=None, setup_dir=None,
-                                     media_file=MEDIA_MATRIX_FILE):
-    """
-    True-parameter JSON content (see read_true_parameters) for the initial values of distribution: ODE
-    parameters copied from the frozen file of source (True_parameters_paper_<source>.json),
-    x0 = first n_exps experiments (None: as many as in the source file) of
-    Initial_values_x0_paper_<distribution>.json, s_x = [sel1, gen0] and T_x of the media matrix
-    (Media_matrix_S_paper.json). setup_dir None: the setup folder (set_setup_dir).
-    """
-    setup_dir = _setup_dir if setup_dir is None else setup_dir
-    file = true_parameters_file(source)
-    res = read_from_json(file, dir=setup_dir)
-    n_file = len(res['T_x'])
-    p = np.asarray(res['param_ode'], dtype=float)
-    n_x0 = len(p) - (4*n_file + 2 + n_file*n_file)
-    if n_x0 < 0 or n_x0 % n_file:
-        raise ValueError(f'param_ode of {setup_dir}{file} (length {len(p)}) does not fit {n_file} species')
-    if n_exps is None:
-        n_exps = n_x0 // n_file
-    x10 = read_initial_values(distribution, n_exps, n_file, dir=setup_dir)
-    S = read_from_json(media_file, dir=setup_dir)
-    s_x = np.concatenate([np.asarray(S['s_selective'][0][:n_file], dtype=float),
-                          np.asarray(S['s_general0'][:n_file], dtype=float)])
-    return {'param_ode': list(np.concatenate([x10.ravel(), p[n_x0:]])), 's_x': list(s_x),
-            'T_x': list(np.asarray(S['T_x'][:n_file], dtype=float))}
-
-
-def get_res_from_zl2030dict(n_cl, model='linear', dir=''):
-    """Extract and reshape calibration parameters from ZL2030 project for a requested number of clusters."""
-    n_cl_zl2030 = 12
-    n_exps_zl2030 = 15 
-    res_zl2030 = read_from_json('Result_calibration_zl2030_copy.json', dir=dir)
-    s_x = np.round((np.array(res_zl2030['s_x'])[:, :n_cl]).flatten(), 1)
-    T_x = np.array(res_zl2030['T_x'])[:n_cl]
-    param_ode_zl2030 = np.round(np.array(res_zl2030['param_ode'])[n_cl_zl2030*n_exps_zl2030:-2*n_cl_zl2030], 1)
-    lambd_1 = param_ode_zl2030[:n_cl]
-    if model == 'linear':
-        alpha0 = param_ode_zl2030[n_cl_zl2030:n_cl_zl2030+n_cl]
-        alpha1 = param_ode_zl2030[2*n_cl_zl2030:2*n_cl_zl2030+n_cl]
-        n_max_param = param_ode_zl2030[3*n_cl_zl2030:3*n_cl_zl2030+1]
-        k_ij = param_ode_zl2030[3*n_cl_zl2030+1:].reshape(n_cl_zl2030, n_cl_zl2030)[:n_cl, :n_cl].flatten()
-        param_ode =  np.concatenate([lambd_1, alpha0, alpha1, n_max_param, k_ij])
-    elif model == 'exponential':
-        lambda_exp = param_ode_zl2030[n_cl_zl2030:n_cl_zl2030+n_cl]
-        alpha0 = param_ode_zl2030[2*n_cl_zl2030:2*n_cl_zl2030+n_cl]
-        alpha1 = param_ode_zl2030[3*n_cl_zl2030:3*n_cl_zl2030+n_cl]
-        n_max_param = param_ode_zl2030[4*n_cl_zl2030:4*n_cl_zl2030+2]
-        k_ij = param_ode_zl2030[4*n_cl_zl2030+2:].reshape(n_cl_zl2030, n_cl_zl2030)[:n_cl, :n_cl].flatten()
-        param_ode =  np.concatenate([lambd_1, lambda_exp, alpha0, alpha1, n_max_param, k_ij])
-    return s_x, T_x, param_ode
-
-
 # 10 species models (linear model)
-def model_2media_linearfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
-    """Generate two-medium linear-model data using parameters fitted to ZL2030 data."""
-    s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='linear', dir='out/zl2030/linear_model/calibration/')
-    s_x = s_x_zl2030
-    if not inhib:
-        param_ode[-n_cl*n_cl:] = 0.
-    param_model = np.concatenate([param_ode, s_x, T_x])
-    if x10 is not None:
-        x0 = set_initial_vals(x10, temps, n_cl)
-    else:
-        x10, x0 = get_random_initial_vals(temps, n_cl)
-    media = ['MRS', 'PC']
-    df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model_linear, t, param_model, x0, temps, n_cl, n_traj=ntr,
-                                                                      noise=noise, rel_noise=rel_noise, media=media)#, jac_func=jacobian_fusion_model)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
-    json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, 'Result_temp_together_real.json', dir=path)
-    #plot_insilico_x(df_realx, fusion_model2, t, param_model, x0, n_cl, path=path, add_name=f'{int(n_cl)}sp_insilicodata_')
-    return df_mibi, df_maldi, df_ngs, df_realx\
 
 
 def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name='', t_meas=None,
-              maldi_n=None, mibi_log10_sd=None, ngs_dm=None):
+              maldi_n=None, platecount_log10_sd=None, ngs_dm=None):
     """Generate synthetic observations using the exponential temperature-dependent model.
     maldi_n: None: MALDI with relative Gaussian noise; N: multinomial MALDI with N colonies per plate.
-    mibi_log10_sd: None: MiBi with relative Gaussian noise; sigma: Gaussian noise on log10 of the plate counts.
+    platecount_log10_sd: None: plate counts with relative Gaussian noise; sigma: Gaussian noise on log10 of the plate counts.
     ngs_dm: None: NGS with relative Gaussian noise; (N, A): Dirichlet-multinomial NGS, N reads, concentration A."""
     np.random.seed(46987)
-    if param_ode is None:  # true ODE parameters from the setup folder (see read_true_parameters)
-        param_ode = read_true_parameters(n_cl)['param_ode']
-        print(f'model_exp: true ODE parameters of {n_cl} species from {_setup_dir}{TRUE_PARAMETERS_FILE}')
+    if param_ode is None:
+        raise ValueError('model_exp needs param_ode, the true ODE parameters of the in-silico model')
     if not inhib:
         param_ode[-n_cl*n_cl:] = 0.
     param_model = np.concatenate([param_ode, s_x, T_x])
@@ -626,25 +458,18 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path=
         x10, x0 = get_random_initial_vals(temps, n_cl)
     if t_meas is not None and np.any(np.asarray(t_meas) != np.round(t_meas)):
         raise ValueError('t_meas must be whole days (the data column names contain the day as an integer)')
-    df_mibi, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t if t_meas is None else t_meas, param_model, x0, temps, n_cl, n_traj=ntr,
-                                                                 noise=noise, rel_noise=rel_noise, media=media, maldi_n=maldi_n, mibi_log10_sd=mibi_log10_sd, ngs_dm=ngs_dm)
-    save_all_dfs([df_mibi, df_maldi, df_ngs, df_realx], names=[f'mibi{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
+    df_platecount, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t if t_meas is None else t_meas, param_model, x0, temps, n_cl, n_traj=ntr,
+                                                                 noise=noise, rel_noise=rel_noise, media=media, maldi_n=maldi_n, platecount_log10_sd=platecount_log10_sd, ngs_dm=ngs_dm)
+    save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=[f'platecount{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, f'Result_real{add_name}.json', dir=path)
-    return df_mibi, df_maldi, df_ngs, df_realx
+    return df_platecount, df_maldi, df_ngs, df_realx
 
 
 ############################ For experiments with different number of species ############################
 # Exponential models:
-def model_2media_expfromzl2030(n_cl, temps, ntr, S_matrix_setup, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name=''):
-    """Generate two-medium exponential-model data using ZL2030 calibration parameters."""
-    np.random.seed(46987)
-    s_x_zl2030, T_x, param_ode = get_res_from_zl2030dict(n_cl, model='exponential', dir='out/zl2030/exp_model/calibration/')
-    s_x = s_x_zl2030
-    media = ['MRS', 'PC']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name='')
 
 def _s_general0(S_matrix_setup, n_cl):
-    """Coefficients of general medium gen0 (ZL2030 plate count agar, key 's_general0') as a list."""
+    """Coefficients of general medium gen0 (key 's_general0') as a list."""
     if 's_general0' not in S_matrix_setup:
         raise KeyError("media matrix has no 's_general0' (gen0); generate it with sample_general_media")
     return list(S_matrix_setup["s_general0"][:n_cl])
@@ -658,96 +483,6 @@ def model_2media_expgensel(n_cl, temps, ntr, S_matrix_setup, **kwargs):
     return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 
-def model_2media_expgen1sel1(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for general medium 1 and selective medium 1."""
-    s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_general"][0][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel1', 'gen1']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_2media_expgen2sel2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for general medium 2 and selective medium 2."""
-    s_x = np.array(S_matrix_setup["s_selective"][1][:n_cl]+S_matrix_setup["s_general"][1][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel2', 'gen2']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_2media_expgen3sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for general medium 3 and selective medium 3."""
-    s_x = np.array(S_matrix_setup["s_selective"][2][:n_cl]+S_matrix_setup["s_general"][2][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel3', 'gen3']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_2media_expsel2sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for selective media 2 and 3."""
-    s_x = np.array(S_matrix_setup["s_selective"][1][:n_cl]+S_matrix_setup["s_selective"][2][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel2', 'sel3']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_2media_expsel1sel3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for selective media 1 and 3."""
-    s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_selective"][2][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel1', 'sel3']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_2media_expsel1sel2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data for selective media 1 and 2."""
-    s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl]+S_matrix_setup["s_selective"][1][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel1', 'sel2']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-
 ################### Experiments with different media (6 species) #######################
-def model_1media_exp_sel1(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data using selective medium 1."""
-    s_x = np.array(S_matrix_setup["s_selective"][0][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel1']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_1media_exp_sel2(n_cl, temps, ntr, S_matrix_setup,  **kwargs):
-    """Generate exponential-model data using selective medium 2."""
-    s_x = np.array(S_matrix_setup["s_selective"][1][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel2']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_1media_exp_sel3(n_cl, temps, ntr, S_matrix_setup,  **kwargs):
-    """Generate exponential-model data using selective medium 3."""
-    s_x = np.array(S_matrix_setup["s_selective"][2][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['sel3']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_1media_exp_gen0(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data using general medium 0 (ZL2030 plate count agar, key 's_general0')."""
-    s_x = np.array(_s_general0(S_matrix_setup, n_cl))
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['gen0']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
 
 
-def model_1media_exp_gen1(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data using general medium 1."""
-    s_x = np.array(S_matrix_setup["s_general"][0][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['gen1']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_1media_exp_gen2(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data using general medium 2."""
-    s_x = np.array(S_matrix_setup["s_general"][1][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['gen2']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)
-
-def model_1media_exp_gen3(n_cl, temps, ntr, S_matrix_setup, **kwargs):
-    """Generate exponential-model data using general medium 3."""
-    s_x = np.array(S_matrix_setup["s_general"][2][:n_cl])
-    T_x = S_matrix_setup["T_x"][:n_cl]
-    media = ['gen3']
-    return model_exp(n_cl, temps, ntr, s_x, T_x, media, **kwargs)

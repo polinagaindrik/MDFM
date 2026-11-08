@@ -41,13 +41,13 @@ def define_bacteria_colors(df_ngs, df_maldi):
 
 def plot_filteringS2(dfs, opt_param, T_x, exps, path='', clrs=None):
     """Plot the fitted media-filtering weights for each bacterium and experiment."""
-    (df_mibi, df_maldi, df_ngs) = dfs
+    (df_platecount, df_maldi, df_ngs) = dfs
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df_maldi.columns])))
-    days_total, [obs_mibi, obs_maldi, obs_ngs] = dtf.extract_observables_from_df(dfs)
-    mibi_max = np.nanmax(obs_mibi, axis=(0, 1))
+    days_total, [obs_platecount, obs_maldi, obs_ngs] = dtf.extract_observables_from_df(dfs)
+    platecount_max = np.nanmax(obs_platecount, axis=(0, 1))
     for k, exp in enumerate(exps):
         rhs1, lhs1 = Scost_ngsterm(days_total, obs_maldi[k], obs_ngs[k], opt_param, T_x)
-        rhs2, lhs2 = Scost_mediarelation(days_total, obs_mibi[k]/mibi_max, obs_maldi[k], opt_param)
+        rhs2, lhs2 = Scost_mediarelation(days_total, obs_platecount[k]/platecount_max, obs_maldi[k], opt_param)
         for i, med in enumerate (media):
             fig, ax = plt.subplots(figsize=(5, 5))
             for j, bact in enumerate(df_maldi.T.columns):
@@ -114,23 +114,32 @@ def species_label(bact):
     return f'Species {suffix}' if suffix.isdigit() else bact
 
 
+def species_legend(ax, lines, outside=False, **kwargs):
+    """Legend of the species: inside the axes with kwargs, or outside right of the axes, centred vertically."""
+    if outside:
+        return ax.legend(handles=lines, loc='center left', bbox_to_anchor=(1.02, 0.5), borderaxespad=0., ncol=1)
+    return ax.legend(handles=lines, **kwargs)
+
+
 def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=[''], clrs=None, path='', add_name='',
-                       relnoise=0.1, maldi_n=None, mibi_log10_sd=None, ngs_dm=None):
+                       relnoise=0.1, maldi_n=None, platecount_log10_sd=None, ngs_dm=None, time_label=r'Time, $t$',
+                       legend_outside=False):
     """Plot one experiment's predicted bacterial counts and observation types
-    (error bars: relnoise * data of MiBi, MALDI and NGS; maldi_n: MALDI as N identified colonies per plate,
-    see plot_opt_res_maldi; mibi_log10_sd: MiBi noise on log10 of the counts, see plot_opt_res_mibi;
-    ngs_dm: NGS as (reads N, concentration A), see plot_opt_res_ngs)."""
+    (error bars: relnoise * data of plate counts, MALDI and NGS; maldi_n: MALDI as N identified colonies per plate,
+    see plot_opt_res_maldi; platecount_log10_sd: plate count noise on log10 of the counts, see plot_opt_res_platecount;
+    ngs_dm: NGS as (reads N, concentration A), see plot_opt_res_ngs; time_label: x-axis label, e.g. r'Time, $t$ [day]';
+    legend_outside: legend of the species right of the axes, centred vertically)."""
     data = prediction_setup['dfs']
     n_cl = np.shape(data[1])[0]
 
     if len(data) == 3:
-        (df_mibi0, df_maldi0, df_ngs0, ) = dtf.filter_dataframe(exp+'_', data)
+        (df_platecount0, df_maldi0, df_ngs0, ) = dtf.filter_dataframe(exp+'_', data)
         df_x0 = df_ngs0
     elif len(data) == 4:
-        (df_mibi0, df_maldi0, df_ngs0, df_x0, ) = dtf.filter_dataframe(exp+'_', data)
-    #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
+        (df_platecount0, df_maldi0, df_ngs0, df_x0, ) = dtf.filter_dataframe(exp+'_', data)
+    #temp = float(df_platecount0.columns[0].split("_")[2][:-1])
     temp = prediction_setup['exp_temps'][exp]
-    days = dtf.get_meas_days(df_mibi0, exp)
+    days = dtf.get_meas_days(df_platecount0, exp)
     t_model = np.linspace(0., np.max(days)+0.7, 100)
     const = [[temp], n_cl, media]
     C0_opt = np.concatenate((L0, np.ones((n_cl+1))))
@@ -141,28 +150,31 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
 
     days_ngs, obs_ngs = mdl.observable_NGS(t_model, n_C, prediction_setup['T_x'], n_C0, const, t_model)
     days_maldi, obs_maldi = mdl.observable_MALDI(t_model, n_C, prediction_setup['s_x'], n_C0, const, t_model)
-    days_mibi, obs_mibi = mdl.observable_MiBi(t_model, n_C, prediction_setup['s_x'], n_C0, const, t_model)
+    days_platecount, obs_platecount = mdl.observable_platecount(t_model, n_C, prediction_setup['s_x'], n_C0, const, t_model)
 
-    f_x = mdl.media_filtering(t_model, n_C, prediction_setup['s_x'], n_C0, const)
+    #f_x = mdl.media_filtering(t_model, n_C, prediction_setup['s_x'], n_C0, const)
 
     where = f'{exp}, {temp:g}$^\\circ$C'
+    # real data has no measurement of x (df_x0 is the NGS data, only for the days and species): model curves only
     plot_opt_res_realx(df_x0, t_model, n_C, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name,
-                       title=f'Cells, {where}')
-    for i in range (len(media)):
-        plot_opt_res_realx(df_x0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name, plot_meas=False,
-                           title=f'Cells recovered on {medium_label(media[i])}, {where}')
+                       title=f'Cells, {where}' if len(data) == 4 else f'$x(t)$, {where}', time_label=time_label,
+                       legend_outside=legend_outside, plot_meas=len(data) == 4)
+    #for i in range (len(media)):
+    #    plot_opt_res_realx(df_x0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name, plot_meas=False,
+    #                       title=f'Cells recovered on {medium_label(media[i])}, {where}')
     plot_opt_res_ngs(df_ngs0, days_ngs, obs_ngs, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name,
-                     relnoise=relnoise, ngs_dm=ngs_dm, title=f'NGS, {where}')
+                     relnoise=relnoise, ngs_dm=ngs_dm, title=f'NGS, {where}', time_label=time_label, legend_outside=legend_outside)
     plot_opt_res_maldi(df_maldi0, days_maldi, obs_maldi, exp, media=media, path=path+'Param_estim_', clrs=clrs,
-                       add_name=add_name, relnoise=relnoise, maldi_n=maldi_n, title=where)
-    plot_opt_res_mibi(df_mibi0, days_mibi, obs_mibi, exp, media=media, path=path+'Param_estim_', add_name=add_name,
-                      relnoise=relnoise, log10_sd=mibi_log10_sd, title=f'Plate counts, {where}')
+                       add_name=add_name, relnoise=relnoise, maldi_n=maldi_n, title=where, time_label=time_label, legend_outside=legend_outside)
+    plot_opt_res_platecount(df_platecount0, days_platecount, obs_platecount, exp, media=media, path=path+'Param_estim_', add_name=add_name,
+                      relnoise=relnoise, log10_sd=platecount_log10_sd, title=f'Plate counts, {where}', time_label=time_label)
 
 
 def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None, relnoise=0.1,
-                     title=None, ngs_dm=None):
+                     title=None, ngs_dm=None, relnoise_of_model=False, time_label=r'Time, $t$', legend_outside=False):
     """Plot modeled NGS proportions against measurements for one experiment
-    (error bars std, if None relnoise * data; ngs_dm = (N, A): Dirichlet-multinomial standard deviation)."""
+    (error bars std, if None relnoise * data; ngs_dm = (N, A): Dirichlet-multinomial standard deviation;
+    relnoise_of_model: relnoise * model at the measured days, the SD of data with relative Gaussian noise)."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     days_meas = [float(f.split('_')[3]) for f in df_ngs0.columns]
@@ -173,6 +185,8 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
         err = relnoise*o_meas if std is None else std
         if std is None and ngs_dm is not None:
             err = np.sqrt(o_meas * (1 - o_meas) * (ngs_dm[0] + ngs_dm[1]) / (ngs_dm[0] * (1 + ngs_dm[1])))
+        elif std is None and relnoise_of_model:
+            err = relnoise*np.interp(days_meas, days_model, o_n)
         if clrs is not None:
             clr = clrs[bact]
         else:
@@ -181,14 +195,14 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
         #ax.scatter(days_model, o_n,label=f'{bact}', color='w', marker='o', s=40, edgecolors=clr)
         ax.plot(days_model, o_n, color=clr)
         lines.append(mlines.Line2D([], [], color=clr, marker='o', label=species_label(bact)))
-    fig, ax = plt_templ.set_labels(fig, ax,  r'Time, $t$', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
+    fig, ax = plt_templ.set_labels(fig, ax, time_label, r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
     #ax.set_ylim(-0.05, 1.05)
     ax.set_ylim(-0.05, np.max(obs_meas)*(1+0.2)+0.1)
     ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
     coord_text = (0.06, 0.92)
     ax.text(*coord_text, '(b)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-    ax.legend(handles=lines, ncol=2)
+    species_legend(ax, lines, legend_outside, ncol=2)
     if title is not None:
         ax.set_title(title, fontsize=13)
     #ax.legend(fontsize=13, framealpha=0., handlelength=2., bbox_to_anchor=(1.,1.))# bbox_to_anchor=(1., 0.1, 0.5, 0.5))#, bbox_to_anchor=(1, 1)) # 
@@ -206,9 +220,10 @@ def wilson_error_bars(p, n, z=1.):
 
 
 def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=[' '], path='', add_name='', clrs=None,
-                       relnoise=0.1, maldi_n=None, title=None):
+                       relnoise=0.1, maldi_n=None, title=None, relnoise_of_model=False, time_label=r'Time, $t$', legend_outside=False):
     """Plot modeled MALDI proportions against measurements for one experiment
-    (error bars std, if None relnoise * data; maldi_n = N identified colonies per plate: wilson_error_bars).
+    (error bars std, if None relnoise * data; maldi_n = N identified colonies per plate: wilson_error_bars;
+    relnoise_of_model: relnoise * model at the measured days, the SD of data with relative Gaussian noise).
     title: figure title after 'MALDI, <medium>', each medium has its own figure and panel letter."""
     general = [is_general_medium(m) for m in media]
     for j, med in enumerate(media):
@@ -228,14 +243,16 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
                 err = std
             elif maldi_n is not None:
                 err = wilson_error_bars(o_meas, maldi_n)
+            elif relnoise_of_model:
+                err = relnoise*np.interp(days_meas, days_model, o_m)
             else:
                 err = relnoise*o_meas
             ax.errorbar(days_meas, o_meas, yerr=err, fmt='o', capsize=3, color=clr, label=f'{bact}')
             ax.plot(days_model, o_m, color=clr)
             lines.append(mlines.Line2D([], [], color=clr, marker='o', label=species_label(bact)))
-        ax.set_ylim(-0.05, np.max([np.max(obs_meas), np.max(o_model)])*1.1)#+0.1)
+        ax.set_ylim(-0.05, np.nanmax([np.nanmax(obs_meas), np.nanmax(o_model)])*1.1)#+0.1)
         ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
-        fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
+        fig, ax = plt_templ.set_labels(fig, ax, time_label, r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         
         coord_text = (0.06, 0.92)
@@ -244,9 +261,9 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
         ax.text(*coord_text, '(c)' if first else '(d)', fontsize=20,
                 horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
         if is_general_medium(med):
-            ax.legend(handles=lines, bbox_to_anchor=(0.72, 0.3))
+            species_legend(ax, lines, legend_outside, bbox_to_anchor=(0.72, 0.3))
         else:
-            ax.legend(handles=lines)
+            species_legend(ax, lines, legend_outside)
         if title is not None:
             ax.set_title(f'MALDI, {medium_label(med)}, {title}', fontsize=13)
         #ax.legend(bbox_to_anchor=(1., 1.))#, bbox_to_anchor=(1., 0.1, 0.5, 0.5)) #, bbox_to_anchor=(1, 1)
@@ -254,23 +271,26 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
         plt.close(fig)
     
 
-def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=[''], path='', add_name='', clrs=None,
-                      relnoise=0.1, log10_sd=None, title=None):
-    """Plot modeled MiBi counts against measurements for one experiment (error bars relnoise * data;
-    log10_sd: noise on log10 of the counts, error bars +- log10_sd in log10 units)."""
+def plot_opt_res_platecount(df_platecount0, days_model, obs_model, exp, std=None, media=[''], path='', add_name='', clrs=None,
+                      relnoise=0.1, log10_sd=None, title=None, relnoise_of_model=False, time_label=r'Time, $t$'):
+    """Plot modeled plate counts counts against measurements for one experiment (error bars relnoise * data;
+    log10_sd: noise on log10 of the counts, error bars +- log10_sd in log10 units;
+    relnoise_of_model: relnoise * model at the measured days, the SD of data with relative Gaussian noise)."""
     fig, ax = plt.subplots()
     fig.subplots_adjust()
     lines = []
     for j, med in enumerate(media):
         med_label = medium_label(med)
-        days_meas = [float(f.split('_')[3]) for f in df_mibi0.filter(like=med).columns]
-        obs_meas = np.array([df_mibi0.filter(like=med)[f]['Average'] for f in df_mibi0.filter(like=med).columns])
-        stds = np.array([df_mibi0.filter(like=med)[f]['Standard deviation'] for f in df_mibi0.filter(like=med).columns])
+        days_meas = [float(f.split('_')[3]) for f in df_platecount0.filter(like=med).columns]
+        obs_meas = np.array([df_platecount0.filter(like=med)[f]['Average'] for f in df_platecount0.filter(like=med).columns])
+        stds = np.array([df_platecount0.filter(like=med)[f]['Standard deviation'] for f in df_platecount0.filter(like=med).columns])
         stds = relnoise*obs_meas
         days_meas, obs_meas, stds = zip(*sorted(zip(days_meas, obs_meas, stds)))
         if log10_sd is not None:
             stds = np.array([np.array(obs_meas)*(1 - 10.**(-log10_sd)), np.array(obs_meas)*(10.**log10_sd - 1)])
         o_model = obs_model[j]
+        if log10_sd is None and relnoise_of_model:
+            stds = relnoise*np.interp(days_meas, days_model, o_model)
         ax.plot(days_model, o_model, color=plt_templ.colors_ngs[2*j], label=med_label+' (model)')
         ax.errorbar(days_meas, obs_meas, yerr=stds, fmt='o', capsize=3, color=plt_templ.colors_ngs[2*j], label=med_label+' (data)')
         lines.append(mlines.Line2D([], [], color=plt_templ.colors_ngs[2*j], marker='o', label=med_label))
@@ -278,16 +298,16 @@ def plot_opt_res_mibi(df_mibi0, days_model, obs_model, exp, std=None, media=['']
     ax.text(*coord_text, '(a)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
     ax.set_yscale('log')
     ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
-    fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'log CFU mL$^{-1}$')
+    fig, ax = plt_templ.set_labels(fig, ax, time_label, r'log CFU mL$^{-1}$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
     ax.legend()#, handles=lines)
     if title is not None:
         ax.set_title(title, fontsize=13)
-    plt.savefig(path+exp+add_name+'_mibi.pdf', bbox_inches='tight')
+    plt.savefig(path+exp+add_name+'_platecount.pdf', bbox_inches='tight')
     plt.close(fig)
 
 
-def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None, plot_meas=True, title=None):
+def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None, plot_meas=True, title=None, time_label=r'Time, $t$', legend_outside=False):
     """Plot modeled bacterial trajectories against measured count data.
     title: figure of a fit result, full time range and y-range of the curves, legend inside the axes, no panel
     letter; None: layout of the data-generation figures (panel letter = temperature, days 0-10 above 2 C)."""
@@ -306,16 +326,17 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
         ax.plot(days_model, o_n, label=f'{bact_all[k]}', color=clr)
         if plot_meas:
             ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
-        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=species_label(bact_all[k])))
+        lines.append(mlines.Line2D([], [], color=clr, marker='o' if plot_meas else '', label=species_label(bact_all[k])))
     ax.set_yscale('log')
     if title is not None:
         shown = np.array(obs_model, dtype=float)[:, np.asarray(days_model) <= np.max(days_meas)]
         low, high = (np.min(obs_meas), np.max(obs_meas)) if plot_meas else (np.min(shown), np.max(shown))
         ax.set_xlim(0., np.max(days_meas)+0.3)
         ax.set_ylim(low*0.5, high*2.5)
-        fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'log $x(t)$')
-        ax.legend(ncol=max(1, len(bact_all)//4), handles=lines)
-        ax.set_title(title, fontsize=13)
+        fig, ax = plt_templ.set_labels(fig, ax, time_label, r'log $x(t)$')
+        species_legend(ax, lines, legend_outside, ncol=max(1, len(bact_all)//4))
+        if title:
+            ax.set_title(title, fontsize=13)
         plt.savefig(path+exp+add_name+'_realx.pdf', bbox_inches='tight')
         plt.close(fig)
         return
@@ -326,7 +347,7 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
         #ax.set_xlim(-0.25, 10)
         ax.set_xlim(0., 10)
         ax.set_ylim(np.min(obs_meas)*0.6, np.max(obs_meas)*2.7)
-    fig, ax = plt_templ.set_labels(fig, ax, r'Time, $t$', r'log $x(t)$')
+    fig, ax = plt_templ.set_labels(fig, ax, time_label, r'log $x(t)$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
     #coord_text = (0.95, 0.07)
     coord_text = (0.06, 0.92)

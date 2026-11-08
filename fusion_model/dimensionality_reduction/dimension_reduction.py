@@ -9,7 +9,7 @@ from ..parameter_estimation.optimization import optimization_func
 
 def calc_Pmatrix(data, transform_func, n_cl, n_cl_red, s_x, temps=[], workers=1, path='', add_name=''):
     """Estimate projection matrices and transform MALDI/NGS data into reduced clusters."""
-    (df_mibi, df_maldi, df_ngs) = data
+    (df_platecount, df_maldi, df_ngs) = data
     p_bnds = [(0., 1.) if j>=i else (0., 0.) for i in range (n_cl_red) for j in range (n_cl)] #+ [(0., 1.) for _ in range (3*n_cl)]
     #p_bnds = [(0., 1.) for i in range (n_cl_red*n_cl)]
     calibr_setup_proj={
@@ -165,47 +165,47 @@ def calculate_model_prob_withP(ll_func, dfs, calibr_setup):
     return optim_output.x
 
 def log_likelihood_withP(param_x0, dfs, model, Pmatrix, s_x):
-    """Evaluate model fit to MiBi, MALDI, and NGS data with one projection matrix."""
-    (df_mibi, df_maldi, df_ngs, ) = dfs
+    """Evaluate model fit to plate counts, MALDI, and NGS data with one projection matrix."""
+    (df_platecount, df_maldi, df_ngs, ) = dfs
     Pinv = np.linalg.pinv(Pmatrix)
     n_cl = np.shape(Pmatrix)[0]
-    maldi_ll, ngs_ll, mibi_ll = 0, 0, 0
-    exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))
+    maldi_ll, ngs_ll, platecount_ll = 0, 0, 0
+    exps = sorted(list(set([s.split('_')[0] for s in df_platecount.columns])))
     param = param_x0[(n_cl)*len(exps):]
     for i, exp in enumerate(exps):
-        df_mibi0, df_maldi0, df_ngs0 = dtf.filter_dataframe(exp, dfs)
-        # Calculate model solution + Observables: MiBi, MALDI, NGS
-        days = dtf.get_meas_days(df_mibi0, exp)
-        temp = float(df_mibi0.columns[0].split("_")[2][:-1])
+        df_platecount0, df_maldi0, df_ngs0 = dtf.filter_dataframe(exp, dfs)
+        # Calculate model solution + Observables: plate counts, MALDI, NGS
+        days = dtf.get_meas_days(df_platecount0, exp)
+        temp = float(df_platecount0.columns[0].split("_")[2][:-1])
         const = [[temp], n_cl] 
         #C0 = 1e3*np.concatenate((param_x0[n_cl*i:n_cl*(i+1)],[1e-3 for _ in range(n_cl)]+[1e-3]))
         C0 = np.concatenate((10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), np.ones((n_cl+1))))
-        df_mibi_model, df_maldi_model, df_ngs_model = model_one_experiment_withP(df_mibi0, df_maldi0, df_ngs0, model, days, param, C0,
+        df_platecount_model, df_maldi_model, df_ngs_model = model_one_experiment_withP(df_platecount0, df_maldi0, df_ngs0, model, days, param, C0,
                                                                                  const, Pinv, s_x, dtf.get_meas_days(df_maldi0, exp),
                                                                                  dtf.get_meas_days(df_ngs0, exp), n_states=2)
-        df_mibi_model = df_mibi_model.drop("Replicas").apply(calc_log_mibi)
-        df_mibi0 = df_mibi0.drop("Replicas").apply(calc_log_mibi)
+        df_platecount_model = df_platecount_model.drop("Replicas").apply(calc_log_platecount)
+        df_platecount0 = df_platecount0.drop("Replicas").apply(calc_log_platecount)
 
-        df_mibi_ll = df_mibi0.sub(df_mibi_model)**2
+        df_platecount_ll = df_platecount0.sub(df_platecount_model)**2
         maldi_ll += diversity_data_ll(df_maldi_model, df_maldi0, std=0.05)
         ngs_ll += diversity_data_ll(df_ngs_model, df_ngs0, std=0.05)
-        mibi_ll += 10*df_mibi_ll.sum().sum()
-    return 0.8*mibi_ll/np.shape(df_mibi)[-1] + 0.1*maldi_ll/(np.size(df_maldi)) + 0.1*ngs_ll/(np.size(df_ngs))
+        platecount_ll += 10*df_platecount_ll.sum().sum()
+    return 0.8*platecount_ll/np.shape(df_platecount)[-1] + 0.1*maldi_ll/(np.size(df_maldi)) + 0.1*ngs_ll/(np.size(df_ngs))
 
 
 def log_likelihood_withP_diffT(param_x0, dfs, model, Pmatrices, s_x):
     """Evaluate model fit using temperature-specific projection matrices."""
-    (df_mibi, df_maldi, df_ngs, ) = dfs
+    (df_platecount, df_maldi, df_ngs, ) = dfs
     Pinv = [np.linalg.pinv(p) for p in Pmatrices]
     n_cl = np.shape(Pmatrices[0])[0]
-    maldi_ll, ngs_ll, mibi_ll = 0, 0, 0
-    exps = sorted(list(set([s.split('_')[0] for s in df_mibi.columns])))
+    maldi_ll, ngs_ll, platecount_ll = 0, 0, 0
+    exps = sorted(list(set([s.split('_')[0] for s in df_platecount.columns])))
     param = param_x0[(n_cl)*len(exps):]
     for i, exp in enumerate(exps):
-        df_mibi0, df_maldi0, df_ngs0  = dtf.filter_dataframe(exp, dfs)
-        # Calculate model solution + Observables: MiBi, MALDI, NGS
-        days = dtf.get_meas_days(df_mibi0, exp)
-        temp = float(df_mibi0.columns[0].split("_")[2][:-1])
+        df_platecount0, df_maldi0, df_ngs0  = dtf.filter_dataframe(exp, dfs)
+        # Calculate model solution + Observables: plate counts, MALDI, NGS
+        days = dtf.get_meas_days(df_platecount0, exp)
+        temp = float(df_platecount0.columns[0].split("_")[2][:-1])
         if temp == 2.:
             pinv = Pinv[0]
         elif temp == 10.:
@@ -215,19 +215,19 @@ def log_likelihood_withP_diffT(param_x0, dfs, model, Pmatrices, s_x):
         const = [[temp], n_cl]
         #C0 = 1e3*np.concatenate((param_x0[n_cl*i:n_cl*(i+1)],[1e-3 for _ in range(n_cl)]+[1e-3]))
         C0 = np.concatenate((10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), np.ones((n_cl+1))))
-        df_mibi_model, df_maldi_model, df_ngs_model = model_one_experiment_withP(df_mibi0, df_maldi0, df_ngs0, model, days, param, C0,
+        df_platecount_model, df_maldi_model, df_ngs_model = model_one_experiment_withP(df_platecount0, df_maldi0, df_ngs0, model, days, param, C0,
                                                                                  const, pinv, s_x, dtf.get_meas_days(df_maldi0, exp),
                                                                                  dtf.get_meas_days(df_ngs0, exp), n_states=2)
-        df_mibi_model = df_mibi_model.drop("Replicas").apply(calc_log_mibi)
-        df_mibi0 = df_mibi0.drop("Replicas").apply(calc_log_mibi)
-        df_mibi_ll = df_mibi0.sub(df_mibi_model)**2
+        df_platecount_model = df_platecount_model.drop("Replicas").apply(calc_log_platecount)
+        df_platecount0 = df_platecount0.drop("Replicas").apply(calc_log_platecount)
+        df_platecount_ll = df_platecount0.sub(df_platecount_model)**2
         maldi_ll += diversity_data_ll(df_maldi_model, df_maldi0, std=0.05)
         ngs_ll += diversity_data_ll(df_ngs_model, df_ngs0, std=0.05)
-        mibi_ll += df_mibi_ll.sum().sum()
-    return mibi_ll/np.shape(df_mibi)[-1] + maldi_ll/(np.size(df_maldi)) + ngs_ll/(np.size(df_ngs))
+        platecount_ll += df_platecount_ll.sum().sum()
+    return platecount_ll/np.shape(df_platecount)[-1] + maldi_ll/(np.size(df_maldi)) + ngs_ll/(np.size(df_ngs))
 
 
-def model_one_experiment_withP(df_mibi0, df_maldi0, df_ngs0, model, t, param, C0, const, Pinv, s_x, t_obs2,
+def model_one_experiment_withP(df_platecount0, df_maldi0, df_ngs0, model, t, param, C0, const, Pinv, s_x, t_obs2,
                                t_obs3, n_states=2):
     """Simulate one experiment, reconstruct original clusters, and create observation tables."""
     C = mdl.model_ODE_solution(model, t, param, C0, const)
@@ -240,17 +240,17 @@ def model_one_experiment_withP(df_mibi0, df_maldi0, df_ngs0, model, t, param, C0
     const_sp = const
     const_sp[1] = np.shape(Pinv)[0]
 
-    days_mibi, obs_mibi = mdl.observable_MiBi(t, n_x, s_x, n_x0, const_sp, t)
+    days_platecount, obs_platecount = mdl.observable_platecount(t, n_x, s_x, n_x0, const_sp, t)
     days_maldi, obs_maldi = mdl.observable_MALDI(t, n_x, s_x, n_x0, const_sp, t_obs2)
     days_ngs, obs_ngs = mdl.observable_NGS(t, n_x, s_x, n_x0, const_sp, t_obs3)
 
-    df_mibi_model = mdl.create_df_mibi(days_mibi, obs_mibi, df_mibi0.columns[0].split('_')[:3], df_mibi0.T.columns)
+    df_platecount_model = mdl.create_df_platecount(days_platecount, obs_platecount, df_platecount0.columns[0].split('_')[:3], df_platecount0.T.columns)
     df_maldi_model = mdl.create_df_maldi(days_maldi, obs_maldi, df_maldi0.columns[0].split('_')[:3], df_maldi0.T.columns)
     df_ngs_model = mdl.create_df_ngs(days_ngs, obs_ngs, df_ngs0.columns[0].split('_')[:3], df_ngs0.T.columns)
-    return df_mibi_model, df_maldi_model, df_ngs_model
+    return df_platecount_model, df_maldi_model, df_ngs_model
 
-def calc_log_mibi(x):
-    """Return a MiBi measurement's log mean and relative standard deviation."""
+def calc_log_platecount(x):
+    """Return a plate count measurement's log mean and relative standard deviation."""
     mean = np.max([x['Average'], 1.])
     return [np.log(mean), np.abs(np.array(x['Standard deviation'])*0.43 / x['Average'])]
 

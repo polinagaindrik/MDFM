@@ -1,7 +1,7 @@
 import numpy as np
 from .. import model as mdl
 
-def param_bnds_insilico_tempexponent(n_cl, inhib=True):
+def param_bnds_insilico_tempexponent(n_cl, inhib=True, lambda_exp_max=5.):
     """Build ODE parameter bounds for the temperature-exponent in-silico model."""
     if inhib == True:  # noqa: E712
         inhib_bnds = [(0.0, 20.) if i!=j else (0., 0.)
@@ -10,9 +10,9 @@ def param_bnds_insilico_tempexponent(n_cl, inhib=True):
     else:
         inhib_bnds = [(0., 0.) for _ in range (n_cl*n_cl)]
     param_ode_bnds = tuple([(-8., -1.)  for _ in range (n_cl)]  + # lambd_1
-                            [(0., 5.)    for _ in range (n_cl)] + # lambd_exp
-                            [(.001,  2.)  for _ in range (n_cl)] +  # alph_0
-                            [(.0,  2.)  for _ in range (n_cl)] +  # alph_exp
+                            [(0., lambda_exp_max)    for _ in range (n_cl)] + # lambd_exp
+                            [(.001,  2.)  for _ in range (n_cl)] +  # mu_0
+                            [(.0,  2.)  for _ in range (n_cl)] +  # mu_exp
                             [(7.5, 14.)] + [(0., 2.)]           + # N_1 and N_exp
                             inhib_bnds)
     
@@ -28,19 +28,21 @@ def param_bnds_insilico_templinear(n_cl, inhib=True):
     else:
         inhib_bnds = [(0., 0.) for _ in range (n_cl*n_cl)]
     param_ode_bnds = tuple([(-7., -2.)  for _ in range (n_cl)] + # lambd_1
-                            [(.01,  1.) for _ in range (n_cl)] + # alph_0 
-                            [(.1 ,  .6) for _ in range (n_cl)] + # alph_1 
+                            [(.01,  1.) for _ in range (n_cl)] + # mu_0
+                            [(.1 ,  .6) for _ in range (n_cl)] + # mu_1
                             [(7.5, 14.)] +      
                             inhib_bnds)
     return param_ode_bnds
 
 
-def define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=None, s_x=None):
-    """Add model-specific parameter bounds and optional media weights to an in-silico setup."""
+def define_calibr_setup_insilico(calibr_presetup, inhib=True, s_x_predefined=None, s_x=None, lambda_exp_max=5.):
+    """Add model-specific parameter bounds and optional media weights to an in-silico setup.
+    lambda_exp_max: upper bound of lambda_exp (fusion_model2)."""
     x0_bnds_all = tuple([(0., 5) for _ in range (calibr_presetup['n_cl']) for _ in range (len(calibr_presetup['exps']))])
     calibr_setup = calibr_presetup
     if calibr_presetup['model'] == mdl.fusion_model2:
-        calibr_setup['param_bnds'] =  x0_bnds_all + param_bnds_insilico_tempexponent(calibr_presetup['n_cl'], inhib=inhib)
+        calibr_setup['param_bnds'] =  x0_bnds_all + param_bnds_insilico_tempexponent(calibr_presetup['n_cl'], inhib=inhib,
+                                                                                    lambda_exp_max=lambda_exp_max)
     elif calibr_presetup['model'] == mdl.fusion_model_linear:
         calibr_setup['param_bnds'] =  x0_bnds_all + param_bnds_insilico_templinear(calibr_presetup['n_cl'], inhib=inhib)
     else:

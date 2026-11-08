@@ -3,7 +3,7 @@ Helpers around a calibration that work the same for experimental (ZL2030) and in
 parameter vector, information read from the data frames, fixed parameters and reloading a saved calibration.
 
 Parameter vector layout (cost_withS, model fusion_model2):
-    [ x0 (n_cl per experiment, log10) | lambda_1 (n_cl) | lambda_exp (n_cl) | alpha_0 (n_cl) | alpha_exp (n_cl) |
+    [ x0 (n_cl per experiment, log10) | lambda_1 (n_cl) | lambda_exp (n_cl) | mu_0 (n_cl) | mu_exp (n_cl) |
       N_1 | N_exp | k_ij (n_cl x n_cl) | S (n_media x n_cl) ]
 """
 import glob
@@ -27,7 +27,7 @@ __all__ = ['load_calibration', 's_x_predefined_from_maldi', 'exp_temps_from_colu
 def load_calibration(path, add_name):
     """Data frames, estimated parameters and the true parameters of in-silico data (None for experimental data)."""
     dfs = []
-    for k in ["mibi", "maldi", "ngs"]:
+    for k in ["platecount", "maldi", "ngs"]:
         f_pre = os.path.join(path, f"dataframe_{k}{add_name}_preprocessed.pkl")
         f_raw = os.path.join(path, f"dataframe_{k}{add_name}.pkl")
         dfs.append(pd.read_pickle(f_pre if os.path.exists(f_pre) else f_raw))
@@ -50,7 +50,7 @@ def s_x_predefined_from_maldi(df_maldi, media):
 
 
 def exp_temps_from_columns(df):
-    """{exp: temperature} parsed from column names like 'V01_M1_02C_00_MRS-mibi'."""
+    """{exp: temperature} parsed from column names like 'V01_M1_02C_00_MRS-platecount'."""
     temps = {}
     for c in df.columns:
         parts = c.split("_")
@@ -65,8 +65,8 @@ def make_param_names(exps, bact, media):
     names = [rf"$x_{{0,{bi}}}^{{{e}}}$" for e in exps for bi in b]
     names += [rf"$\lambda_{{1,{bi}}}$" for bi in b]
     names += [rf"$\lambda_{{exp,{bi}}}$" for bi in b]
-    names += [rf"$\alpha_{{0,{bi}}}$" for bi in b]
-    names += [rf"$\alpha_{{exp,{bi}}}$" for bi in b]
+    names += [rf"$\mu_{{0,{bi}}}$" for bi in b]
+    names += [rf"$\mu_{{exp,{bi}}}$" for bi in b]
     names += [r"$N_1$", r"$N_{exp}$"]
     names += [rf"$k_{{{b[i]},{b[j]}}}$" for i in range(n_cl) for j in range(n_cl)]
     names += [rf"$S_{{{m},{bi}}}$" for m in media for bi in b]
@@ -75,7 +75,7 @@ def make_param_names(exps, bact, media):
 
 def resolve_fixed_values(fix, names):
     """{index: value} from a dict whose keys are indices or parameter names (as in make_param_names,
-    with or without the LaTeX $ \\ { }), e.g. {17: 0.} or {'k_00,01': 0., 'alpha_exp,00': 0.}."""
+    with or without the LaTeX $ \\ { }), e.g. {17: 0.} or {'k_00,01': 0., 'mu_exp,00': 0.}."""
     return {pl._resolve_param_index(k, names): float(v) for k, v in (fix or {}).items()}
 
 
@@ -122,8 +122,7 @@ def copy_result_to_all_profiles(path, add_name, profile_dir="profile_likelihood"
 
 def build_calibr_setup(path, add_name, n_cl, n_media, define_setup, objective="neg2logL", exps=None):
     """calibr_setup (incl. param_bnds and data_array) for a saved calibration.
-    define_setup: function that adds the parameter bounds of this kind of data, fm.pest.define_calibr_setup_ZL2030
-                  or fm.pest.define_calibr_setup_insilico
+    define_setup: function that adds the parameter bounds of this kind of data, e.g. fm.pest.define_calibr_setup_insilico
     objective: 'neg2logL'    GaussianNeg2LogLik: -2 log L, data types weighted by their number of points
                'geomean'     GeometricMeanNeg2LogLik: -2 log L version of the calibration cost
                              (same optimum as cost_sum_and_geometric_mean, equal weight per data type)
@@ -136,8 +135,8 @@ def build_calibr_setup(path, add_name, n_cl, n_media, define_setup, objective="n
     dfs, result, true_params = load_calibration(path, add_name)
     if exps is not None:  # the cost function takes the experiments from the columns of the data frames
         dfs = [df[[c for c in df.columns if c.split("_")[0] in exps]] for df in dfs]
-    df_mibi, df_maldi, df_ngs = dfs
-    exps = sorted(list(set([s.split("_")[0] for s in df_mibi.columns])))
+    df_platecount, df_maldi, df_ngs = dfs
+    exps = sorted(list(set([s.split("_")[0] for s in df_platecount.columns])))
     media = sorted(list(set([s.split("_")[-1].split("-")[0] for s in df_maldi.columns])))
     bact = list(df_maldi.index)
     assert len(bact) == n_cl and len(media) == n_media, (bact, media)
@@ -151,7 +150,7 @@ def build_calibr_setup(path, add_name, n_cl, n_media, define_setup, objective="n
         "dfs": dfs,
         "aggregation_func": cost_sum_and_geometric_mean,
         "exps": exps,
-        "exp_temps": exp_temps_from_columns(df_mibi),
+        "exp_temps": exp_temps_from_columns(df_platecount),
         "media": media,
     }
     calibr_setup = define_setup(calibr_presetup, inhib=True, s_x_predefined=s_x_predefined_from_maldi(df_maldi, media),

@@ -15,7 +15,7 @@ iterations in narrow valleys of the cost.
   decreases (usually 2-4 outer iterations). The weights are obtained numerically from
   calibr_setup['aggregation_func'], so no special case per aggregation is needed.
 * The free parameters are mapped to [0, 1] (bound-scaled); with log_scale='auto' every
-  parameter with 0 < lower bound and upper/lower >= 100 (k_ij, alpha, S) is mapped on a
+  parameter with 0 < lower bound and upper/lower >= 100 (k_ij, mu, S) is mapped on a
   log10 scale. Fixed parameters (lower == upper) and fixed_indices stay at their value.
 * Jacobian by forward differences, evaluated in n_jobs processes. The x0 of different
   experiments only change the residuals of their own experiment, so the x0 of all

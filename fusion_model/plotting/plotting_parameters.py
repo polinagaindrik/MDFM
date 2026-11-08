@@ -39,49 +39,49 @@ def _stem_est_real(ax, bact_all, est, real=None):
         ax.legend(handles=handles, fontsize=12, framealpha=0.1, bbox_to_anchor=(1, 1), loc='upper left')
 
 
-def plot_alpha(alph, bact_all, clrs1, alph_real=None, path=''):
-    """Plot estimated alpha growth parameters against temperature for each bacterium."""
+def plot_mu(mu, bact_all, clrs1, mu_real=None, path=''):
+    """Plot estimated mu growth parameters against temperature for each bacterium."""
     temp = np.linspace(1.95, 14.05, 100)
-    (alph_1, alph_exp) = alph
+    (mu_1, mu_exp) = mu
     fig, ax = plt.subplots()
-    for a0, a1, b in zip(alph_1, alph_exp, bact_all):
+    for a0, a1, b in zip(mu_1, mu_exp, bact_all):
         #ax.plot(temp, lin_func(temp, a0, a1)/24., label=b, color=clrs1[b], linewidth=2)
         ax.plot(temp, exp_func(temp, a0, a1)/24., color=clrs1[b], linewidth=2)
-    if alph_real is not None:
-        (alph_1_real, alph_exp_real) = alph_real
-        for a0, a1, b in zip(alph_1_real, alph_exp_real, bact_all):
+    if mu_real is not None:
+        (mu_1_real, mu_exp_real) = mu_real
+        for a0, a1, b in zip(mu_1_real, mu_exp_real, bact_all):
             ax.plot(temp, exp_func(temp, a0, a1)/24., color=clrs1[b], linewidth=2, linestyle='dashed')
     ax.set_title('Wachstumsrate', fontsize=14)
-    ax.set_ylabel(r'$\alpha$ [$h^{-1}$]', fontsize=14)
+    ax.set_ylabel(r'$\mu$ [$h^{-1}$]', fontsize=14)
     ax.set_xlabel(r'Temperatur [°C]', fontsize=14)
     ax.set_xlim(1.95, 14.05)
     ax.tick_params(axis='both', which='major', labelsize=12)
-    _curve_legends(ax, bact_all, clrs1, alph_real is not None)
-    plt.savefig(path+'alphas.png', bbox_inches='tight')
+    _curve_legends(ax, bact_all, clrs1, mu_real is not None)
+    plt.savefig(path+'mu.png', bbox_inches='tight')
     plt.close(fig)
 
-    # Now plot separately alpha parameter values:
+    # Now plot separately mu parameter values:
     n_cl = len(bact_all)
     fig, ax = plt.subplots()
-    _stem_est_real(ax, bact_all, alph_1, None if alph_real is None else alph_1_real)
+    _stem_est_real(ax, bact_all, mu_1, None if mu_real is None else mu_1_real)
     ax.set_xticks(np.linspace(0, n_cl-1, n_cl))
     ax.set_title('Wachstumsrate', fontsize=14)
     ax.set_xticklabels(bact_all, rotation=45, ha='right')
     ax.tick_params(axis='both', which='major', labelsize=14)
-    ax.set_ylabel(r'$\alpha$ [$h^{-1}$]', fontsize=14)
+    ax.set_ylabel(r'$\mu$ [$h^{-1}$]', fontsize=14)
     ax.tick_params(axis='both', which='major', labelsize=12)
-    plt.savefig(path+'alphas_1.png', bbox_inches='tight')
+    plt.savefig(path+'mu_1.png', bbox_inches='tight')
     plt.close(fig)
 
     fig, ax = plt.subplots()
-    _stem_est_real(ax, bact_all, alph_exp, None if alph_real is None else alph_exp_real)
+    _stem_est_real(ax, bact_all, mu_exp, None if mu_real is None else mu_exp_real)
     ax.set_xticks(np.linspace(0, n_cl-1, n_cl))
     ax.set_title('Wachstumsrate', fontsize=14)
     ax.set_xticklabels(bact_all, rotation=45, ha='right')
     ax.tick_params(axis='both', which='major', labelsize=14)
-    ax.set_ylabel(r'$\alpha$ [$h^{-1}$]', fontsize=14)
+    ax.set_ylabel(r'$\mu$ [$h^{-1}$]', fontsize=14)
     ax.tick_params(axis='both', which='major', labelsize=12)
-    plt.savefig(path+'alphas_exp.png', bbox_inches='tight')
+    plt.savefig(path+'mu_exp.png', bbox_inches='tight')
     plt.close(fig)
 
 
@@ -194,15 +194,15 @@ def plot_parameters(param_ode, bact_all, exps, clrs1, param_real=[], path='', x0
     param = param_ode[n_cl*len(exps):]
 
     #lambd_exp = param[:n_cl]#10**param[:n_cl]
-    #alph0 = param[n_cl:2*n_cl]
-    #alph1 = param[2*n_cl:3*n_cl]
+    #mu0 = param[n_cl:2*n_cl]
+    #mu1 = param[2*n_cl:3*n_cl]
     #nmax = param[3*n_cl]
     #kij_matrix = param[3*n_cl+1:].reshape(n_cl, -1)*(5e-8)
 
     lambd_1 = param[:n_cl]#10**param[:n_cl]
     lambd_exp = param[n_cl:2*n_cl]
-    alph0 = param[2*n_cl:3*n_cl]
-    alph1 = param[3*n_cl:4*n_cl]
+    mu0 = param[2*n_cl:3*n_cl]
+    mu1 = param[3*n_cl:4*n_cl]
     nmax = param[4*n_cl]
     nmax_exp = param[4*n_cl+1]
     kij_matrix = param[4*n_cl+2:].reshape(n_cl, -1)*(5e-8)
@@ -214,11 +214,11 @@ def plot_parameters(param_ode, bact_all, exps, clrs1, param_real=[], path='', x0
     if len(param_real)!=0:
         lambd_1_real = param_real[:n_cl]
         lambd_exp_real = param_real[n_cl:2*n_cl]
-        alph0_real = param_real[2*n_cl:3*n_cl]
-        alph1_real = param_real[3*n_cl:4*n_cl]
+        mu0_real = param_real[2*n_cl:3*n_cl]
+        mu1_real = param_real[3*n_cl:4*n_cl]
 
         plot_lambda((lambd_1, lambd_exp), bact_all, clrs1, lambd_real=(lambd_1_real, lambd_exp_real), path=path)
-        plot_alpha((alph0, alph1), bact_all, clrs1, alph_real=(alph0_real, alph1_real), path=path)
+        plot_mu((mu0, mu1), bact_all, clrs1, mu_real=(mu0_real, mu1_real), path=path)
         kij_real = np.asarray(param_real[4*n_cl+2:]).reshape(n_cl, -1)*(5e-8)
         plot_kij(kij_real, bact_all, path=path+'real_', label=REAL_LABEL)
         diff = kij_real - kij_matrix
@@ -227,7 +227,7 @@ def plot_parameters(param_ode, bact_all, exps, clrs1, param_real=[], path='', x0
                  vmin=-dmax, vmax=dmax, cmap='RdBu_r')
     else:
         plot_lambda((lambd_1, lambd_exp), bact_all, clrs1, path=path)
-        plot_alpha((alph0, alph1), bact_all, clrs1, path=path)
+        plot_mu((mu0, mu1), bact_all, clrs1, path=path)
     
 
 def plot_cost_function(df_optim, path='', add_name=''):

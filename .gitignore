@@ -29,3 +29,20 @@ __pycache__/
 *.nbi
 *.nbc
 *.egg-info
+
+# Archives and other data formats
+*.zip
+*.rar
+*.7z
+*.tar
+*.tgz
+*.xls
+*.ods
+*.parquet
+*.h5
+*.hdf5
+*.npy
+*.npz
+*.mat
+*.sqlite
+*.db

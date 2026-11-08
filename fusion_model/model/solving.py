@@ -4,19 +4,19 @@ from scipy.integrate import solve_ivp, odeint
 
 def calc_obs_model(data, param_x0, calibr_setup, t_model):
     """Simulate each experiment and return bacterial counts and predicted observations."""
-    (df_mibi, df_maldi, df_ngs,) = data
+    (df_platecount, df_maldi, df_ngs,) = data
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     n_cl = np.shape(data[1])[0]
     param_opt = param_x0[n_cl*len(exps):]
     s_x = calibr_setup['s_x']
-    obs_mibi = np.zeros((len(exps), len(s_x), len(t_model)))
+    obs_platecount = np.zeros((len(exps), len(s_x), len(t_model)))
     obs_maldi = np.zeros((len(exps), len(s_x), np.shape(df_maldi)[0], len(t_model)))
     obs_ngs = np.zeros((len(exps), np.shape(df_ngs)[0], len(t_model)))
     temps = []
     x_count = np.zeros((len(exps) , np.shape(df_maldi)[0], len(t_model)))
     for i, exp in enumerate(exps):
-        #df_mibi0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
-        #temp = float(df_mibi0.columns[0].split("_")[2][:-1])
+        #df_platecount0, df_maldi0, df_ngs0 = filter_dataframe(exp, data)
+        #temp = float(df_platecount0.columns[0].split("_")[2][:-1])
         temp = calibr_setup['exp_temps'][exp]
         const = [[temp], n_cl, calibr_setup['media']]
         #C0_opt = 1e3*np.concatenate((param_x0_opt[n_cl*i:n_cl*(i+1)],[1e-3 for _ in range(n_cl)]+[1e-3])) 
@@ -26,11 +26,11 @@ def calc_obs_model(data, param_x0, calibr_setup, t_model):
         x_count[i] = n_C
         n_C0 = get_bacterial_count(np.array(C0_opt).reshape(len(C0_opt), 1), n_cl, 2)
 
-        obs_mibi[i] = observable_MiBi(t_model, n_C, calibr_setup['s_x'], n_C0, const, t_model)[1]
+        obs_platecount[i] = observable_platecount(t_model, n_C, calibr_setup['s_x'], n_C0, const, t_model)[1]
         obs_maldi[i] = observable_MALDI(t_model, n_C, calibr_setup['s_x'], n_C0, const, t_model)[1]
         obs_ngs[i] = observable_NGS(t_model, n_C, calibr_setup['T_x'], n_C0, const, t_model)[1]
         temps.append(temp)
-    return x_count, obs_mibi, obs_maldi, obs_ngs, temps
+    return x_count, obs_platecount, obs_maldi, obs_ngs, temps
 
 
 # ----------------------------------------------------------------------
@@ -54,12 +54,12 @@ try:
     def _fusion_model2_rhs_nb(x, temp, n_cl, param):
         """Compute fusion_model2 derivatives in a Numba-compiled function."""
         lambd = 10.0**param[:n_cl] * temp**param[n_cl:2*n_cl]
-        alph = param[2*n_cl:3*n_cl] * temp**param[3*n_cl:4*n_cl]
+        mu = param[2*n_cl:3*n_cl] * temp**param[3*n_cl:4*n_cl]
         nmax = 10.0**param[4*n_cl] * temp**param[4*n_cl+1]
         kij = param[4*n_cl+2:4*n_cl+2+n_cl*n_cl].reshape(n_cl, n_cl) * 5e-8
         xa = x[n_cl:2*n_cl]
         b = kij @ xa
-        growth = alph * x[-1] * xa / (1.0 + b)
+        growth = mu * x[-1] * xa / (1.0 + b)
         out = np.empty_like(x)
         out[:n_cl] = -x[:n_cl] * x[-1] * lambd
         out[n_cl:2*n_cl] = x[:n_cl] * x[-1] * lambd + growth
@@ -119,15 +119,15 @@ def media_filtering(t, n, s_x, x0, const):
     return x_filt
 
 
-def observable_MiBi(t, n, s_x, x0, const, t_meas, std=0.):
-    """Predict MiBi measurements by filtering counts and summing clusters per medium."""
+def observable_platecount(t, n, s_x, x0, const, t_meas, std=0.):
+    """Predict plate count measurements by filtering counts and summing clusters per medium."""
     n = np.array([xx for tt, xx in zip(t, n.T) if tt in t_meas]).T
     f_x = media_filtering(t, n, s_x, x0, const)
     return t_meas, np.sum(f_x, axis=1)
 
 
-def observable_MiBi_woS(t, n, s_x, x0, const, t_meas, std=0.):
-    """Predict unfiltered MiBi measurements by summing cluster counts."""
+def observable_platecount_woS(t, n, s_x, x0, const, t_meas, std=0.):
+    """Predict unfiltered plate count measurements by summing cluster counts."""
     n = np.array([xx for tt, xx in zip(t, n.T) if tt in t_meas]).T
     return t_meas, np.sum(n, axis=0)
 

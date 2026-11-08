@@ -106,8 +106,10 @@ def plot_all_crittime(temp_plot, labels, templ_meas=template_plot_measurements0,
 
 
 # Plotting of model prediction and/or measurement data:
-def plot_all(temp_plot, labels, templ_meas=template_plot_measurements0, clrs=None, df=[], temps=[], mtimes=[], mestim=[], time_lim=[], tcr=[], dir='', add_name=''):
-    """Plot model predictions and measurements across the requested temperatures."""
+def plot_all(temp_plot, labels, templ_meas=template_plot_measurements0, clrs=None, df=[], temps=[], mtimes=[], mestim=[], time_lim=[], tcr=[], dir='', add_name='',
+             panel_width=6., wspace=0.12):
+    """Plot model predictions and measurements across the requested temperatures
+    (panel_width: width of each panel in inches for several temperatures, the height is 6; wspace: gap between panels)."""
     ncols = [1 for _ in temp_plot]
     media = sorted(list(set([s.split('_')[-1].split('-')[0] for s in df.columns])))[0]
     exps = sorted(list(set([s.split('_')[0] for s in df.columns])))
@@ -115,7 +117,7 @@ def plot_all(temp_plot, labels, templ_meas=template_plot_measurements0, clrs=Non
         fig, ax = template_fig_1_temp(temp_plot, *labels, tcr, time_lim=time_lim)
         #mtimes, mestim = [mtimes], [mestim]
     elif len(temp_plot)>1 and len(np.shape(temp_plot))==1:
-        fig, ax = template_fig_for_many_temps(temp_plot, *labels, time_lim=time_lim)
+        fig, ax = template_fig_for_many_temps(temp_plot, *labels, time_lim=time_lim, panel_width=panel_width, wspace=wspace)
 
     for i, (ax0, temp) in enumerate(zip(ax, temp_plot)):
         if len(temp_plot) == 1:
@@ -129,10 +131,10 @@ def plot_all(temp_plot, labels, templ_meas=template_plot_measurements0, clrs=Non
     plt.close(fig) 
 
 
-def template_fig_for_many_temps(temp_plot, xlabel, ylabel, time_lim=[]):
+def template_fig_for_many_temps(temp_plot, xlabel, ylabel, time_lim=[], panel_width=6., wspace=0.12):
     """Create a row of shared-axis subplots for multiple temperatures."""
-    fig, ax = plt.subplots(1, len(temp_plot), figsize=(6.*len(temp_plot), 6), sharey=True)
-    fig.subplots_adjust(hspace=0.2, wspace=0.12)
+    fig, ax = plt.subplots(1, len(temp_plot), figsize=(panel_width*len(temp_plot), 6), sharey=True)
+    fig.subplots_adjust(hspace=0.2, wspace=wspace)
     for i, ax0 in enumerate(ax): 
         ax0.tick_params(axis='x', which='major', labelsize=13, labelrotation=0)
         if len(time_lim) == len(temp_plot):
@@ -222,7 +224,7 @@ def make_barplot2(ax, times, obs_data, species):
 
 
 def plot_measurement(ax0, df0, exp, c, lst, scatter_marker):
-    """Plot one experiment's MiBi measurements with error bars."""
+    """Plot one experiment's plate count measurements with error bars."""
     days_meas = [float(f.split('_')[3]) for f in df0.columns]
     obs_meas = [df0[f]['Average'] for f in df0.columns]
     std_meas = [df0[f]['Standard deviation'] for f in df0.columns]

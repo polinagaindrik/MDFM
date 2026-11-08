@@ -138,7 +138,7 @@ Discussion with Christian (04.06.2025):
         p(T) = p0 T^p1, where p0, p1: estimated parameters
 
         Some tips from results from total count model sum(x_i) (1 dimensional):
-        - alpha \propto T^{1/2}    
+        - mu \propto T^{1/2}
         - Model works if self-inhibition term is included 1 / (1+ \beta(T) n(t)/nmax).
           Terms comes from inibition of diff species of each other.
         - \beta doesn't strongly depend on the temperature 

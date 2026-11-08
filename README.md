@@ -36,13 +36,13 @@
 
 MDFM (Python package `fusion_model`) is a temperature-dependent model of bacterial growth in food that fuses three kinds of microbiome measurements:
 
-- bacterial plate counts on different media (microbiology, MiBi),
+- bacterial plate counts on different media (microbiology),
 - species proportions from MALDI-ToF,
 - species proportions from amplicon sequencing (NGS).
 
 The package calibrates the model on these data, estimating the growth parameters of each species, the interactions between species and the recovery of each species on each medium. With the calibrated model it then predicts the bacterial dynamics of new experiments from their storage temperature and initial values, and analyses which parameters the data can identify.
 
-It was developed for the project [Zukunftslabor2030 (ZL2030)](https://zukunftslabor2030.de), which aims at the dynamic assessment and prediction of food spoilage. It can be used with the ZL2030 measurements or with generated in-silico data.
+It was developed for the project [Zukunftslabor2030 (ZL2030)](https://zukunftslabor2030.de), which aims at the dynamic assessment and prediction of food spoilage. This repository is the core library: the model, cost functions, optimization and plotting, with examples on generated in-silico data. It contains no measurement data and no application to a specific data set.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -57,7 +57,7 @@ The mathematical model will be described in a forthcoming paper. In short, the m
 The parameter vector of a calibration with `fm.pest.cost_withS` and `fusion_model2` is:
 
 ```
-[ x0 (n_cl per experiment, log10) | lambda_1 (n_cl) | lambda_exp (n_cl) | alpha_0 (n_cl) | alpha_exp (n_cl) | N_1 | N_exp | k_ij (n_cl x n_cl) | S (n_media x n_cl) ]
+[ x0 (n_cl per experiment, log10) | lambda_1 (n_cl) | lambda_exp (n_cl) | mu_0 (n_cl) | mu_exp (n_cl) | N_1 | N_exp | k_ij (n_cl x n_cl) | S (n_media x n_cl) ]
 ```
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -88,7 +88,7 @@ pip install -e ".[numba]"    # about 6x faster ODE solves of fusion_model2
 pip install -e ".[jax]"      # exact derivatives for the local fits (backend='jax' of fm.pest.local_optimization)
 ```
 
-For a GPU, install JAX with `pip install "jax[cuda12]"`. Note that `requirements.txt` installs the dependencies including both extras, but not the package itself.
+For a GPU, install JAX with `pip install "jax[cuda12]"`. JAX then uses the GPU by default. With many parallel processes, for example in `fm.pest.multistart_optimization`, large problems can run out of GPU memory; set `JAX_PLATFORMS=cpu` to use one CPU core per process instead. Note that `requirements.txt` installs the dependencies including both extras, but not the package itself.
 
 ### Quick Start
 
@@ -114,7 +114,7 @@ The main submodules are `fm.data` (data), `fm.mdl` (ODE models), `fm.pest` (para
 
 ### Prepare Data
 
-All functions return the data frames `dfs = [df_mibi, df_maldi, df_ngs]`, the species names, the NGS weights `T_x` and the predefined entries of the media matrix `s_x_predefined` (`nan` = to be estimated).
+All functions return the data frames `dfs = [df_platecount, df_maldi, df_ngs]`, the species names, the NGS weights `T_x` and the predefined entries of the media matrix `s_x_predefined` (`nan` = to be estimated).
 
 **In-silico data.** A generator such as `fm.data.model_2media_expgensel` simulates `fusion_model2` with given parameters:
 
@@ -125,27 +125,21 @@ dfs, bact, T_x, s_x_predefined = fm.data.prepare_insilico_data(
     param_ode=param_ode_true, x10=x10, path=path, inhib=True, rel_noise=0.1)
 ```
 
-Here `n_cl` is the number of species, `temps` the temperature of each experiment, `ntr` the number of trajectories per temperature and `x10` the log10 initial values (experiments x species). The folder `path` has to exist. Instead of the relative Gaussian noise `rel_noise`, each data type can have a noise model of its own: `mibi_log10_sd` (Gaussian on log10 of the counts), `maldi_n` (multinomial) and `ngs_dm` (Dirichlet-multinomial).
+Here `n_cl` is the number of species, `temps` the temperature of each experiment, `ntr` the number of trajectories per temperature and `x10` the log10 initial values (experiments x species). The folder `path` has to exist. Instead of the relative Gaussian noise `rel_noise`, each data type can have a noise model of its own: `platecount_log10_sd` (Gaussian on log10 of the counts), `maldi_n` (multinomial) and `ngs_dm` (Dirichlet-multinomial).
 
-**ZL2030 data.** The measurements are stored in the project's OpenBIS and need a ZL2030 login. Download them to the matching subfolders of `experiments/` (`microbiology`, `MALDI`, `NGS`). If the password is left out, it is asked for interactively:
+**Measured data.** Provide the same three data frames from your own measurements:
 
-```python
-fm.data.download_microbiology_from_openbis(path, username)
-fm.data.download_MALDI_from_openbis(path, username)
-fm.data.download_NGS_from_openbis(path, username)
-```
-
-Then read the experiments to use for each data type. This also needs the temperature of each experiment in `inputs_fusionmodel/exp_temps.json`. [`examples/create_exp_temps_dict.py`](examples/create_exp_temps_dict.py) creates this file from the temperature profiles `input_6St_interruption.json` and `input_12St_interruption.json` in the same folder. These input files are not part of the repository:
-
-```python
-dfs, bact, T_x, s_x_predefined = fm.data.prepare_ZL2030_data(exps_mibi, exps_maldi, exps_ngs, cutoff=0.01, path=path)
-```
+| Data frame | Rows | Columns, e.g. experiment `V01`, atmosphere `M1`, 2 °C, day 3, medium `PC` |
+|---|---|---|
+| `df_platecount` | `Average`, `Replicas`, `Standard deviation` | `V01_M1_02C_03_PC-platecount` |
+| `df_maldi` | Species, proportions | `V01_M1_02C_03_PC-maldi` |
+| `df_ngs` | Species, proportions | `V01_M1_02C_03_ngs` |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 ### Model Calibration
 
-Define the calibration setup. `define_calibr_setup_insilico` adds the parameter bounds, use `define_calibr_setup_ZL2030` for the ZL2030 data:
+Define the calibration setup. `define_calibr_setup_insilico` adds the parameter bounds, `lambda_exp_max` sets the upper bound of `lambda_exp`:
 
 ```python
 calibr_setup = fm.pest.define_calibr_setup_insilico({
@@ -214,7 +208,7 @@ param_opt, cost_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_
 
 `fm.pest.multistart_optimization` is an alternative global search with many local fits from Latin hypercube start points.
 
-`fm.pest.profile_likelihood` computes profile likelihoods with confidence intervals of the parameters and a classification of their identifiability (`run_profile_likelihood_all`, `run_profile_likelihood_adaptive`). Its use on a small problem is shown in `model_paper/test_2sp.py` of the paper repository.
+`fm.pest.profile_likelihood` computes profile likelihoods with confidence intervals of the parameters and a classification of their identifiability (`run_profile_likelihood_all`, `run_profile_likelihood_adaptive`).
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -223,7 +217,7 @@ param_opt, cost_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_
 
 | Path | Content |
 |---|---|
-| `fusion_model/data` | OpenBIS download, reading of the ZL2030 data, in-silico data generators, JSON output |
+| `fusion_model/data` | In-silico data generation, reading and writing of results |
 | `fusion_model/model` | ODE models and observables |
 | `fusion_model/parameter_estimation` | Cost functions and likelihoods, global and local optimization, media matrix, profile likelihood, JAX backend |
 | `fusion_model/plotting` | Figures of data, fits and parameters |
@@ -231,9 +225,9 @@ param_opt, cost_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_
 | `fusion_model/analysis` | Spectral expansion |
 | `fusion_model/tools` | Data frame helpers |
 | `main.py` | Complete example on in-silico data |
-| `examples/main_ZL2030_*.py` | Calibration and prediction on the ZL2030 data (need the measurement data) |
-| `examples/main_param_distrib*.py`, `examples/plot_*.py` | Parameter distribution studies, plots of saved results |
-| `plot_results/` | Further plotting scripts |
+| `experiments/insilico/` | Example of generated in-silico data frames |
+| `examples/` | Parameter distribution studies on in-silico data, plots of saved results |
+| `others/` | Notes and earlier scripts, not maintained |
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 

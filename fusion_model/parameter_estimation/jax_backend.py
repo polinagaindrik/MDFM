@@ -31,7 +31,7 @@ jax.config.update("jax_enable_x64", True)  # the fit needs double precision
 
 from .cost_function import (cost_sum_and_geometric_mean, relative_mask, _noise_model, SelectedDataTypes,
                             _n_total_points, maldi_n_of, multinomial_counts, multinomial_deviance_residuals,
-                            ngs_dm_of, dm_saturated, dm_deviance_residuals, _dm_rate, ode_params_for_model)
+                            ngs_dm_of, maldi_dm_of, dm_saturated, dm_deviance_residuals, _dm_rate, ode_params_for_model)
 
 
 # ----------------------------------------------------------------------
@@ -111,6 +111,13 @@ class JaxCost:
         if self.maldi_n is not None:
             self.masks[1] = np.isfinite(self.obs[1])
             self.maldi_k = np.where(self.masks[1], multinomial_counts(self.obs[1], self.maldi_n), 0.)
+        # MALDI with the Dirichlet-multinomial likelihood (maldi_dm): as NGS below
+        self.maldi_dm = maldi_dm_of(calibr_setup)
+        if self.maldi_dm is not None:
+            self.masks[1] = np.isfinite(self.obs[1])
+            self.maldi_k = np.where(self.masks[1], multinomial_counts(self.obs[1], self.maldi_dm[0]), 0.)
+            self.maldi_sat = dm_saturated(self.maldi_k, *self.maldi_dm)
+            self.maldi_c = _dm_rate(*self.maldi_dm)
         # NGS with the Dirichlet-multinomial likelihood: all measured entries incl. zeros (undetected species)
         self.ngs_dm = ngs_dm_of(calibr_setup)
         if self.ngs_dm is not None:
@@ -198,6 +205,9 @@ class JaxCost:
             if i == 0 and self.ngs_dm is not None:
                 r = dm_deviance_residuals(self.ngs_k, jnp.where(mask, mod, 1.0) * self.ngs_dm[1], self.ngs_sat, self.ngs_c,
                                           xp=jnp, lgamma=jax.scipy.special.gammaln)
+            elif i == 1 and self.maldi_dm is not None:
+                r = dm_deviance_residuals(self.maldi_k, jnp.where(mask, mod, 1.0) * self.maldi_dm[1], self.maldi_sat,
+                                          self.maldi_c, xp=jnp, lgamma=jax.scipy.special.gammaln)
             elif i == 1 and self.maldi_n is not None:
                 r = multinomial_deviance_residuals(self.maldi_k, jnp.where(mask, mod, 1.0) * self.maldi_n, xp=jnp)
             elif self.noise_model == "relative":
@@ -347,6 +357,7 @@ def jax_cost_for(calibr_setup, **kwargs):
     s_x = calibr_setup.get("s_x")
     key = (id(calibr_setup), id(calibr_setup.get("aggregation_func")), calibr_setup.get("noise_model"),
            _hashable(calibr_setup.get("maldi_n")), _hashable(calibr_setup.get("ngs_dm")),
+           _hashable(calibr_setup.get("maldi_dm")),
            None if s_x is None else tuple(np.ravel(np.asarray(s_x, dtype=float))),
            calibr_setup.get("s_max_penalty"), tuple(map(tuple, calibr_setup["param_bnds"])),
            tuple(np.ravel(calibr_setup.get("lambda_tref", ()))),

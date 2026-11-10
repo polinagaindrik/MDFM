@@ -27,6 +27,7 @@ from fusion_model.parameter_estimation.media_matrix import S_squared_difference
 #   MALDI as N identified colonies per plate, counts k_j = N * measured ~ Multinomial(N, p_j(model)). Residuals
 #   are the deviance residuals of the counts (multinomial_deviance_residuals), one per species incl. the undetected
 #   ones (k_j = 0); their sum of squares is -2 log L of the multinomial up to a constant, with no noise level to estimate.
+# calibr_setup['maldi_dm'] = (N, A): MALDI as Dirichlet-multinomial instead of the multinomial maldi_n, N as for maldi_n.
 # calibr_setup['ngs_dm'] = (N, A), N one number or an array of the reads of each sample as for maldi_n (None: off, needs noise_model 'relative' and pl.make_gaussian_neg2loglik(..., ngs_dm=(N, A))):
 #   NGS as N reads per sample with species counts k ~ Dirichlet-multinomial(N, A p), including k_j = 0. The residuals
 #   are dm_deviance_residuals; their sum of squares is -2 log L up to a constant, with N and A known.
@@ -68,15 +69,32 @@ def maldi_n_of(calibr_setup):
     agg = getattr(agg, 'aggregation_func', agg)  # inside SelectedDataTypes
     is_multinomial = bool(getattr(agg, 'is_deviance', (False, False, False))[1])
     if not count_setting_on(n):
-        if is_multinomial:
-            raise ValueError("aggregation MultinomialMaldiNeg2LogLik needs calibr_setup['maldi_n']")
+        if is_multinomial and not count_setting_on(calibr_setup.get('maldi_dm')):
+            raise ValueError("aggregation MultinomialMaldiNeg2LogLik needs calibr_setup['maldi_n'] or ['maldi_dm']")
         return None
+    if count_setting_on(calibr_setup.get('maldi_dm')):
+        raise ValueError("calibr_setup: give either 'maldi_n' (multinomial) or 'maldi_dm' (Dirichlet-multinomial)")
     if _noise_model(calibr_setup) != 'relative':
         raise ValueError("calibr_setup['maldi_n'] needs noise_model = 'relative'")
     if not is_multinomial:
         raise ValueError("calibr_setup['maldi_n'] needs the objective pl.make_gaussian_neg2loglik(..., maldi_n=N) "
                          f"('neg2logL'), got {type(agg).__name__ if agg is not None else None}")
     return _counts_per_composition(n)
+
+
+def maldi_dm_of(calibr_setup):
+    """(colonies per plate N, concentration A) if MALDI is fitted with the Dirichlet-multinomial likelihood
+    (calibr_setup['maldi_dm'], N one number or one per composition as for maldi_n), else None."""
+    dm = calibr_setup.get('maldi_dm')
+    if not count_setting_on(dm):
+        return None
+    agg = calibr_setup.get('aggregation_func')
+    agg = getattr(agg, 'aggregation_func', agg)  # inside SelectedDataTypes
+    if _noise_model(calibr_setup) != 'relative':
+        raise ValueError("calibr_setup['maldi_dm'] needs noise_model = 'relative'")
+    if not bool(getattr(agg, 'is_deviance', (False, False, False))[1]):
+        raise ValueError("calibr_setup['maldi_dm'] needs the objective pl.make_gaussian_neg2loglik(..., maldi_dm=(N, A))")
+    return _counts_per_composition(dm[0]), float(dm[1])
 
 
 def ngs_dm_of(calibr_setup):
@@ -157,9 +175,12 @@ def dm_saturated(k, n, conc):
         lo = lo * (1. - 1e-9)
         hi = 2. * lo + 1.
         root = lambda a: (polygamma(0, v + a) - polygamma(0, a)) - c
-        while root(hi) > 0:
-            hi *= 2.
-        a = brentq(root, lo, hi, xtol=1e-12, rtol=1e-13)
+        if not root(lo) > 0:  # very large a (A >> N): digamma differences lose precision, use the expansion
+            a = v / c - (v - 1.) / 2.
+        else:
+            while root(hi) > 0:
+                hi *= 2.
+            a = brentq(root, lo, hi, xtol=1e-12, rtol=1e-13)
         g2 = polygamma(1, v + a) - polygamma(1, a)
         g3 = polygamma(2, v + a) - polygamma(2, a)
         a_star[i], g_star[i] = a, gammaln(v + a) - gammaln(a) - c * a
@@ -206,6 +227,36 @@ def dm_residuals(meas, model, n, conc):
     return np.where(use, r, np.nan)
 
 
+def dm_neg2loglik(k, p, n, conc):
+    """
+    -2 log L of Dirichlet-multinomial counts k (species on axis -2, NaN: not measured) with proportions p, totals n
+    (one number or one per composition, species axis of length 1) and concentration A = conc, without the term
+    log(N! / prod k_j!) that depends on the data only. Unlike the deviance residuals it contains every term that depends
+    on A, so it can be minimized over A: dm_concentration_mle. Categories with k = 0 and p = 0 (species fixed absent)
+    contribute 0.
+    """
+    k = np.asarray(k, dtype=float)
+    use = np.isfinite(k)
+    a = conc * np.where(use, np.asarray(p, dtype=float), 0.)
+    k0 = np.where(use, k, 0.)
+    absent = (k0 == 0) & (a <= 0)
+    a_safe = np.where(absent, 1., np.maximum(a, 1e-300))
+    per_species = np.where(absent | ~use, 0., gammaln(k0 + a_safe) - gammaln(a_safe))
+    measured = use.any(axis=-2)
+    n_comp = np.broadcast_to(np.asarray(n, dtype=float), k.shape[:-2] + (1,) + k.shape[-1:])[..., 0, :]
+    per_comp = gammaln(conc) - gammaln(np.where(measured, n_comp, 0.) + conc)
+    return float(-2. * (np.sum(per_species) + np.sum(np.where(measured, per_comp, 0.))))
+
+
+def dm_concentration_mle(k, p, n, bounds=(1e-1, 1e7)):
+    """Maximum-likelihood concentration A of Dirichlet-multinomial counts for given proportions p (see dm_neg2loglik),
+    on a log scale within bounds. Returns (A, -2 log L at A)."""
+    from scipy.optimize import minimize_scalar
+    f = lambda la: dm_neg2loglik(k, p, n, 10.**la)
+    r = minimize_scalar(f, bounds=np.log10(bounds), method='bounded', options={'xatol': 1e-4})
+    return float(10.**r.x), float(r.fun)
+
+
 def relative_mask(meas, kind):
     """Data entries used by the relative noise model (depends only on the data).
     kind: 'counts' (plate counts) or 'composition' (MALDI, NGS; species on axis -2)."""
@@ -228,7 +279,7 @@ def relative_residuals(meas, model, kind):
     return np.where(use, d, np.nan)
 
 
-def count_data_points_noise(data_array, noise_model='absolute', maldi_n=None, ngs_dm=None):
+def count_data_points_noise(data_array, noise_model='absolute', maldi_n=None, ngs_dm=None, maldi_dm=None):
     """Number of data points (degrees of freedom) per data type [ngs, maldi, platecount] for a noise model.
     maldi_n: MALDI fitted with the multinomial likelihood, (species - 1) per measured composition incl. zeros.
     ngs_dm: the same for NGS fitted with the Dirichlet-multinomial likelihood."""
@@ -237,7 +288,7 @@ def count_data_points_noise(data_array, noise_model='absolute', maldi_n=None, ng
         def comp_dof(obs):
             use = relative_mask(obs, 'composition')
             return int(np.sum(np.maximum(use.sum(axis=-2) - 1, 0)))
-        dof_maldi = (int(np.sum(np.maximum(np.isfinite(obs_maldi).sum(axis=-2) - 1, 0))) if count_setting_on(maldi_n)
+        dof_maldi = (int(np.sum(np.maximum(np.isfinite(obs_maldi).sum(axis=-2) - 1, 0))) if (count_setting_on(maldi_n) or count_setting_on(maldi_dm))
                      else comp_dof(obs_maldi))
         dof_ngs = (int(np.sum(np.maximum(np.isfinite(obs_ngs).sum(axis=-2) - 1, 0))) if count_setting_on(ngs_dm)
                    else comp_dof(obs_ngs))
@@ -285,12 +336,19 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, platecount_ma
             n_maldi = n_maldi[i]
         if dm_ngs is not None and np.ndim(dm_ngs[0]) > 0:
             dm_ngs = (dm_ngs[0][i], dm_ngs[1])
+        dm_maldi = maldi_dm_of(calibr_setup)
+        if dm_maldi is not None and np.ndim(dm_maldi[0]) > 0:
+            dm_maldi = (dm_maldi[0][i], dm_maldi[1])
         sq = [None if dm_ngs is not None else relative_residuals(obs_ngs_meas[i], obs_ngs, 'composition')**2,
-              None if n_maldi is not None else relative_residuals(obs_maldi_meas[i], obs_maldi, 'composition')**2,
+              None if (n_maldi is not None or dm_maldi is not None)
+              else relative_residuals(obs_maldi_meas[i], obs_maldi, 'composition')**2,
               relative_residuals(obs_platecount_meas[i], obs_platecount, 'counts')**2]
         sq = [None if q is None else np.where(np.isnan(q), 0., q) for q in sq]  # unused entries: 0 (dropped later)
         if n_maldi is not None:  # failed solve (NaN model) -> inf -> PENALTY in the aggregation
             q = multinomial_residuals(obs_maldi_meas[i], obs_maldi, n_maldi)**2
+            sq[1] = np.where(np.isfinite(obs_maldi_meas[i]), np.nan_to_num(q, nan=np.inf, posinf=np.inf), 0.)
+        if dm_maldi is not None:
+            q = dm_residuals(obs_maldi_meas[i], obs_maldi, *dm_maldi)**2
             sq[1] = np.where(np.isfinite(obs_maldi_meas[i]), np.nan_to_num(q, nan=np.inf, posinf=np.inf), 0.)
         if dm_ngs is not None:
             q = dm_residuals(obs_ngs_meas[i], obs_ngs, *dm_ngs)**2
@@ -361,6 +419,7 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
     relative = _noise_model(calibr_setup) == 'relative'
     n_maldi = maldi_n_of(calibr_setup)
     dm_ngs = ngs_dm_of(calibr_setup)
+    dm_maldi = maldi_dm_of(calibr_setup)
     for obs, mdl_obs, scale, kind in ((obs_ngs_meas, m_ngs, 1., 'composition'),
                                       (obs_maldi_meas, m_maldi, 1., 'composition'),
                                       (obs_platecount_meas, m_platecount, platecount_max, 'counts')):
@@ -368,6 +427,9 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
         if n_maldi is not None and mdl_obs is m_maldi:
             mask = np.isfinite(obs)
             r = multinomial_residuals(obs, mdl_obs, n_maldi)
+        elif dm_maldi is not None and mdl_obs is m_maldi:
+            mask = np.isfinite(obs)
+            r = dm_residuals(obs, mdl_obs, *dm_maldi)
         elif dm_ngs is not None and mdl_obs is m_ngs:
             mask = np.isfinite(obs)
             r = dm_residuals(obs, mdl_obs, *dm_ngs)

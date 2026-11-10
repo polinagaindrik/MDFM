@@ -148,7 +148,7 @@ class MultinomialMaldiNeg2LogLik(GaussianNeg2LogLik):
         return total
 
 
-def make_gaussian_neg2loglik(data_array, noise_model="absolute", maldi_n=None, ngs_dm=None):
+def make_gaussian_neg2loglik(data_array, noise_model="absolute", maldi_n=None, ngs_dm=None, maldi_dm=None):
     """
     Build a GaussianNeg2LogLik from ``calibr_setup['data_array']``
     (= extract_observables_from_df(dfs) -> (days, [obs_platecount, obs_maldi, obs_ngs])).
@@ -157,12 +157,14 @@ def make_gaussian_neg2loglik(data_array, noise_model="absolute", maldi_n=None, n
     maldi_n: as calibr_setup['maldi_n'], gives a MultinomialMaldiNeg2LogLik (MALDI multinomial, N colonies per plate;
              one number, or an array of N per composition as in calibr_setup['maldi_n']).
     ngs_dm: as calibr_setup['ngs_dm'], the same with NGS Dirichlet-multinomial ((N, A): N reads, concentration A).
+    maldi_dm: as calibr_setup['maldi_dm'], MALDI Dirichlet-multinomial ((N, A)) instead of the multinomial maldi_n.
     """
     from .cost_function import count_data_points_noise
     from .cost_function import count_setting_on
-    if count_setting_on(maldi_n) or count_setting_on(ngs_dm):
-        return MultinomialMaldiNeg2LogLik(count_data_points_noise(data_array, noise_model, maldi_n, ngs_dm),
-                                          is_deviance=(count_setting_on(ngs_dm), count_setting_on(maldi_n), False))
+    maldi_counts = count_setting_on(maldi_n) or count_setting_on(maldi_dm)
+    if maldi_counts or count_setting_on(ngs_dm):
+        return MultinomialMaldiNeg2LogLik(count_data_points_noise(data_array, noise_model, maldi_n, ngs_dm, maldi_dm),
+                                          is_deviance=(count_setting_on(ngs_dm), maldi_counts, False))
     return GaussianNeg2LogLik(count_data_points_noise(data_array, noise_model))
 
 

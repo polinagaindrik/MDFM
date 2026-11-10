@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 numba = ["numba"]                                 # ~6x faster ODE solves of fusion_model2
 jax = ["jax>=0.4.30", "diffrax>=0.6.0"]           # exact derivatives (BACKEND = 'jax')
+mcmc = ["emcee>=3.1"]                             # MCMC sampling of the parameters (fm.mcmc)
 
 [tool.setuptools.packages.find]
 include = ["fusion_model*"]

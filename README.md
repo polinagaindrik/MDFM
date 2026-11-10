@@ -210,6 +210,41 @@ param_opt, cost_opt = fm.pest.calculate_model_params(fm.pest.cost_withS, calibr_
 
 `fm.pest.profile_likelihood` computes profile likelihoods with confidence intervals of the parameters and a classification of their identifiability (`run_profile_likelihood_all`, `run_profile_likelihood_adaptive`).
 
+### Prediction Uncertainty
+
+`fm.pred_unc` propagates the parameter uncertainty to the predictions. The ensemble holds all parameter vectors whose cost lies within the chi2 threshold of the optimum. It is built from the points of a profile-likelihood run, or with `ensemble_from_fits` from any set of fits and their costs, for example multistart end points:
+
+```python
+ens = fm.pred_unc.ensemble_from_profile_csv(csv_path)             # 95 %, dof = 1, scale from the summary JSON
+pred = fm.pred_unc.predict_ensemble(ens, calibr_setup, t_plot)   # calibration experiments, x0 from the vectors
+fm.plotting.plot_prediction_uncertainty(pred, calibr_setup, path=path, add_name='_calibration',
+                                        plot_estimate=True, plot_data=True)
+```
+
+For new experiments, pass their initial values. With `refit_x0=True` the initial values are re-estimated for each ensemble member on the data in `prediction_setup['dfs']`:
+
+```python
+pred = fm.pred_unc.predict_ensemble(ens, prediction_setup, t_plot, exps=exps_predict, x0=x0_dict,
+                                    refit_x0=True, n_jobs=8)
+bands = fm.pred_unc.prediction_bands(pred)                       # {exp: {'x'|'platecount'|'maldi'|'ngs': (lower, upper)}}
+fm.pred_unc.prediction_to_dataframe(pred, bands).to_csv(path + 'prediction_bands.csv', index=False)
+```
+
+The band is the envelope (min/max) over the members. Use `method='quantile'` for an ensemble of samples. The profile points are paths through the confidence region, not a sample of it, so the envelope is the usual approximation of the prediction confidence band and tends to underestimate it.
+
+**MCMC.** `fm.mcmc` samples the whole region of good fits with [emcee](https://emcee.readthedocs.io) (`pip install -e ".[mcmc]"`). The likelihood is exp(-cost/2) for a -2 log L objective, with flat priors on `param_bnds`. Starting the walkers at the profile points shortens the burn-in:
+
+```python
+res = fm.mcmc.run_mcmc(calibr_setup, param_opt, n_steps=5000, init_ensemble=ens, names=names,
+                       out_file=path + 'mcmc_chain.npz', resume=True)   # JAX cost; checkpoints, resumable
+diag = fm.mcmc.print_diagnostics(res)        # acceptance, autocorrelation time, burn-in, thinning
+fm.mcmc.plot_mcmc_traces(res, path + 'mcmc_', burn=diag['burn'])
+ens_mcmc = fm.mcmc.ensemble_from_mcmc(res, max_members=1000)
+pred = fm.pred_unc.predict_ensemble(ens_mcmc, calibr_setup, t_plot)    # bands: 2.5 / 97.5 % quantiles
+```
+
+The chain should be at least about 50 autocorrelation times long; `print_diagnostics` reports this. The bands are Bayesian credible bands. For poorly identified parameters, the bounds act as the prior.
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 

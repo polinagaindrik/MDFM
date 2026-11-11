@@ -245,6 +245,15 @@ pred = fm.pred_unc.predict_ensemble(ens_mcmc, calibr_setup, t_plot)    # bands: 
 
 The chain should be at least about 50 autocorrelation times long; `print_diagnostics` reports this. The bands are Bayesian credible bands. For poorly identified parameters, the bounds act as the prior.
 
+**Measurement noise.** The bands above are for the model curves. To get intervals for new measurements, add the noise of each data type as assumed by the likelihood of the calibration (relative: log-normal plate counts, centred log-ratio MALDI / NGS; multinomial or Dirichlet-multinomial counts; absolute: Gaussian). Gaussian noise levels are estimated from the residuals as in -2 log L:
+
+```python
+noise = fm.pred_unc.noise_model_from_fit(calibr_setup, param_opt)
+b_new = fm.pred_unc.predictive_bands(pred, noise, n_draws=20)       # pred from an MCMC ensemble
+print(fm.pred_unc.band_coverage(pred, b_new, calibr_setup))          # fraction of data inside, ~0.95 expected
+fm.plotting.plot_prediction_uncertainty(pred, calibr_setup, path=path, noise_bands=b_new)
+```
+
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 

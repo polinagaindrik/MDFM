@@ -41,7 +41,9 @@ def _data_points(df, exp, med=None, row=None):
     return np.array(days), np.array(vals)
 
 
-def _band_and_estimate(ax, t, lo, hi, est, clr, alpha, plot_estimate, members=None, plot_members=False):
+def _band_and_estimate(ax, t, lo, hi, est, clr, alpha, plot_estimate, members=None, plot_members=False, noise=None):
+    if noise is not None:  # prediction interval of new data (lighter, behind)
+        ax.fill_between(t, noise[0], noise[1], color=clr, alpha=0.4 * alpha, linewidth=0)
     ax.fill_between(t, lo, hi, color=clr, alpha=alpha, linewidth=0)
     if plot_members and members is not None:
         for m in members:
@@ -50,9 +52,11 @@ def _band_and_estimate(ax, t, lo, hi, est, clr, alpha, plot_estimate, members=No
         ax.plot(t, est, color=clr)
 
 
-def _legend_handles_style(plot_estimate, plot_data, alpha, conf_label):
+def _legend_handles_style(plot_estimate, plot_data, alpha, conf_label, noise_label=None):
     """Generic handles (gray) explaining band / estimate / data."""
     h = [mpatches.Patch(color='gray', alpha=alpha, label=conf_label)]
+    if noise_label:
+        h.append(mpatches.Patch(color='gray', alpha=0.4 * alpha, label=noise_label))
     if plot_estimate:
         h.append(mlines.Line2D([], [], color='gray', label='estimate'))
     if plot_data:
@@ -72,7 +76,7 @@ def plot_prediction_uncertainty(prediction, setup, path='', add_name='', exps=No
                                 quantiles=(0.025, 0.975), plot_estimate=True, plot_data=True, plot_members=False,
                                 observables=('x', 'ngs', 'maldi', 'platecount'), clrs=None, alpha=0.25,
                                 time_label=r'Time, $t$', legend_outside=False, species=None, file_prefix='Pred_uncert_',
-                                x_data=None):
+                                x_data=None, noise_bands=None, noise_label=None):
     """
     Plot the prediction band of each experiment (and observable), optionally with the estimate and the data.
 
@@ -86,6 +90,8 @@ def plot_prediction_uncertainty(prediction, setup, path='', add_name='', exps=No
     species      : names of the species; None: rows of the MALDI data frame
     x_data       : data frame of x(t) (e.g. the true counts of in-silico data, dataframe_x_*.pkl), shown as
                    points in the x(t) figure; None: setup['dfs'][3] if present
+    noise_bands  : fm.pred_unc.predictive_bands(...): prediction interval of new data (parameters + measurement
+                   noise), drawn as a lighter band behind the band of the curves (not for x(t), it is not measured)
     """
     method = method or prediction.get('band_method', 'envelope')
     bands = bands if bands is not None else prediction_bands(prediction, method=method, quantiles=quantiles)
@@ -102,6 +108,17 @@ def plot_prediction_uncertainty(prediction, setup, path='', add_name='', exps=No
         conf_label = rf"{100*(quantiles[1]-quantiles[0]):g}\% credible"
     else:
         conf_label = rf"{100*cl:g}\% confidence" if cl is not None else 'band'
+    if noise_bands is not None and noise_label is None:
+        noise_label = rf"{100*(quantiles[1]-quantiles[0]):g}\% new data"
+    if noise_bands is None:
+        noise_label = None
+
+    def nb(exp, o, *idx):
+        if noise_bands is None:
+            return None
+        lo, hi = noise_bands[exp][o]
+        return lo[idx], hi[idx]
+
     estimate = prediction.get('estimate') if plot_estimate else None
     plot_estimate = estimate is not None
 
@@ -137,7 +154,7 @@ def plot_prediction_uncertainty(prediction, setup, path='', add_name='', exps=No
             for k, bact in enumerate(species):
                 clr = _species_color(k, bact, clrs)
                 _band_and_estimate(ax, t, b['ngs'][0][k], b['ngs'][1][k], None if est is None else est['ngs'][k],
-                                   clr, alpha, plot_estimate, mem['ngs'][:, k], plot_members)
+                                   clr, alpha, plot_estimate, mem['ngs'][:, k], plot_members, nb(exp, 'ngs', k))
                 if data is not None:
                     ax.plot(data[0], data[1][:, k], 'o', color=clr)
                 handles.append(mlines.Line2D([], [], color=clr, label=species_label(bact)))
@@ -145,7 +162,7 @@ def plot_prediction_uncertainty(prediction, setup, path='', add_name='', exps=No
             ax.set_xlim(t[0], t[-1])
             plt_templ.set_labels(fig, ax, time_label, r'$T \mathbf{x} / \lVert T \mathbf{x} \rVert$')
             _finish(fig, ax, f'NGS, {where}', base + '_ngs.pdf', handles,
-                    _legend_handles_style(plot_estimate, data is not None, alpha, conf_label), legend_outside)
+                    _legend_handles_style(plot_estimate, data is not None, alpha, conf_label, noise_label), legend_outside)
 
         if 'maldi' in observables:
             for j, med in enumerate(media):
@@ -156,7 +173,7 @@ def plot_prediction_uncertainty(prediction, setup, path='', add_name='', exps=No
                     clr = _species_color(k, bact, clrs)
                     _band_and_estimate(ax, t, b['maldi'][0][j, k], b['maldi'][1][j, k],
                                        None if est is None else est['maldi'][j, k], clr, alpha, plot_estimate,
-                                       mem['maldi'][:, j, k], plot_members)
+                                       mem['maldi'][:, j, k], plot_members, nb(exp, 'maldi', j, k))
                     if data is not None:
                         ax.plot(data[0], data[1][:, k], 'o', color=clr)
                     handles.append(mlines.Line2D([], [], color=clr, label=species_label(bact)))
@@ -164,7 +181,8 @@ def plot_prediction_uncertainty(prediction, setup, path='', add_name='', exps=No
                 ax.set_xlim(t[0], t[-1])
                 plt_templ.set_labels(fig, ax, time_label, r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
                 _finish(fig, ax, f'MALDI, {medium_label(med)}, {where}', base + f'_{med}_maldi.pdf', handles,
-                        _legend_handles_style(plot_estimate, data is not None, alpha, conf_label), legend_outside)
+                        _legend_handles_style(plot_estimate, data is not None, alpha, conf_label, noise_label),
+                        legend_outside)
 
         if 'platecount' in observables:
             fig, ax = plt.subplots()
@@ -174,7 +192,7 @@ def plot_prediction_uncertainty(prediction, setup, path='', add_name='', exps=No
                 clr = _medium_color(j)
                 _band_and_estimate(ax, t, b['platecount'][0][j], b['platecount'][1][j],
                                    None if est is None else est['platecount'][j], clr, alpha, plot_estimate,
-                                   mem['platecount'][:, j], plot_members)
+                                   mem['platecount'][:, j], plot_members, nb(exp, 'platecount', j))
                 data = _data_points(df_platecount, exp, med, row='Average') if plot_data else None
                 if data is not None:
                     ax.plot(data[0], data[1], 'o', color=clr)
@@ -184,4 +202,4 @@ def plot_prediction_uncertainty(prediction, setup, path='', add_name='', exps=No
             ax.set_xlim(t[0], t[-1])
             plt_templ.set_labels(fig, ax, time_label, r'log CFU mL$^{-1}$')
             _finish(fig, ax, f'Plate counts, {where}', base + '_platecount.pdf', handles,
-                    _legend_handles_style(plot_estimate, any_data, alpha, conf_label), legend_outside)
+                    _legend_handles_style(plot_estimate, any_data, alpha, conf_label, noise_label), legend_outside)

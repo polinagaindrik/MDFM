@@ -437,3 +437,153 @@ def prediction_to_dataframe(prediction, bands=None, species=None, **band_kwargs)
                 add(e, 'maldi', med, sp_names[k], None if est is None else est['maldi'][j, k],
                     b['maldi'][0][j, k], b['maldi'][1][j, k])
     return pd.concat(rows, ignore_index=True)
+
+
+# ----------------------------------------------------------------------
+# 4) Measurement noise: prediction intervals for new data
+# ----------------------------------------------------------------------
+#
+# The bands above describe the uncertainty of the model curves. Data scatter around the curves with the noise of
+# each data type; noise_model_from_fit returns that noise, as assumed by the likelihood of the calibration, and
+# predictive_bands adds it to every ensemble member (best with an MCMC ensemble, whose members are samples).
+#
+#   noise_model 'relative': plate counts  log y = log m + sigma eps                    (sigma from the fit)
+#                           MALDI / NGS   y ~ m * exp(sigma eps), normalized (centred log-ratio residuals)
+#                           maldi_n:      MALDI counts ~ Multinomial(N, m) / N
+#                           maldi_dm / ngs_dm: counts ~ Dirichlet-multinomial(N, A m) / N
+#   noise_model 'absolute': y = m + sigma eps; plate counts: sigma relative to the maximum of the plate counts of
+#                           each day, as in the residuals of the cost function
+# Gaussian noise levels are the maximum-likelihood estimates of GaussianNeg2LogLik, sigma_k^2 = SSR_k / n_k
+# at the given parameters (n_k: count_data_points_noise).
+
+_TYPES = ('ngs', 'maldi', 'platecount')  # order of the residual groups of residuals_withS
+
+
+def noise_model_from_fit(setup, param, with_S=True):
+    """
+    Noise of each data type for setup's noise model and likelihood, Gaussian noise levels estimated from the
+    residuals at param (full vector of the calibration). Returns {'ngs'|'maldi'|'platecount': dict(kind=...)}:
+    kind 'lognormal' / 'clr' / 'gaussian' with 'sigma', 'multinomial' with 'N', 'dm' with 'N', 'A'.
+    Counts per composition given as arrays are replaced by their median (new time points have no own N).
+    """
+    from ..parameter_estimation.cost_function import (residuals_withS, residuals_direct, count_data_points_noise,
+                                                      _noise_model, maldi_n_of, maldi_dm_of, ngs_dm_of)
+    if 'data_array' not in setup:
+        setup = dict(setup, data_array=extract_observables_from_df(setup['dfs']))
+    nm = _noise_model(setup)
+    res, _ = (residuals_withS if with_S else residuals_direct)(np.asarray(param, dtype=float), setup)
+    n_k = count_data_points_noise(setup['data_array'], nm, setup.get('maldi_n'), setup.get('ngs_dm'),
+                                  setup.get('maldi_dm'))
+    sigma = {t: float(np.sqrt(np.nansum(np.asarray(r, dtype=float)**2) / max(n, 1)))
+             for t, r, n in zip(_TYPES, res[:3], n_k)}
+
+    def med(n):
+        return float(np.nanmedian(n)) if np.ndim(n) > 0 else float(n)
+
+    out = {}
+    if nm == 'relative':
+        out['platecount'] = {'kind': 'lognormal', 'sigma': sigma['platecount']}
+        mn, mdm, ndm = maldi_n_of(setup), maldi_dm_of(setup), ngs_dm_of(setup)
+        out['maldi'] = ({'kind': 'multinomial', 'N': med(mn)} if mn is not None else
+                        {'kind': 'dm', 'N': med(mdm[0]), 'A': mdm[1]} if mdm is not None else
+                        {'kind': 'clr', 'sigma': sigma['maldi']})
+        out['ngs'] = ({'kind': 'dm', 'N': med(ndm[0]), 'A': ndm[1]} if ndm is not None else
+                      {'kind': 'clr', 'sigma': sigma['ngs']})
+    else:
+        days, (obs_pc, _, _) = setup['data_array']
+        out['platecount'] = {'kind': 'gaussian', 'sigma': sigma['platecount'], 'days': np.asarray(days, dtype=float),
+                             'scale': np.nanmax(obs_pc, axis=(0, 1))}
+        out['maldi'] = {'kind': 'gaussian', 'sigma': sigma['maldi']}
+        out['ngs'] = {'kind': 'gaussian', 'sigma': sigma['ngs']}
+    return out
+
+
+def _noisy(m, noise, rng, t=None):
+    """Noisy observations of model values m; m: platecount (..., T), compositions (..., species, T)."""
+    kind = noise['kind']
+    m = np.asarray(m, dtype=float)
+    if kind == 'lognormal':
+        return m * np.exp(noise['sigma'] * rng.standard_normal(m.shape))
+    if kind == 'gaussian':
+        s = noise['sigma']
+        if 'scale' in noise:  # plate counts: residuals relative to the maximum of each measured day
+            s = s * np.interp(t, noise['days'], noise['scale'])
+        return m + s * rng.standard_normal(m.shape)
+    p = np.moveaxis(m, -2, -1)  # (..., T, species)
+    p = np.where(np.isfinite(p) & (p > 0), p, 0.)
+    tot = p.sum(axis=-1, keepdims=True)
+    p = np.where(tot > 0, p / np.where(tot > 0, tot, 1.), np.nan)
+    if kind == 'clr':
+        y = p * np.exp(noise['sigma'] * rng.standard_normal(p.shape))
+        y = y / np.nansum(y, axis=-1, keepdims=True)
+    else:
+        flat = p.reshape(-1, p.shape[-1])
+        y = np.full_like(flat, np.nan)
+        n = int(round(noise['N']))
+        for i, q in enumerate(flat):
+            if not np.all(np.isfinite(q)):
+                continue
+            if kind == 'dm':
+                pos = q > 0
+                q2 = np.zeros_like(q)
+                q2[pos] = rng.dirichlet(noise['A'] * q[pos])
+                q = q2
+            y[i] = rng.multinomial(n, q / q.sum()) / n
+        y = y.reshape(p.shape)
+    return np.moveaxis(y, -1, -2)
+
+
+def predictive_bands(prediction, noise, n_draws=20, quantiles=(0.025, 0.975), use='members', seed=0):
+    """
+    Prediction intervals for new measurements: quantiles of noisy observations (noise_model_from_fit) drawn
+    n_draws times for every ensemble member, so parameter uncertainty and measurement noise are both included.
+    use: 'members' (all ensemble members; use an MCMC ensemble so that they are samples) or 'estimate'
+         (noise around the estimate only, no parameter uncertainty).
+    x(t) is not measured: its band is the band of the parameter uncertainty (quantiles over the members).
+    Returns {exp: {obs: (lower, upper)}} like prediction_bands.
+    """
+    rng = np.random.default_rng(seed)
+    t = prediction['t']
+    out = {}
+    for e in prediction['exps']:
+        src = (prediction['members'][e] if use == 'members' else
+               {o: prediction['estimate'][e][o][None] for o in OBSERVABLES})
+        out[e] = {'x': tuple(np.nanquantile(src['x'], quantiles, axis=0))}
+        for o, nz in (('platecount', noise['platecount']), ('maldi', noise['maldi']), ('ngs', noise['ngs'])):
+            m = np.repeat(src[o], n_draws, axis=0)
+            y = _noisy(m, nz, rng, t=t)
+            out[e][o] = tuple(np.nanquantile(y, quantiles, axis=0))
+    return out
+
+
+def band_coverage(prediction, bands, setup):
+    """
+    Fraction of the measured data points of setup['dfs'] inside the bands (interpolated to the measured days),
+    per data type: {'platecount': (inside, total), 'maldi': ..., 'ngs': ...}. For calibration data and
+    predictive_bands at 95 %, about 0.95 is expected if the noise model describes the data.
+    Only points with measured value > 0 are counted for the compositions (as in the relative noise model).
+    """
+    df_pc, df_maldi, df_ngs = setup['dfs'][:3]
+    t = prediction['t']
+    cnt = {o: [0, 0] for o in ('platecount', 'maldi', 'ngs')}
+
+    def check(o, val, lo, hi, day):
+        if not np.isfinite(val) or (o != 'platecount' and val <= 0):
+            return
+        a, b = np.interp(day, t, lo), np.interp(day, t, hi)
+        cnt[o][0] += int(a <= val <= b)
+        cnt[o][1] += 1
+
+    for e in prediction['exps']:
+        b = bands[e]
+        for j, med in enumerate(prediction['media']):
+            for c in df_pc.filter(like=e + '_').filter(like=med).columns:
+                check('platecount', float(df_pc[c].loc['Average']), b['platecount'][0][j], b['platecount'][1][j],
+                      float(c.split('_')[3]))
+            for c in df_maldi.filter(like=e + '_').filter(like=med).columns:
+                for k, v in enumerate(df_maldi[c].to_numpy(float)):
+                    check('maldi', v, b['maldi'][0][j, k], b['maldi'][1][j, k], float(c.split('_')[3]))
+        for c in df_ngs.filter(like=e + '_').columns:
+            for k, v in enumerate(df_ngs[c].to_numpy(float)):
+                check('ngs', v, b['ngs'][0][k], b['ngs'][1][k], float(c.split('_')[3]))
+    return {o: (i, n) for o, (i, n) in cnt.items()}

@@ -304,11 +304,104 @@ def ode_params_for_model(param_ode, calibr_setup, xp=np):
     Same model, it only decorrelates the two lambda parameters: lambda_1 = lambda_ref - lambda_exp * log10(T_ref).
     """
     t_ref = calibr_setup.get('lambda_tref')
-    if t_ref is None:
+    structure = calibr_setup.get('k_structure') or 'full'
+    if t_ref is None and structure == 'full':
         return param_ode
     n_cl = calibr_setup['n_cl']
     ode = xp.asarray(param_ode)
-    return xp.concatenate([ode[:n_cl] - ode[n_cl:2*n_cl] * np.log10(t_ref), ode[n_cl:]])
+    if t_ref is not None:
+        ode = xp.concatenate([ode[:n_cl] - ode[n_cl:2*n_cl] * np.log10(t_ref), ode[n_cl:]])
+    if structure != 'full':
+        ode = xp.concatenate([ode[:4*n_cl + 2], xp.ravel(structured_k(ode[4*n_cl + 2:], n_cl, structure, xp=xp))])
+    return ode
+
+
+# ----------------------------------------------------------------------
+# Reduced inhibition matrices: calibr_setup['k_structure'] (fusion_model2 layout, k_ij = last n_cl x n_cl entries of the
+# ODE parameters; k_ij = effect of species j on the growth of species i, diagonal 0)
+#   'full'    (default) every k_ij is a parameter: n (n - 1)
+#   'column'  k_ij = b_j: species j inhibits all others equally: n parameters
+#   'product' k_ij = a_i b_j: sensitivity of species i times strength of species j, a_0 = 1: 2 n - 1 parameters
+#   'none'    k_ij = 0
+# The parameter vector keeps its layout. The reduced parameters live in entries of the k block that are otherwise unused:
+# b_j in k[(j + 1) mod n, j] and a_i in k[i, (i + 1) mod n] (n >= 3); all other entries are fixed at 0 and ignored.
+# k_structure_bounds gives the bounds for a structure, k_to_structure the start point from a full matrix.
+# ----------------------------------------------------------------------
+K_STRUCTURES = ('full', 'column', 'product', 'none')
+
+
+def _k_slots(n_cl):
+    idx = np.arange(n_cl)
+    return (idx, (idx + 1) % n_cl), ((idx + 1) % n_cl, idx)  # entries of a_i, entries of b_j
+
+
+def structured_k(k_block, n_cl, structure, xp=np):
+    """Full n_cl x n_cl inhibition matrix from the k block of a parameter vector with a reduced structure."""
+    if structure not in K_STRUCTURES:
+        raise ValueError(f'k_structure must be one of {K_STRUCTURES}, got {structure!r}')
+    k = xp.reshape(xp.asarray(k_block), (n_cl, n_cl))
+    if structure == 'full':
+        return k
+    if structure == 'none':
+        return k * 0.
+    if n_cl < 3:
+        raise ValueError("k_structure 'column' / 'product' needs at least 3 species")
+    slot_a, slot_b = _k_slots(n_cl)
+    b = k[slot_b]
+    full = xp.ones((n_cl, 1)) * b[None, :]
+    if structure == 'product':
+        full = k[slot_a][:, None] * full
+    return full * (1. - np.eye(n_cl))
+
+
+def k_block_start(param_bnds, n_cl):
+    """Index of the first k entry in a parameter vector [x0 | ODE (4 n + 2 + n^2) | S (n_media x n)] or [x0 | ODE]."""
+    n = len(param_bnds)
+    for n_s in range(n // n_cl, -1, -1):  # with S: prefer the largest S block that leaves whole experiments of x0
+        n_x0 = n - n_s * n_cl - (4 * n_cl + 2 + n_cl * n_cl)
+        if n_x0 >= 0 and n_x0 % n_cl == 0:
+            return n_x0 + 4 * n_cl + 2
+    raise ValueError('parameter vector does not have the fusion_model2 layout')
+
+
+def k_structure_bounds(param_bnds, n_cl, structure, k_start, k_bounds=(0., 20.), a_bounds=(0.01, 100.)):
+    """param_bnds with the k block (from index k_start) set for a structure: b_j in k_bounds, a_i in a_bounds with
+    a_0 = 1 (the common scale of a and b is free otherwise), unused entries fixed at 0. 'full': unchanged."""
+    if structure == 'full':
+        return tuple(tuple(b) for b in param_bnds)
+    bnds = [tuple(b) for b in param_bnds]
+    block = np.zeros((n_cl, n_cl, 2))
+    slot_a, slot_b = _k_slots(n_cl)
+    if structure in ('column', 'product'):
+        block[slot_b] = k_bounds
+    if structure == 'product':
+        block[slot_a] = a_bounds
+        block[0, 1 % n_cl] = (1., 1.)
+    bnds[k_start:k_start + n_cl * n_cl] = [tuple(v) for v in block.reshape(-1, 2)]
+    return tuple(bnds)
+
+
+def k_to_structure(param, n_cl, structure, k_start, a_bounds=(0.01, 100.)):
+    """Parameter vector with the full k block replaced by its closest reduced form, as a start point: 'column':
+    b_j = mean of column j; 'product': leading singular vectors of k (non-negative), a_0 = 1; 'none': 0."""
+    p = np.array(param, dtype=float)
+    if structure == 'full':
+        return p
+    k = p[k_start:k_start + n_cl * n_cl].reshape(n_cl, n_cl)
+    off = ~np.eye(n_cl, dtype=bool)
+    new = np.zeros((n_cl, n_cl))
+    slot_a, slot_b = _k_slots(n_cl)
+    if structure == 'column':
+        new[slot_b] = [k[off[:, j], j].mean() for j in range(n_cl)]
+    elif structure == 'product':
+        u, s, vt = np.linalg.svd(k)
+        a, b = np.abs(u[:, 0]) * np.sqrt(s[0]), np.abs(vt[0]) * np.sqrt(s[0])
+        a = np.clip(a / max(a[0], 1e-12), *a_bounds)
+        a[0] = 1.
+        b = np.array([np.sum(a[off[:, j]] * k[off[:, j], j]) / np.sum(a[off[:, j]]**2) for j in range(n_cl)])  # least squares given a
+        new[slot_a], new[slot_b] = a, np.maximum(b, 0.)
+    p[k_start:k_start + n_cl * n_cl] = new.ravel()
+    return p
 
 
 def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, platecount_max):

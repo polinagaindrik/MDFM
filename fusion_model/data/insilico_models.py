@@ -122,7 +122,7 @@ def save_all_dfs(dfs, names=[''], path=''):
 
 
 def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name='', t_meas=None,
-                          maldi_n=None, platecount_log10_sd=None, ngs_dm=None):
+                          maldi_n=None, platecount_log10_sd=None, ngs_dm=None, seed=None):
     """Generate synthetic observations and align their MALDI and NGS bacteria.
     t_meas: measurement days (whole days; default: module attribute t = 0, 1, ..., 17); only for the
     model_exp based generators (model_1media_exp_*, model_2media_exp*).
@@ -131,8 +131,12 @@ def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, para
     platecount_log10_sd: None (default): plate counts with relative Gaussian noise; sigma: Gaussian noise with standard deviation
     sigma on log10 of the plate counts; only for the model_exp based generators.
     ngs_dm: None (default): NGS with relative Gaussian noise; (N, A): NGS as N reads per sample, Dirichlet-multinomial
-    with concentration A (see insilico_traj_dataframe); only for the model_exp based generators."""
+    with concentration A (see insilico_traj_dataframe); only for the model_exp based generators.
+    seed: seed of the measurement noise (None: the fixed default seed of the generator, as before); only for the
+    model_exp based generators. Different seeds give independent noise realisations of the same true model."""
     extra = {} if t_meas is None else {'t_meas': np.asarray(t_meas, dtype=float)}
+    if seed is not None:
+        extra['seed'] = int(seed)
     if maldi_n is not None:
         extra['maldi_n'] = int(maldi_n)
     if platecount_log10_sd is not None:
@@ -441,12 +445,13 @@ def read_exp_temps(dir, df=None):
 
 
 def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name='', t_meas=None,
-              maldi_n=None, platecount_log10_sd=None, ngs_dm=None):
+              maldi_n=None, platecount_log10_sd=None, ngs_dm=None, seed=46987):
     """Generate synthetic observations using the exponential temperature-dependent model.
     maldi_n: None: MALDI with relative Gaussian noise; N: multinomial MALDI with N colonies per plate.
     platecount_log10_sd: None: plate counts with relative Gaussian noise; sigma: Gaussian noise on log10 of the plate counts.
-    ngs_dm: None: NGS with relative Gaussian noise; (N, A): Dirichlet-multinomial NGS, N reads, concentration A."""
-    np.random.seed(46987)
+    ngs_dm: None: NGS with relative Gaussian noise; (N, A): Dirichlet-multinomial NGS, N reads, concentration A.
+    seed: seed of the measurement noise (default 46987, the seed of all earlier runs)."""
+    np.random.seed(46987 if seed is None else int(seed))
     if param_ode is None:
         raise ValueError('model_exp needs param_ode, the true ODE parameters of the in-silico model')
     if not inhib:

@@ -132,6 +132,8 @@ class JaxCost:
         self.lambda_tref = calibr_setup.get("lambda_tref")  # see cost_function.ode_params_for_model
         self.k_structure = calibr_setup.get("k_structure")  # reduced inhibition matrix, see cost_function
         self.k_groups = None if calibr_setup.get("k_groups") is None else tuple(calibr_setup["k_groups"])
+        self.lambda_mode = calibr_setup.get("lambda_mode")
+        self.lambda_groups = None if calibr_setup.get("lambda_groups") is None else tuple(calibr_setup["lambda_groups"])
         self.rtol, self.atol, self.max_steps = rtol, atol, max_steps
         self.solver = {"Tsit5": diffrax.Tsit5, "Kvaerno5": diffrax.Kvaerno5, "Dopri8": diffrax.Dopri8}[solver]()
         n_x0 = self.n_cl * self.n_exps
@@ -179,7 +181,7 @@ class JaxCost:
     def _observables(self, p, adjoint):
         n, m = self.n_cl, self.n_media
         x0 = p[self.slices[0]].reshape(self.n_exps, n)
-        ode = ode_params_for_model(p[self.slices[1]], {"lambda_tref": self.lambda_tref, "k_structure": self.k_structure, "k_groups": self.k_groups, "n_cl": n}, xp=jnp)
+        ode = ode_params_for_model(p[self.slices[1]], {"lambda_tref": self.lambda_tref, "k_structure": self.k_structure, "k_groups": self.k_groups, "lambda_mode": self.lambda_mode, "lambda_groups": self.lambda_groups, "n_cl": n}, xp=jnp)
         s_x = p[-n * m:].reshape(m, n)
         counts = jax.vmap(lambda x, T: self._solve_one(x, T, ode, adjoint))(x0, jnp.asarray(self.temps))
         return self._observables_of_counts(counts, s_x)
@@ -245,7 +247,7 @@ class JaxCost:
 
         def sens(x, temp):
             def f(theta):
-                ode = ode_params_for_model(raw.at[idx].set(theta[n:]), {"lambda_tref": self.lambda_tref, "k_structure": self.k_structure, "k_groups": self.k_groups, "n_cl": n}, xp=jnp)
+                ode = ode_params_for_model(raw.at[idx].set(theta[n:]), {"lambda_tref": self.lambda_tref, "k_structure": self.k_structure, "k_groups": self.k_groups, "lambda_mode": self.lambda_mode, "lambda_groups": self.lambda_groups, "n_cl": n}, xp=jnp)
                 c = self._solve_one(theta[:n], temp, ode, "forward")
                 return c, c
             return jax.jacfwd(f, has_aux=True)(jnp.concatenate([x, raw[idx]]))
@@ -364,6 +366,8 @@ def jax_cost_for(calibr_setup, **kwargs):
            calibr_setup.get("s_max_penalty"), tuple(map(tuple, calibr_setup["param_bnds"])),
            tuple(np.ravel(calibr_setup.get("lambda_tref", ()))), calibr_setup.get("k_structure"),
            None if calibr_setup.get("k_groups") is None else tuple(calibr_setup["k_groups"]),
+           calibr_setup.get("lambda_mode"),
+           None if calibr_setup.get("lambda_groups") is None else tuple(calibr_setup["lambda_groups"]),
            tuple(sorted(kwargs.items())))
     if key not in _CACHE:
         _CACHE.clear()

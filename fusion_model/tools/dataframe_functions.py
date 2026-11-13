@@ -2,6 +2,12 @@ import pandas as pd
 import numpy as np
 
 
+def day_label(d):
+    """Day in sample names: two digits for whole days ('03'), else two decimals ('00.25'); float() reads both."""
+    d = float(d)
+    return f'{int(round(d)):02d}' if abs(d - round(d)) < 1e-9 else f'{d:05.2f}'
+
+
 def intersection(lst1, lst2):
     """Return the values from the first list that also occur in the second."""
     lst3 = [value for value in lst1 if value in lst2]
@@ -22,7 +28,7 @@ def create_df_platecount(days, obs, name_part, bact_name, media=['MRS', 'PC'], s
     data = {'Properties': ['Average', 'Standard deviation', 'Replicas']}
     for d, o, std in zip(days, obs.T, stds.T):
         for med, o_med, std_med in zip(media, o, std):
-            data["_".join(name_part + [f'{int(d):02d}', f'{med}-platecount'])] = [o_med, std_med, [o_med]]
+            data["_".join(name_part + [day_label(d), f'{med}-platecount'])] = [o_med, std_med, [o_med]]
     return pd.DataFrame(data=data).groupby('Properties').sum()
 
 
@@ -30,7 +36,7 @@ def create_df_sumx(days, obs, name_part, bact_name, stds=None):
     """Build a dataframe of total bacterial counts indexed by sample and time."""
     data = {'Properties': ['Average']}
     for d, o in zip(days, obs):   
-        data["_".join(name_part + [f'{int(d):02d}', '-sumx'])] = [o]
+        data["_".join(name_part + [day_label(d), '-sumx'])] = [o]
     return pd.DataFrame(data=data).groupby('Properties').sum()
 
 
@@ -39,7 +45,7 @@ def create_df_maldi(days, obs, name_part, bact_name, media=['MRS', 'PC'], stds=0
     data = {"Genus": bact_name}
     for d, o in zip(days, obs.T):
         for med, o_med in zip(media, o.T):
-            data["_".join(name_part + [f'{int(d):02d}', f'{med}-maldi'])] = o_med
+            data["_".join(name_part + [day_label(d), f'{med}-maldi'])] = o_med
     df = pd.DataFrame(data=data).groupby('Genus').sum()
     #df[df < 0] = 0
     return df.apply(calc_proportion)
@@ -49,7 +55,7 @@ def create_df_ngs(days, obs, name_part, bact_name, **kwargs):
     """Build a genus-by-sample NGS dataframe and normalize each sample to proportions."""
     data = {"Genus": bact_name}
     for d, o in zip(days, obs.T):
-        data["_".join(name_part + [f'{int(d):02d}', 'ngs'])] = o
+        data["_".join(name_part + [day_label(d), 'ngs'])] = o
     df = pd.DataFrame(data=data).groupby('Genus').sum()
     #df[df < 0] = 0
     return df.apply(calc_proportion)
@@ -59,7 +65,7 @@ def create_df_x(days, obs, name_part, bact_name, **kwargs):
     """Build a genus-by-sample dataframe of modeled bacterial counts."""
     data = {"Genus": bact_name}
     for d, o in zip(days, obs.T):
-        data["_".join(name_part + [f'{int(d):02d}', 'realx'])] = o
+        data["_".join(name_part + [day_label(d), 'realx'])] = o
     df = pd.DataFrame(data=data).groupby('Genus').sum()
     #df[df < 0] = 0
     return df
@@ -71,7 +77,7 @@ def create_df_fullx(days, obs, name_part, bact_name, stds=0):
     n_states = len(obs) // len(bact_name)
     data = {"Genus": [bact_name[i]+f'_State_{j:02d}' for i in range (n_cl) for j in range (n_states)]}#bact_name}
     for d, o in zip(days, obs.T):
-        data["_".join(name_part + [f'{int(d):02d}', 'realx'])] = o[:2*n_cl]
+        data["_".join(name_part + [day_label(d), 'realx'])] = o[:2*n_cl]
     df = pd.DataFrame(data=data).groupby('Genus').sum()
     return df
 
@@ -180,7 +186,7 @@ def extract_observables_from_df_maldi(df_maldi, days, exps, media):
     for i, exp in enumerate(exps):
         for j, med in enumerate(media):
             for k, d in enumerate(days):
-                df0 = df_maldi.filter(like=exp).filter(like=med).filter(like=f'_{int(d):02d}_')
+                df0 = df_maldi.filter(like=exp).filter(like=med).filter(like=f'_{day_label(d)}_')
                 if np.shape(df0)[-1] != 0.:
                     obs_maldi[i, j, :, k] = np.array(df0.T)[0]
                 else:
@@ -193,7 +199,7 @@ def extract_observables_from_df_ngs(df_ngs, days, exps):
     obs_ngs = np.zeros((len(exps), np.shape(df_ngs)[0], len(days)))
     for i, exp in enumerate(exps):
         for k, d in enumerate(days):
-            df0 = df_ngs.filter(like=exp).filter(like=f'_{int(d):02d}_')
+            df0 = df_ngs.filter(like=exp).filter(like=f'_{day_label(d)}_')
             if np.shape(df0)[-1] != 0.:
                 obs_ngs[i, :, k] = np.array(df0.T)[0]
             else:
@@ -208,7 +214,7 @@ def extract_observables_from_df_platecount(df_platecount, days, exps, media):
     for i, exp in enumerate(exps):
         for j, med in enumerate(media):
             for k, d in enumerate(days):
-                df0 = df_platecount.filter(like=exp+'_').filter(like=med).filter(like=f'_{int(d):02d}_')
+                df0 = df_platecount.filter(like=exp+'_').filter(like=med).filter(like=f'_{day_label(d)}_')
                 if np.shape(df0)[-1] != 0.:
                     obs_platecount[i, j, k] = np.mean(df0.T['Average'])
                     # np.mean (like 'Average' above): float() on a 1-element array fails in numpy >= 2.x
@@ -223,7 +229,7 @@ def extract_observables_from_df_x(df_x, days, exps, media=None):
     obs_x = np.zeros((len(exps), np.shape(df_x)[0], len(days)))
     for i, exp in enumerate(exps):
         for k, d in enumerate(days):
-            df0 = df_x.filter(like=exp).filter(like=f'_{int(d):02d}_')
+            df0 = df_x.filter(like=exp).filter(like=f'_{day_label(d)}_')
             if np.shape(df0)[-1] != 0.:
                 obs_x[i, :, k] = np.array(df0.T)[0]
             else:

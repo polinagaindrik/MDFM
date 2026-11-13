@@ -302,15 +302,28 @@ def ode_params_for_model(param_ode, calibr_setup, xp=np):
     calibr_setup['lambda_tref'] = T_ref (one value or one per species): the first n_cl entries of param_ode are
     lambda_ref = log10 lambda(T_ref) instead of lambda_1, i.e. lambda(T) = 10^lambda_ref * (T / T_ref)^lambda_exp.
     Same model, it only decorrelates the two lambda parameters: lambda_1 = lambda_ref - lambda_exp * log10(T_ref).
+    calibr_setup['lambda_mode'] = 'ratio': lambda_i(T) = c_i mu_i(T); the first n_cl entries are log10 c_i, the lambda_exp
+    entries are ignored (lambda_exp = mu_exp, lambda_1 = log10 c + log10 mu_0); with calibr_setup['lambda_groups'] the
+    species of a group share c (stored in the entry of the group's first species). 'const' (lambda_exp = 0) and 'free'
+    need no transformation (lambda_mode_bounds fixes lambda_exp for 'const').
     """
     t_ref = calibr_setup.get('lambda_tref')
     structure = calibr_setup.get('k_structure') or 'full'
-    if t_ref is None and structure == 'full':
+    lambda_mode = calibr_setup.get('lambda_mode') or 'free'
+    if t_ref is None and structure == 'full' and lambda_mode != 'ratio':
         return param_ode
     n_cl = calibr_setup['n_cl']
     ode = xp.asarray(param_ode)
     if t_ref is not None:
+        if lambda_mode == 'ratio':
+            raise ValueError("lambda_tref and lambda_mode 'ratio' cannot be combined")
         ode = xp.concatenate([ode[:n_cl] - ode[n_cl:2*n_cl] * np.log10(t_ref), ode[n_cl:]])
+    if lambda_mode == 'ratio':
+        log_c = ode[:n_cl]
+        if calibr_setup.get('lambda_groups') is not None:
+            log_c = log_c[np.asarray(_group_representatives(calibr_setup['lambda_groups']))]
+        mu_0, mu_exp = ode[2*n_cl:3*n_cl], ode[3*n_cl:4*n_cl]
+        ode = xp.concatenate([log_c + xp.log10(mu_0), mu_exp, ode[2*n_cl:]])
     if structure != 'full':
         ode = xp.concatenate([ode[:4*n_cl + 2], xp.ravel(structured_k(ode[4*n_cl + 2:], n_cl, structure, xp=xp,
                                                                       groups=calibr_setup.get('k_groups')))])
@@ -428,6 +441,47 @@ def k_structure_bounds(param_bnds, n_cl, structure, k_start, k_bounds=(0., 20.),
                 block[slot_b[0][j], slot_b[1][j]] = (0., 0.)  # strength of the group's first species only
     bnds[k_start:k_start + n_cl * n_cl] = [tuple(v) for v in block.reshape(-1, 2)]
     return tuple(bnds)
+
+
+LAMBDA_MODES = ('free', 'const', 'ratio')
+
+
+def lambda_mode_bounds(param_bnds, n_cl, mode, ode_start, groups=None, log_c_bounds=(-4., 1.5)):
+    """param_bnds for a lambda mode (ODE parameters from index ode_start): 'const' fixes lambda_exp = 0; 'ratio' puts
+    log10 c in the lambda_1 entries (log_c_bounds; with groups only the group's first species, the others fixed at 0)
+    and fixes the unused lambda_exp entries at 0. 'free': unchanged."""
+    bnds = [tuple(b) for b in param_bnds]
+    if mode == 'free':
+        return tuple(bnds)
+    for i in range(n_cl):
+        bnds[ode_start + n_cl + i] = (0., 0.)
+    if mode == 'ratio':
+        rep = _group_representatives(groups) if groups is not None else list(range(n_cl))
+        for i in range(n_cl):
+            bnds[ode_start + i] = tuple(log_c_bounds) if rep[i] == i else (0., 0.)
+    elif mode != 'const':
+        raise ValueError(f'unknown lambda_mode {mode!r}, expected one of {LAMBDA_MODES}')
+    return tuple(bnds)
+
+
+def lambda_to_mode(param, n_cl, mode, ode_start, t_ref=6., groups=None):
+    """Start point for a lambda mode from a 'free' parameter vector: lambda(t_ref) and mu(t_ref) are kept.
+    'const': lambda_1 = log10 lambda(t_ref), lambda_exp = 0; 'ratio': log10 c = log10 lambda(t_ref) - log10 mu(t_ref)
+    (group mean with groups)."""
+    p = np.array(param, dtype=float)
+    o = ode_start
+    l1, le = p[o:o + n_cl].copy(), p[o + n_cl:o + 2*n_cl].copy()
+    mu0, me = p[o + 2*n_cl:o + 3*n_cl], p[o + 3*n_cl:o + 4*n_cl]
+    log_lam = l1 + le * np.log10(t_ref)
+    if mode == 'const':
+        p[o:o + n_cl], p[o + n_cl:o + 2*n_cl] = log_lam, 0.
+    elif mode == 'ratio':
+        log_c = log_lam - np.log10(mu0) - me * np.log10(t_ref)
+        if groups is not None:
+            rep = np.asarray(_group_representatives(groups))
+            log_c = np.array([log_c[rep == rep[i]].mean() if rep[i] == i else 0. for i in range(n_cl)])
+        p[o:o + n_cl], p[o + n_cl:o + 2*n_cl] = log_c, 0.
+    return p
 
 
 def k_to_structure(param, n_cl, structure, k_start, a_bounds=(0.01, 100.), groups=None):

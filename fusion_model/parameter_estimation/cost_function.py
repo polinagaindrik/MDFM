@@ -312,7 +312,8 @@ def ode_params_for_model(param_ode, calibr_setup, xp=np):
     if t_ref is not None:
         ode = xp.concatenate([ode[:n_cl] - ode[n_cl:2*n_cl] * np.log10(t_ref), ode[n_cl:]])
     if structure != 'full':
-        ode = xp.concatenate([ode[:4*n_cl + 2], xp.ravel(structured_k(ode[4*n_cl + 2:], n_cl, structure, xp=xp))])
+        ode = xp.concatenate([ode[:4*n_cl + 2], xp.ravel(structured_k(ode[4*n_cl + 2:], n_cl, structure, xp=xp,
+                                                                      groups=calibr_setup.get('k_groups')))])
     return ode
 
 
@@ -322,21 +323,43 @@ def ode_params_for_model(param_ode, calibr_setup, xp=np):
 #   'full'    (default) every k_ij is a parameter: n (n - 1)
 #   'column'  k_ij = b_j: species j inhibits all others equally: n parameters
 #   'product' k_ij = a_i b_j: sensitivity of species i times strength of species j, a_0 = 1: 2 n - 1 parameters
+#   'shared'  k_ij = a_i b_j also for i = j: every species feels the same inhibitor load I = sum_j b_j x_j (its own
+#             products included) with its sensitivity a_i; a_0 = 1: 2 n - 1 parameters, from n = 2
+#   'shared_c' as 'shared' with the diagonal scaled by a free factor c: k_ii = c a_i b_i (c = 0: 'product', c = 1:
+#             'shared'), c in k[0, 1]; 2 n parameters, from n = 3
 #   'none'    k_ij = 0
 # The parameter vector keeps its layout. The reduced parameters live in entries of the k block that are otherwise unused:
-# b_j in k[(j + 1) mod n, j] and a_i in k[i, (i + 1) mod n] (n >= 3); all other entries are fixed at 0 and ignored.
+# b_j in k[(j + 1) mod n, j] and a_i in k[i, (i + 1) mod n] (n >= 3); for 'shared' a_i in k[i, i] and b_j in
+# k[(j + 1) mod n, j] (n >= 2). All other entries are fixed at 0 and ignored.
 # k_structure_bounds gives the bounds for a structure, k_to_structure the start point from a full matrix.
+# calibr_setup['k_groups'] (with 'product', 'shared', 'shared_c'): one group label per species; species of one group share one strength b,
+# stored in the b entry of the group's first species (the other b entries are fixed at 0 and ignored). The sensitivities
+# a_i stay per species. Groups can come from taxonomy or from the data (fusion_model.analysis.inhibition_groups).
 # ----------------------------------------------------------------------
-K_STRUCTURES = ('full', 'column', 'product', 'none')
+K_STRUCTURES = ('full', 'column', 'product', 'shared', 'shared_c', 'none')
 
 
-def _k_slots(n_cl):
+C_SLOT = (0, 1)  # entry of the self-inhibition factor c of 'shared_c'
+
+
+def _k_slots(n_cl, structure='product'):
     idx = np.arange(n_cl)
+    if structure in ('shared', 'shared_c'):
+        return (idx, idx), ((idx + 1) % n_cl, idx)  # a_i on the diagonal, b_j below it
     return (idx, (idx + 1) % n_cl), ((idx + 1) % n_cl, idx)  # entries of a_i, entries of b_j
 
 
-def structured_k(k_block, n_cl, structure, xp=np):
-    """Full n_cl x n_cl inhibition matrix from the k block of a parameter vector with a reduced structure."""
+def _group_representatives(groups):
+    """Index of the representative (first species) of each species' group: [rep(g_0), rep(g_1), ...]."""
+    first = {}
+    for j, g in enumerate(groups):
+        first.setdefault(g, j)
+    return np.array([first[g] for g in groups])
+
+
+def structured_k(k_block, n_cl, structure, xp=np, groups=None):
+    """Full n_cl x n_cl inhibition matrix from the k block of a parameter vector with a reduced structure;
+    groups: species groups sharing one strength b (only 'shared', see calibr_setup['k_groups'])."""
     if structure not in K_STRUCTURES:
         raise ValueError(f'k_structure must be one of {K_STRUCTURES}, got {structure!r}')
     k = xp.reshape(xp.asarray(k_block), (n_cl, n_cl))
@@ -344,10 +367,26 @@ def structured_k(k_block, n_cl, structure, xp=np):
         return k
     if structure == 'none':
         return k * 0.
+    if structure in ('shared', 'shared_c'):
+        if n_cl < (3 if structure == 'shared_c' else 2):
+            raise ValueError(f"k_structure {structure!r} needs at least {3 if structure == 'shared_c' else 2} species")
+        slot_a, slot_b = _k_slots(n_cl, 'shared')
+        b = k[slot_b]
+        if groups is not None:
+            b = b[_group_representatives(groups)]
+        full = k[slot_a][:, None] * b[None, :]
+        if structure == 'shared_c':
+            eye = np.eye(n_cl)
+            full = full * (1. - eye) + full * eye * k[C_SLOT]
+        return full
     if n_cl < 3:
         raise ValueError("k_structure 'column' / 'product' needs at least 3 species")
     slot_a, slot_b = _k_slots(n_cl)
     b = k[slot_b]
+    if groups is not None:
+        if structure != 'product':
+            raise ValueError("k_groups needs k_structure 'product', 'shared' or 'shared_c'")
+        b = b[_group_representatives(groups)]
     full = xp.ones((n_cl, 1)) * b[None, :]
     if structure == 'product':
         full = k[slot_a][:, None] * full
@@ -364,24 +403,34 @@ def k_block_start(param_bnds, n_cl):
     raise ValueError('parameter vector does not have the fusion_model2 layout')
 
 
-def k_structure_bounds(param_bnds, n_cl, structure, k_start, k_bounds=(0., 20.), a_bounds=(0.01, 100.)):
+def k_structure_bounds(param_bnds, n_cl, structure, k_start, k_bounds=(0., 20.), a_bounds=(0.01, 100.), groups=None,
+                       c_bounds=(0., 10.)):
     """param_bnds with the k block (from index k_start) set for a structure: b_j in k_bounds, a_i in a_bounds with
     a_0 = 1 (the common scale of a and b is free otherwise), unused entries fixed at 0. 'full': unchanged."""
     if structure == 'full':
         return tuple(tuple(b) for b in param_bnds)
     bnds = [tuple(b) for b in param_bnds]
     block = np.zeros((n_cl, n_cl, 2))
-    slot_a, slot_b = _k_slots(n_cl)
-    if structure in ('column', 'product'):
+    slot_a, slot_b = _k_slots(n_cl, structure)
+    if structure in ('column', 'product', 'shared', 'shared_c'):
         block[slot_b] = k_bounds
-    if structure == 'product':
+    if structure in ('product', 'shared', 'shared_c'):
         block[slot_a] = a_bounds
-        block[0, 1 % n_cl] = (1., 1.)
+        block[slot_a[0][0], slot_a[1][0]] = (1., 1.)  # a_0 = 1
+    if structure == 'shared_c':
+        block[C_SLOT] = c_bounds
+    if groups is not None:
+        if structure not in ('product', 'shared', 'shared_c'):
+            raise ValueError("k_groups needs k_structure 'product', 'shared' or 'shared_c'")
+        rep = _group_representatives(groups)
+        for j in range(n_cl):
+            if rep[j] != j:
+                block[slot_b[0][j], slot_b[1][j]] = (0., 0.)  # strength of the group's first species only
     bnds[k_start:k_start + n_cl * n_cl] = [tuple(v) for v in block.reshape(-1, 2)]
     return tuple(bnds)
 
 
-def k_to_structure(param, n_cl, structure, k_start, a_bounds=(0.01, 100.)):
+def k_to_structure(param, n_cl, structure, k_start, a_bounds=(0.01, 100.), groups=None):
     """Parameter vector with the full k block replaced by its closest reduced form, as a start point: 'column':
     b_j = mean of column j; 'product': leading singular vectors of k (non-negative), a_0 = 1; 'none': 0."""
     p = np.array(param, dtype=float)
@@ -390,16 +439,26 @@ def k_to_structure(param, n_cl, structure, k_start, a_bounds=(0.01, 100.)):
     k = p[k_start:k_start + n_cl * n_cl].reshape(n_cl, n_cl)
     off = ~np.eye(n_cl, dtype=bool)
     new = np.zeros((n_cl, n_cl))
-    slot_a, slot_b = _k_slots(n_cl)
+    slot_a, slot_b = _k_slots(n_cl, structure)
     if structure == 'column':
         new[slot_b] = [k[off[:, j], j].mean() for j in range(n_cl)]
-    elif structure == 'product':
+    elif structure in ('product', 'shared', 'shared_c'):
         u, s, vt = np.linalg.svd(k)
         a, b = np.abs(u[:, 0]) * np.sqrt(s[0]), np.abs(vt[0]) * np.sqrt(s[0])
         a = np.clip(a / max(a[0], 1e-12), *a_bounds)
         a[0] = 1.
         b = np.array([np.sum(a[off[:, j]] * k[off[:, j], j]) / np.sum(a[off[:, j]]**2) for j in range(n_cl)])  # least squares given a
         new[slot_a], new[slot_b] = a, np.maximum(b, 0.)
+    if structure == 'shared_c':
+        new[C_SLOT] = 1.
+    if groups is not None and structure in ('product', 'shared', 'shared_c'):  # group strength: mean of the members' strengths
+        rep = _group_representatives(groups)
+        b = new[slot_b].copy()
+        for r in set(rep):
+            new[slot_b[0][r], slot_b[1][r]] = b[rep == r].mean()
+        for j in range(n_cl):
+            if rep[j] != j:
+                new[slot_b[0][j], slot_b[1][j]] = 0.
     p[k_start:k_start + n_cl * n_cl] = new.ravel()
     return p
 

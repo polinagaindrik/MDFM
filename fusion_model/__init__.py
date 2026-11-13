@@ -10,3 +10,4 @@ from .dimensionality_reduction import dimension_reduction as dim_red
 from .analysis import spectral_expansion as se
 from .analysis import prediction_uncertainty as pred_unc
 from .analysis import mcmc
+from .analysis import inhibition_groups as inhib_groups

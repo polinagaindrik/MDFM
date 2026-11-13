@@ -124,8 +124,10 @@ def save_all_dfs(dfs, names=[''], path=''):
 def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name='', t_meas=None,
                           maldi_n=None, platecount_log10_sd=None, ngs_dm=None, seed=None):
     """Generate synthetic observations and align their MALDI and NGS bacteria.
-    t_meas: measurement days (days, fractions allowed; default: module attribute t = 0, 1, ..., 17); only for the
-    model_exp based generators (model_1media_exp_*, model_2media_exp*).
+    t_meas: measurement days (days, fractions allowed; default: module attribute t = 0, 1, ..., 17), or a dict
+    {temperature: days} for schedules that differ between temperatures (the data are generated on the union of the
+    days, then the samples outside the schedule of an experiment's temperature are removed; the true curves x keep all
+    days); only for the model_exp based generators (model_1media_exp_*, model_2media_exp*).
     maldi_n: None (default): MALDI with relative Gaussian noise; N: MALDI as N identified colonies per plate
     (multinomial, see insilico_traj_dataframe); only for the model_exp based generators.
     platecount_log10_sd: None (default): plate counts with relative Gaussian noise; sigma: Gaussian noise with standard deviation
@@ -134,7 +136,12 @@ def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, para
     with concentration A (see insilico_traj_dataframe); only for the model_exp based generators.
     seed: seed of the measurement noise (None: the fixed default seed of the generator, as before); only for the
     model_exp based generators. Different seeds give independent noise realisations of the same true model."""
-    extra = {} if t_meas is None else {'t_meas': np.asarray(t_meas, dtype=float)}
+    if t_meas is None:
+        extra = {}
+    elif isinstance(t_meas, dict):
+        extra = {'t_meas': {float(k): np.asarray(v, dtype=float) for k, v in t_meas.items()}}
+    else:
+        extra = {'t_meas': np.asarray(t_meas, dtype=float)}
     if seed is not None:
         extra['seed'] = int(seed)
     if maldi_n is not None:
@@ -461,8 +468,17 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path=
         x0 = set_initial_vals(x10, temps, n_cl)
     else:
         x10, x0 = get_random_initial_vals(temps, n_cl)
+    schedule = t_meas if isinstance(t_meas, dict) else None
+    if schedule is not None:
+        missing = set(float(T) for T in temps) - set(schedule)
+        if missing:
+            raise ValueError(f't_meas has no days for the temperatures {sorted(missing)}')
+        t_meas = np.unique(np.concatenate([np.asarray(v, dtype=float) for v in schedule.values()]))
     df_platecount, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t if t_meas is None else t_meas, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                  noise=noise, rel_noise=rel_noise, media=media, maldi_n=maldi_n, platecount_log10_sd=platecount_log10_sd, ngs_dm=ngs_dm)
+    if schedule is not None:
+        keep = lambda c: any(abs(float(c.split('_')[3]) - d) < 1e-9 for d in schedule[float(c.split('_')[2].rstrip('C'))])
+        df_platecount, df_maldi, df_ngs = (df.loc[:, [c for c in df.columns if keep(c)]] for df in (df_platecount, df_maldi, df_ngs))
     save_all_dfs([df_platecount, df_maldi, df_ngs, df_realx], names=[f'platecount{add_name}', f'maldi{add_name}', f'ngs{add_name}', f'x{add_name}'], path=path)
     json_dump({'param_ode': [x00  for i in range (len(temps)) for x00 in x10[i]]+list(param_ode), 's_x': s_x, 'T_x': T_x}, f'Result_real{add_name}.json', dir=path)
     return df_platecount, df_maldi, df_ngs, df_realx

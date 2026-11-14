@@ -171,6 +171,23 @@ def build_calibr_setup(path, add_name, n_cl, n_media, define_setup, objective="n
     elif objective == "geomean":
         calibr_setup["aggregation_func"] = pl.make_geomean_neg2loglik(calibr_setup["data_array"],
                                                                       calibr_setup["noise_model"])
+    # reduced inhibition structure, strength groups and lag model of the calibration (stored in its result)
+    structure = result.get("k_structure") or "full"
+    if structure != "full":
+        from .cost_function import k_structure_bounds
+        calibr_setup["k_structure"] = structure
+        if result.get("k_groups") is not None:
+            calibr_setup["k_groups"] = list(result["k_groups"])
+        calibr_setup["param_bnds"] = k_structure_bounds(calibr_setup["param_bnds"], n_cl, structure,
+                                                        n_cl * len(exps) + 4 * n_cl + 2, groups=calibr_setup.get("k_groups"))
+        print(f"Calibration used the inhibition structure {structure!r}, groups {calibr_setup.get('k_groups')}")
+    if (result.get("lambda_mode") or "free") != "free":
+        from .cost_function import lambda_mode_bounds
+        calibr_setup["lambda_mode"] = result["lambda_mode"]
+        if result.get("lambda_groups") is not None:
+            calibr_setup["lambda_groups"] = list(result["lambda_groups"])
+        calibr_setup["param_bnds"] = lambda_mode_bounds(calibr_setup["param_bnds"], n_cl, result["lambda_mode"],
+                                                        n_cl * len(exps), groups=calibr_setup.get("lambda_groups"))
     param_opt = np.array(result["param_ode"], dtype=float)
     param_names = make_param_names(exps, bact, media)
     assert len(param_opt) == len(calibr_setup["param_bnds"]) == len(param_names)

@@ -20,7 +20,9 @@ def calc_obs_model(data, param_x0, calibr_setup, t_model):
         temp = calibr_setup['exp_temps'][exp]
         const = [[temp], n_cl, calibr_setup['media']]
         #C0_opt = 1e3*np.concatenate((param_x0_opt[n_cl*i:n_cl*(i+1)],[1e-3 for _ in range(n_cl)]+[1e-3])) 
-        C0_opt = np.concatenate((10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), np.ones((n_cl+1))))
+        # lag cells, growing cells 1, inhibitor loads 0 (pool models), exact R(0) (ode_structure.initial_state)
+        from .ode_structure import initial_state
+        C0_opt = initial_state(calibr_setup['model'], 10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), n_cl, param_opt, temp)
         C = model_ODE_solution(calibr_setup['model'], t_model, param_opt, C0_opt, const)
         n_C = get_bacterial_count(C, n_cl, 2)
         x_count[i] = n_C

@@ -5,6 +5,7 @@ from scipy.optimize import brentq
 from scipy.special import gammaln, polygamma
 from scipy.stats.mstats import gmean
 from fusion_model.model.solving import model_ODE_solution, get_bacterial_count
+from fusion_model.model.ode_structure import initial_state
 from fusion_model.model.solving import observable_NGS, observable_MALDI, observable_platecount
 from fusion_model.parameter_estimation.media_matrix import S_squared_difference
 
@@ -526,7 +527,7 @@ def sq_diff_oneexp(calibr_setup, exp, i, n_cl, x0, param_ode, s_x, platecount_ma
     T_x = calibr_setup['T_x']
     const = [[temp], n_cl, calibr_setup['media']]
 
-    C0 = np.concatenate((10**np.array(x0), np.ones((n_cl+1))))
+    C0 = initial_state(model, 10**np.array(x0), n_cl, param_ode, calibr_setup['exp_temps'][exp])
     C = model_ODE_solution(model, days, param_ode, C0, const)
     n_C = get_bacterial_count(C, np.shape(s_x)[-1], 2)
     n_C0 = get_bacterial_count(np.array(C0).reshape(len(C0), 1), np.shape(s_x)[-1], 2)
@@ -613,7 +614,7 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
                               np.full(np.shape(obs_platecount_meas), np.nan))
     for i, exp in enumerate(exps):
         const = [[calibr_setup['exp_temps'][exp]], n_cl_d, calibr_setup['media']]
-        C0 = np.concatenate((10**np.array(x0_vals[n_cl_d*i:n_cl_d*(i+1)]), np.ones((n_cl_d+1))))
+        C0 = initial_state(model, 10**np.array(x0_vals[n_cl_d*i:n_cl_d*(i+1)]), n_cl_d, param_ode, calibr_setup['exp_temps'][exp])
         C = model_ODE_solution(model, days, param_ode, C0, const)
         n_C = get_bacterial_count(C, np.shape(s_x)[-1], 2)
         n_C0 = get_bacterial_count(np.array(C0).reshape(len(C0), 1), np.shape(s_x)[-1], 2)

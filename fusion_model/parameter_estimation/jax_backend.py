@@ -133,6 +133,8 @@ class JaxCost:
         self.k_structure = calibr_setup.get("k_structure")  # reduced inhibition matrix, see cost_function
         self.k_groups = None if calibr_setup.get("k_groups") is None else tuple(calibr_setup["k_groups"])
         self.lambda_mode = calibr_setup.get("lambda_mode")
+        from ..model.ode_structure import inhibitor_of
+        self.inhibitor = inhibitor_of(calibr_setup.get("model"))  # 'algebraic', 'F1' or 'F2' (inhibitor pool)
         self.lambda_groups = None if calibr_setup.get("lambda_groups") is None else tuple(calibr_setup["lambda_groups"])
         self.rtol, self.atol, self.max_steps = rtol, atol, max_steps
         self.solver = {"Tsit5": diffrax.Tsit5, "Kvaerno5": diffrax.Kvaerno5, "Dopri8": diffrax.Dopri8}[solver]()
@@ -160,6 +162,13 @@ class JaxCost:
         lambd = 10.0 ** ode[:n] * temp ** ode[n:2 * n]
         mu = ode[2 * n:3 * n] * temp ** ode[3 * n:4 * n]
         nmax = 10.0 ** ode[4 * n] * temp ** ode[4 * n + 1]
+        if self.inhibitor != "algebraic":   # inhibitor pool, states [x1, x2, J, R] (model.ode_structure)
+            kij = ode[4 * n + 2:].reshape(n, n)
+            lag, act, J, res = y[:n], y[n:2 * n], y[2 * n:3 * n], y[-1]
+            growth = mu * res * act / (1.0 + 5e-8 * J)
+            dJ = kij @ (res * act if self.inhibitor == "F2" else act)
+            return jnp.concatenate([-lag * res * lambd, lag * res * lambd + growth, dJ,
+                                    jnp.array([-(1.0 / nmax) * jnp.sum(growth)])])
         kij = ode[4 * n + 2:].reshape(n, n) * 5e-8
         lag, act, res = y[:n], y[n:2 * n], y[-1]
         b = kij @ act
@@ -169,7 +178,10 @@ class JaxCost:
 
     def _solve_one(self, x0_log, temp, ode, adjoint):
         n = self.n_cl
-        y0 = jnp.concatenate([10.0 ** x0_log, jnp.ones(n + 1)])
+        nmax = 10.0 ** ode[4 * n] * temp ** ode[4 * n + 1]
+        r0 = 1.0 - (jnp.sum(10.0 ** x0_log) + n) / nmax          # R = free fraction of the capacity (conservation law)
+        y0 = jnp.concatenate([10.0 ** x0_log, jnp.ones(n)] + ([jnp.zeros(n)] if self.inhibitor != "algebraic" else [])
+                             + [jnp.reshape(r0, (1,))])
         adj = diffrax.ForwardMode() if adjoint == "forward" else diffrax.RecursiveCheckpointAdjoint()
         sol = diffrax.diffeqsolve(diffrax.ODETerm(self._rhs), self.solver, t0=0.0, t1=float(self.days[-1]),
                                   dt0=None, y0=y0, args=(ode, temp), saveat=diffrax.SaveAt(ts=self.days),
@@ -366,7 +378,7 @@ def jax_cost_for(calibr_setup, **kwargs):
            calibr_setup.get("s_max_penalty"), tuple(map(tuple, calibr_setup["param_bnds"])),
            tuple(np.ravel(calibr_setup.get("lambda_tref", ()))), calibr_setup.get("k_structure"),
            None if calibr_setup.get("k_groups") is None else tuple(calibr_setup["k_groups"]),
-           calibr_setup.get("lambda_mode"),
+           calibr_setup.get("lambda_mode"), getattr(calibr_setup.get("model"), "__name__", None),
            None if calibr_setup.get("lambda_groups") is None else tuple(calibr_setup["lambda_groups"]),
            tuple(sorted(kwargs.items())))
     if key not in _CACHE:

@@ -77,7 +77,7 @@ def create_df_fullx(days, obs, name_part, bact_name, stds=0):
     n_states = len(obs) // len(bact_name)
     data = {"Genus": [bact_name[i]+f'_State_{j:02d}' for i in range (n_cl) for j in range (n_states)]}#bact_name}
     for d, o in zip(days, obs.T):
-        data["_".join(name_part + [day_label(d), 'realx'])] = o[:2*n_cl]
+        data["_".join(name_part + [day_label(d), 'realx'])] = o[:n_states*n_cl]
     df = pd.DataFrame(data=data).groupby('Genus').sum()
     return df
 

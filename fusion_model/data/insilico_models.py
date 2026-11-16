@@ -2,6 +2,7 @@
 
 import numpy as np
 from ..model import fusion_model2, fusion_model_linear, fusion_model_distr#, jacobian_fusion_model
+from ..model.ode_structure import model_for_inhibitor, initial_state
 from .output import json_dump, read_from_json
 from .data_generation import generate_data_dfs
 from ..tools import dataframe_functions as dtf
@@ -122,8 +123,10 @@ def save_all_dfs(dfs, names=[''], path=''):
 
 
 def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=.0, cutoff=0., cutoff_prop=0., add_name='', t_meas=None,
-                          maldi_n=None, platecount_log10_sd=None, ngs_dm=None, seed=None):
+                          maldi_n=None, platecount_log10_sd=None, ngs_dm=None, seed=None, inhibitor=None):
     """Generate synthetic observations and align their MALDI and NGS bacteria.
+    inhibitor: None / 'algebraic' (load = current abundances, fusion_model2) or the inhibitor pool 'F1' / 'F2'
+    (model.ode_structure.fusion_model2_f1 / _f2); only for the model_exp based generators.
     t_meas: measurement days (days, fractions allowed; default: module attribute t = 0, 1, ..., 17), or a dict
     {temperature: days} for schedules that differ between temperatures (the data are generated on the union of the
     days, then the samples outside the schedule of an experiment's temperature are removed; the true curves x keep all
@@ -144,6 +147,8 @@ def prepare_insilico_data(insilico_model, n_cl, temps, ntr, S_matrix_setup, para
         extra = {'t_meas': np.asarray(t_meas, dtype=float)}
     if seed is not None:
         extra['seed'] = int(seed)
+    if inhibitor not in (None, 'algebraic'):
+        extra['inhibitor'] = inhibitor
     if maldi_n is not None:
         extra['maldi_n'] = int(maldi_n)
     if platecount_log10_sd is not None:
@@ -452,7 +457,7 @@ def read_exp_temps(dir, df=None):
 
 
 def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path='', inhib=False, noise=0., rel_noise=0., add_name='', t_meas=None,
-              maldi_n=None, platecount_log10_sd=None, ngs_dm=None, seed=46987):
+              maldi_n=None, platecount_log10_sd=None, ngs_dm=None, seed=46987, inhibitor=None):
     """Generate synthetic observations using the exponential temperature-dependent model.
     maldi_n: None: MALDI with relative Gaussian noise; N: multinomial MALDI with N colonies per plate.
     platecount_log10_sd: None: plate counts with relative Gaussian noise; sigma: Gaussian noise on log10 of the plate counts.
@@ -464,17 +469,19 @@ def model_exp(n_cl, temps, ntr, s_x, T_x, media, param_ode=None, x10=None, path=
     if not inhib:
         param_ode[-n_cl*n_cl:] = 0.
     param_model = np.concatenate([param_ode, s_x, T_x])
+    model = model_for_inhibitor(inhibitor)
     if x10 is not None:
         x0 = set_initial_vals(x10, temps, n_cl)
     else:
         x10, x0 = get_random_initial_vals(temps, n_cl)
+    x0 = [list(initial_state(model, np.asarray(v[:n_cl]), n_cl, param_ode, T)) for v, T in zip(x0, temps)]  # J(0) = 0, R(0) exact
     schedule = t_meas if isinstance(t_meas, dict) else None
     if schedule is not None:
         missing = set(float(T) for T in temps) - set(schedule)
         if missing:
             raise ValueError(f't_meas has no days for the temperatures {sorted(missing)}')
         t_meas = np.unique(np.concatenate([np.asarray(v, dtype=float) for v in schedule.values()]))
-    df_platecount, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(fusion_model2, t if t_meas is None else t_meas, param_model, x0, temps, n_cl, n_traj=ntr,
+    df_platecount, df_maldi, df_ngs, df_realx, _ = generate_data_dfs(model, t if t_meas is None else t_meas, param_model, x0, temps, n_cl, n_traj=ntr,
                                                                  noise=noise, rel_noise=rel_noise, media=media, maldi_n=maldi_n, platecount_log10_sd=platecount_log10_sd, ngs_dm=ngs_dm)
     if schedule is not None:
         keep = lambda c: any(abs(float(c.split('_')[3]) - d) < 1e-9 for d in schedule[float(c.split('_')[2].rstrip('C'))])

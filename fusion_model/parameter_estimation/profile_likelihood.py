@@ -334,17 +334,22 @@ def free_param_indices(param_bnds, fixed_indices=()):
     return [j for j, (lo, hi) in enumerate(param_bnds) if hi > lo and j not in fixed]
 
 
+MIN_GRID_FRAC = 0.02   # smallest half-width of the initial profile grid, as a fraction of the bound range
+
+
 def _build_grid(param_opt, param_index, param_bnds, span, n_points):
-    """Grid around the estimate, written with |p| so that it also works for negative values."""
+    """Grid around the estimate, written with |p| so that it also works for negative values. An estimate of
+    (practically) zero gets the whole bound range; otherwise the half-width is span * |p|, at least MIN_GRID_FRAC of
+    the bound range (an estimate just above a bound of 0, e.g. 1e-10, would otherwise give a grid of zero width)."""
     p_opt_val = float(param_opt[param_index])
     lo, hi = param_bnds[param_index]
     if hi <= lo:
         raise ValueError(f"param_index {param_index} is fixed in param_bnds ({lo}, {hi}); nothing to profile.")
-    if p_opt_val == 0:
+    if abs(p_opt_val) <= 1e-8 * max(1., hi - lo):
         grid = np.linspace(lo, hi, n_points)
     else:
-        grid = np.linspace(max(lo, p_opt_val - span * abs(p_opt_val)),
-                           min(hi, p_opt_val + span * abs(p_opt_val)), n_points)
+        half = max(span * abs(p_opt_val), MIN_GRID_FRAC * (hi - lo))
+        grid = np.linspace(max(lo, p_opt_val - half), min(hi, p_opt_val + half), n_points)
     # make sure the optimum itself is included so profile_cost has a true minimum
     return np.sort(np.unique(np.concatenate([grid, [p_opt_val]])))
 

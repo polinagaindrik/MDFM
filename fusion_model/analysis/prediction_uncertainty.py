@@ -55,6 +55,7 @@ from scipy.stats import chi2
 from ..model.solving import (model_ODE_solution, get_bacterial_count, observable_NGS, observable_MALDI,
                              observable_platecount)
 from ..parameter_estimation.cost_function import ode_params_for_model, cost_initvals
+from ..model.ode_structure import initial_state
 from ..parameter_estimation.profile_likelihood import _read_csv_and_summary, rereference_to_best
 from ..tools.dataframe_functions import extract_observables_from_df
 
@@ -201,7 +202,7 @@ def simulate_experiment(param_ode, s_x, x0_log10, temp, setup, t_model):
     n_cl = setup['n_cl']
     t_model = np.asarray(t_model, dtype=float)
     const = [[temp], n_cl, setup['media']]
-    C0 = np.concatenate((10**np.asarray(x0_log10, dtype=float), np.ones(n_cl + 1)))
+    C0 = initial_state(setup['model'], 10**np.asarray(x0_log10, dtype=float), n_cl, ode_params_for_model(param_ode, setup), temp)
     nan = {'x': np.full((n_cl, len(t_model)), np.nan),
            'platecount': np.full((setup['n_media'], len(t_model)), np.nan),
            'maldi': np.full((setup['n_media'], n_cl, len(t_model)), np.nan),

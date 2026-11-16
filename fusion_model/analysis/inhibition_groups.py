@@ -69,6 +69,7 @@ def model_curves(param, calibr_setup, days=None):
     """
     from ..model.solving import model_ODE_solution
     from ..parameter_estimation.cost_function import ode_params_for_model
+    from ..model.ode_structure import initial_state
     p = np.asarray(param, dtype=float)
     n, n_media, exps = calibr_setup['n_cl'], calibr_setup['n_media'], calibr_setup['exps']
     days = np.asarray(calibr_setup['data_array'][0] if days is None else days, dtype=float)
@@ -76,7 +77,7 @@ def model_curves(param, calibr_setup, days=None):
     ode = ode_params_for_model(p[n * len(exps):-n * n_media], calibr_setup)
     curves = []
     for i, e in enumerate(exps):
-        c0 = np.concatenate((10. ** x0[i], np.ones(n + 1)))
+        c0 = initial_state(calibr_setup['model'], 10. ** x0[i], n, ode, calibr_setup['exp_temps'][e])
         c = model_ODE_solution(calibr_setup['model'], days, ode, c0, [[calibr_setup['exp_temps'][e]], n, calibr_setup['media']])
         curves.append(np.asarray(c)[n:2 * n])                       # x2 (species, days)
     return np.concatenate(curves, axis=1)

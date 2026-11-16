@@ -141,7 +141,7 @@ def build_calibr_setup(path, add_name, n_cl, n_media, define_setup, objective="n
     bact = list(df_maldi.index)
     assert len(bact) == n_cl and len(media) == n_media, (bact, media)
     calibr_presetup = {
-        "model": mdl.fusion_model2,
+        "model": mdl.model_for_inhibitor(result.get("inhibitor")),   # inhibitor pool F1 / F2 or the algebraic load
         "T_x": result["T_x"],
         "workers": 1,
         "output_path": path,

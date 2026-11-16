@@ -1,4 +1,6 @@
 from functools import lru_cache
+import json
+import os
 
 import numpy as np
 from scipy.optimize import brentq
@@ -593,6 +595,8 @@ def residuals_withS(param, calibr_setup, jac_spasity=None):
     With calibr_setup['s_max_penalty'], a 4th group [max(S) - 1] is appended (owner -1);
     total_cost_from_residuals combines the groups exactly like cost_withS.
     """
+    if calibr_setup.get('inhibitor_obs') is not None:
+        raise NotImplementedError('a measured inhibitor (inhibitor_obs) needs the JAX backend')
     n_cl = calibr_setup['n_cl']
     n_media = calibr_setup['n_media']
     exps_setup = calibr_setup['exps']
@@ -659,6 +663,43 @@ def residuals_direct(param, calibr_setup, jac_spasity=None):
     """Signed residuals of cost_direct (S fixed at calibr_setup['s_x'], param = [x0 | ODE]), see residuals_withS."""
     return residuals_withS(np.concatenate([np.asarray(param, dtype=float), np.ravel(calibr_setup['s_x'])]),
                            calibr_setup, jac_spasity)
+
+
+class InhibitorObsNeg2LogLik:
+    """
+    Aggregation with a measured inhibitor I(t) (inhibitor-pool models): the data aggregation of NGS, MALDI and plate
+    counts (aggregation_func, first three groups) plus the sum of squares of the I residuals (last group), which are
+    already divided by their known SD: -2 log L of log-normal I measurements, see attach_inhibitor_obs.
+    Only the JAX backend computes the I residuals.
+    """
+    def __init__(self, aggregation_func, n_inhibitor):
+        self.aggregation_func = aggregation_func
+        self.n_inhibitor = int(n_inhibitor)
+        self.n_data = list(getattr(aggregation_func, 'n_data', [])) + [self.n_inhibitor]
+
+    def __call__(self, sq_groups):
+        return self.aggregation_func(list(sq_groups[:-1])) + float(np.sum(sq_groups[-1]))
+
+
+def attach_inhibitor_obs(calibr_setup, path):
+    """
+    Measured inhibitor of a run: if <path>/inhibitor_obs.json exists ({'sd_log10', 'scale_known', 'values':
+    experiments x days of the data grid, None = not measured}), store it in calibr_setup['inhibitor_obs'] and wrap
+    calibr_setup['aggregation_func'] in InhibitorObsNeg2LogLik. Returns True if attached.
+    Residuals (JAX backend): (log10 y - log10 I_model) / sd_log10 with I_model = J_0 (a_0 = 1); scale unknown:
+    the residuals of each run are centred (the log10 scale factor is profiled out).
+    """
+    f = os.path.join(path, 'inhibitor_obs.json')
+    if not os.path.exists(f) or isinstance(calibr_setup.get('aggregation_func'), InhibitorObsNeg2LogLik):
+        return False
+    with open(f) as fh:
+        obs = json.load(fh)
+    values = np.array([[np.nan if v is None else v for v in row] for row in obs['values']], dtype=float)
+    calibr_setup['inhibitor_obs'] = dict(values=values, sd_log10=float(obs['sd_log10']),
+                                         scale_known=bool(obs['scale_known']))
+    calibr_setup['aggregation_func'] = InhibitorObsNeg2LogLik(calibr_setup['aggregation_func'],
+                                                              int(np.isfinite(values).sum()))
+    return True
 
 
 class TotalCostFromResiduals:
@@ -752,6 +793,8 @@ def cost_withS(param, calibr_setup, jac_spasity):
     exps = calibr_setup['exps']
     # The optimization vector is [initial values per experiment, ODE parameters,
     # flattened media-by-cluster filtering weights].
+    if calibr_setup.get('inhibitor_obs') is not None:
+        raise NotImplementedError('a measured inhibitor (inhibitor_obs) needs the JAX backend')
     param_ode = param[n_cl*len(exps):-n_cl*n_media]
     s_x = np.array(param)[-n_cl*n_media:].reshape((n_media, n_cl))
     x0_vals = param[:n_cl*len(exps)]

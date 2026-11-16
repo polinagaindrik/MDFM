@@ -40,6 +40,9 @@ from .cost_function import (cost_sum_and_geometric_mean, relative_mask, _noise_m
 def _jax_aggregation(agg):
     """JAX function of the list [SSR_ngs, SSR_maldi, SSR_platecount] equal to the numpy aggregation agg."""
     use = None
+    if type(agg).__name__ == "InhibitorObsNeg2LogLik":   # data aggregation + known-SD inhibitor group (last)
+        inner = _jax_aggregation(agg.aggregation_func)
+        return lambda ssr: inner(list(ssr[:-1])) + ssr[-1]
     if isinstance(agg, SelectedDataTypes):
         agg, use = agg.aggregation_func, list(agg.use)
     name = type(agg).__name__
@@ -128,6 +131,13 @@ class JaxCost:
         self.platecount_max = np.nanmax(self.obs[2], axis=(0, 1))
         self.agg = _jax_aggregation(calibr_setup["aggregation_func"])
         self.penalty_w = float(calibr_setup.get("s_max_penalty") or 0.)
+        # measured inhibitor I(t) = J_0 (cost_function.attach_inhibitor_obs): values (n_exps, n_days), NaN = not measured
+        io = calibr_setup.get("inhibitor_obs")
+        self.I_obs = None
+        if io is not None:
+            v = np.asarray(io["values"], dtype=float)
+            self.I_obs = dict(mask=np.isfinite(v), log10=np.log10(np.where(np.isfinite(v) & (v > 0), v, 1.0)),
+                              sd=float(io["sd_log10"]), known=bool(io["scale_known"]))
         self.n_total = _n_total_points(calibr_setup["aggregation_func"])
         self.lambda_tref = calibr_setup.get("lambda_tref")  # see cost_function.ode_params_for_model
         self.k_structure = calibr_setup.get("k_structure")  # reduced inhibition matrix, see cost_function
@@ -178,6 +188,12 @@ class JaxCost:
 
     def _solve_one(self, x0_log, temp, ode, adjoint):
         n = self.n_cl
+        ys = self._solve_states(x0_log, temp, ode, adjoint)
+        return (ys[:, :n] + ys[:, n:2 * n]).T  # bacterial counts (n_cl, n_days)
+
+    def _solve_states(self, x0_log, temp, ode, adjoint):
+        """All states at the days (n_days, n_states): [x1, x2, (J,) R]."""
+        n = self.n_cl
         nmax = 10.0 ** ode[4 * n] * temp ** ode[4 * n + 1]
         r0 = 1.0 - (jnp.sum(10.0 ** x0_log) + n) / nmax          # R = free fraction of the capacity (conservation law)
         y0 = jnp.concatenate([10.0 ** x0_log, jnp.ones(n)] + ([jnp.zeros(n)] if self.inhibitor != "algebraic" else [])
@@ -187,8 +203,7 @@ class JaxCost:
                                   dt0=None, y0=y0, args=(ode, temp), saveat=diffrax.SaveAt(ts=self.days),
                                   stepsize_controller=diffrax.PIDController(rtol=self.rtol, atol=self.atol),
                                   max_steps=self.max_steps, adjoint=adj, throw=False)
-        ys = sol.ys  # (n_days, 2n+1)
-        return (ys[:, :n] + ys[:, n:2 * n]).T  # bacterial counts (n_cl, n_days)
+        return sol.ys
 
     def _observables(self, p, adjoint):
         n, m = self.n_cl, self.n_media
@@ -237,12 +252,26 @@ class JaxCost:
             out.append(r[mask])
         return out
 
+    def _inhibitor_residual(self, p, adjoint):
+        """(log10 y - log10 J_0) / sd of the measured inhibitor; scale unknown: centred over all measurements."""
+        n = self.n_cl
+        x0 = p[self.slices[0]].reshape(self.n_exps, n)
+        ode = ode_params_for_model(p[self.slices[1]], {"lambda_tref": self.lambda_tref, "k_structure": self.k_structure, "k_groups": self.k_groups, "lambda_mode": self.lambda_mode, "lambda_groups": self.lambda_groups, "n_cl": n}, xp=jnp)
+        J0 = jax.vmap(lambda x, T: self._solve_states(x, T, ode, adjoint)[:, 2 * n])(x0, jnp.asarray(self.temps))
+        mask = self.I_obs["mask"]
+        d = (self.I_obs["log10"] - jnp.log10(jnp.maximum(J0, 1e-300)))[mask]
+        if not self.I_obs["known"]:
+            d = d - jnp.mean(d)
+        return d / self.I_obs["sd"]
+
     def _penalty_residual(self, p):
         s_x = p[-self.n_cl * self.n_media:]
         return jnp.max(s_x) - 1.0
 
     def _residuals_fn(self, p, adjoint):
         groups = self._residual_groups(p, adjoint)
+        if self.I_obs is not None:
+            groups = groups + [self._inhibitor_residual(p, adjoint)]
         if self.penalty_w:
             groups = groups + [jnp.atleast_1d(self._penalty_residual(p))]
         return groups
@@ -252,6 +281,8 @@ class JaxCost:
 
     def _structured_jacobian(self, p):
         """d residual_vector / d p: ODE sensitivities per experiment, then the chain rule through the observables."""
+        if self.I_obs is not None:
+            raise NotImplementedError("structured_jacobian does not support a measured inhibitor (inhibitor_obs)")
         n, m = self.n_cl, self.n_media
         raw = p[self.slices[1]]
         idx = jnp.asarray(self.ode_free)
@@ -285,6 +316,8 @@ class JaxCost:
 
     def _cost_fn(self, p):
         groups = self._residual_groups(p, "reverse")
+        if self.I_obs is not None:
+            groups = groups + [self._inhibitor_residual(p, "reverse")]
         c = self.agg([jnp.sum(r ** 2) for r in groups])
         if self.penalty_w:
             p_sq = self._penalty_residual(p) ** 2
@@ -328,7 +361,8 @@ class JaxCost:
         return np.asarray(self._jac(pf))[:, :n]
 
     def group_sizes(self):
-        return [int(m.sum()) for m in self.masks] + ([1] if self.penalty_w else [])
+        return ([int(m.sum()) for m in self.masks] + ([int(self.I_obs["mask"].sum())] if self.I_obs is not None else [])
+                + ([1] if self.penalty_w else []))
 
 
 _CACHE = {}
@@ -379,6 +413,9 @@ def jax_cost_for(calibr_setup, **kwargs):
            tuple(np.ravel(calibr_setup.get("lambda_tref", ()))), calibr_setup.get("k_structure"),
            None if calibr_setup.get("k_groups") is None else tuple(calibr_setup["k_groups"]),
            calibr_setup.get("lambda_mode"), getattr(calibr_setup.get("model"), "__name__", None),
+           None if calibr_setup.get("inhibitor_obs") is None else
+           (calibr_setup["inhibitor_obs"]["sd_log10"], calibr_setup["inhibitor_obs"]["scale_known"],
+            _hashable(calibr_setup["inhibitor_obs"]["values"])),
            None if calibr_setup.get("lambda_groups") is None else tuple(calibr_setup["lambda_groups"]),
            tuple(sorted(kwargs.items())))
     if key not in _CACHE:

@@ -171,6 +171,12 @@ def build_calibr_setup(path, add_name, n_cl, n_media, define_setup, objective="n
     elif objective == "geomean":
         calibr_setup["aggregation_func"] = pl.make_geomean_neg2loglik(calibr_setup["data_array"],
                                                                       calibr_setup["noise_model"])
+    # measured inhibitor I(t) of the calibration (inhibitor_obs.json in the calibration folder)
+    from .cost_function import attach_inhibitor_obs
+    if attach_inhibitor_obs(calibr_setup, path):
+        io = calibr_setup["inhibitor_obs"]
+        print(f"Calibration used a measured inhibitor: sd {io['sd_log10']} log10, scale "
+              f"{'known' if io['scale_known'] else 'unknown'}, {calibr_setup['aggregation_func'].n_inhibitor} points")
     # reduced inhibition structure, strength groups and lag model of the calibration (stored in its result)
     structure = result.get("k_structure") or "full"
     if structure != "full":

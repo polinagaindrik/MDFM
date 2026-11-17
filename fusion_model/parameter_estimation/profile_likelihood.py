@@ -851,6 +851,8 @@ def estimate_profile_scale(cost_func, param_opt, calibr_setup, cost_opt, n_free_
     agg = calibr_setup.get("aggregation_func")
     if isinstance(agg, GaussianNeg2LogLik):  # already -2 log L, no counting needed
         return 1.0, int(sum(agg.n_data)), None
+    if type(agg).__name__ == "InhibitorObsNeg2LogLik" and isinstance(agg.aggregation_func, GaussianNeg2LogLik):
+        return 1.0, int(sum(agg.n_data)), None  # -2 log L of the data plus the measured inhibitor (cost_function)
     if getattr(cost_func, "__name__", "") in ("cost_withS_jax", "cost_direct_jax"):  # counting: numpy cost
         from .cost_function import cost_withS, cost_direct
         cost_func = cost_withS if cost_func.__name__ == "cost_withS_jax" else cost_direct

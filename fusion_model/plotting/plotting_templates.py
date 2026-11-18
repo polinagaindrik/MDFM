@@ -45,6 +45,98 @@ colors_ngs = np.array([[230, 25, 75],  [228, 188, 92], [245, 130, 48], [60, 180,
                            [69, 64, 64],   [235, 236, 229],[244, 143, 40], [225, 217, 27], [18, 176, 44],])
 colors_ngs = colors_ngs/ 255
 
+# Species, media and inhibitor colours of the paper figures (filled markers, one shape per species).
+# Species 1-6 are the most distinct colours (6-species figures use only these); 7-12 added for larger systems.
+# Brown/tan are reserved for the toxin / inhibitor, the media colours are not used by any species.
+species_colors = ['#00356B', '#ED733E', '#386641', '#C3568A', '#E2B100', '#7E57A5',
+                  '#0982A4', '#D70040', '#88CCEE', '#44AA99', '#999933', '#332288']
+species_markers = ['o', 's', '^', 'D', 'v', 'P', 'X', '<', '>', 'h', 'p', '*']
+media_colors = {'selective': ['#DC4C50', '#9E3436'], 'general': ['#3781BD', '#2C5F7F']}
+inhibitor_color = '#99582A'
+inhibitor_color_light = '#c79758'
+
+
+# Style of the per-experiment figures (plotting_results.plot_opt_res_*). Default: legend, title and panel letter in
+# each figure. Paper style (set_paper_style(True)): none of these (one legend strip per figure, save_legend_strip;
+# letters added in LaTeX), thin error bars, white marker edges, data points of the species slightly offset in time,
+# species numbered from 1, axis limits fitted to the data (no headroom for an in-panel legend).
+# Paper style panels are made at their printed size (half the text width of main.tex, 16 cm), to be included at
+# scale 1: 8-9 pt text like the captions.
+paper_style = dict(legend=True, title=True, panel_label=True, thin_errorbars=False, dodge=0., number_from=None,
+                   tight=False, label_fs=15, tick_fs=13, ylabel_x=r'log $x(t)$', ylabel_pc=r'log CFU mL$^{-1}$',
+                   maldi_band=False)   # maldi_band: MALDI without error bars, +-1 SD band around the model
+PAPER_RC = {'figure.figsize': (3.05, 2.05), 'lines.linewidth': 1.2, 'lines.markersize': 4.5, 'axes.linewidth': 0.6,
+            'xtick.major.width': 0.6, 'ytick.major.width': 0.6, 'xtick.minor.width': 0.4, 'ytick.minor.width': 0.4,
+            'xtick.major.size': 2.5, 'ytick.major.size': 2.5, 'xtick.minor.size': 1.5, 'ytick.minor.size': 1.5,
+            'legend.fontsize': 8, 'savefig.pad_inches': 0.01}
+_rc_default = {}
+
+
+def set_paper_style(on=True, **kwargs):
+    """Switch the paper style on (on=True) or back to the default; kwargs override single entries."""
+    paper_style.update(legend=not on, title=not on, panel_label=not on, thin_errorbars=on,
+                       dodge=0.18 if on else 0., number_from=1 if on else None, tight=on,
+                       label_fs=9 if on else 15, tick_fs=8 if on else 13,
+                       ylabel_x=r'$x(t)$ [CFU/mL]' if on else r'log $x(t)$',
+                       ylabel_pc=r'$\lVert S \mathbf{x} \rVert$ [CFU/mL]' if on else r'log CFU mL$^{-1}$')
+    paper_style.update(kwargs)
+    if on:
+        if not _rc_default:
+            _rc_default.update({k: plt.rcParams[k] for k in PAPER_RC})
+        plt.rcParams.update(PAPER_RC)
+    elif _rc_default:
+        plt.rcParams.update(_rc_default)
+
+
+def errorbar_kwargs():
+    """Keyword arguments of ax.errorbar for the data points in the current style."""
+    if paper_style['thin_errorbars']:
+        return dict(capsize=0., elinewidth=0.7, markeredgecolor='white', markeredgewidth=0.25, markersize=3.2)
+    return dict(capsize=3)
+
+
+def dodge(days, k, n):
+    """Days of the data points of species k of n, offset by paper_style['dodge'] per species (0: unchanged)."""
+    return np.asarray(days, dtype=float) + (k - (n - 1) / 2) * paper_style['dodge']
+
+
+def tight_xlim(ax, days, n):
+    """x range of the data days with half a day margin (more if the offset of n species needs it; paper style)."""
+    span = max(0.5, 0.15 + (n - 1) / 2 * paper_style['dodge'])
+    ax.set_xlim(np.min(days) - span, np.max(days) + span)
+
+
+def errorbar_top(y, err):
+    """Highest upper end of error bars (err: scalar, (n,) or (2, n) as in ax.errorbar)."""
+    y = np.asarray(y, dtype=float)
+    up = np.asarray(err, dtype=float)
+    up = up[1] if up.ndim == 2 else up
+    return float(np.nanmax(y + np.broadcast_to(up, y.shape)))
+
+
+def species_color(k):
+    """Colour of species k (0-based); cycles beyond 12 species."""
+    return species_colors[k % len(species_colors)]
+
+
+def species_marker(k):
+    """Filled marker shape of species k (0-based); cycles beyond 12 species."""
+    return species_markers[k % len(species_markers)]
+
+
+def species_colors_dict(bact_all):
+    """{species name: colour} in the order of bact_all."""
+    return {b: species_color(k) for k, b in enumerate(bact_all)}
+
+
+def medium_color(med, media=None):
+    """Colour of a medium: rose for selective, blue for general media (a second medium of the same kind darker)."""
+    general = med.startswith('gen') or med in ('PC', 'media1')
+    same = [m for m in (media if media is not None else [med])
+            if (m.startswith('gen') or m in ('PC', 'media1')) == general]
+    clrs = media_colors['general' if general else 'selective']
+    return clrs[(same.index(med) if med in same else 0) % len(clrs)]
+
 blue_colors = [
     '#00FFFF', '#89CFF0', '#0000FF', '#7393B3', '#0096FF', '#0047AB', '#6495ED', '#00008B', '#5D3FD3', '#A7C7E7',
     '#4169E1', '#008080', '#000080'
@@ -164,9 +256,9 @@ def template_fig_1_temp(temp_plot, xlabel, ylabel, tcr, time_lim=[]):
 
 def set_labels(fig, ax, xlabel, y_label):
     """Set axis labels and tick styling on a figure axis."""
-    ax.set_xlabel(xlabel, fontsize=15)
-    ax.tick_params(labelsize=13)
-    ax.set_ylabel(y_label, fontsize=15)
+    ax.set_xlabel(xlabel, fontsize=paper_style['label_fs'])
+    ax.tick_params(labelsize=paper_style['tick_fs'])
+    ax.set_ylabel(y_label, fontsize=paper_style['label_fs'])
     return fig, ax
 
 

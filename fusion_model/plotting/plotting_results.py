@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
 from matplotlib import rcParams
 import numpy as np
 
@@ -34,8 +35,8 @@ def define_bacteria_colors(df_ngs, df_maldi):
     df_maldi, bact_maldi = dtf.preprocess_dataframe(df_maldi, cutoff=0.)
     bact_all = sorted(set(list(bact_ngs.values) + list(bact_maldi.values)))
     clrs1 = {}
-    for b, c in zip(bact_all, plt_templ.colors_ngs[0:]):
-        clrs1[b] = c
+    for k, b in enumerate(bact_all):
+        clrs1[b] = plt_templ.species_color(k)
     return clrs1
 
 
@@ -70,14 +71,25 @@ def plot_filteringS2(dfs, opt_param, T_x, exps, path='', clrs=None):
         plt.close(fig)
     
 
-def plot_optimization_result(param_x0, calibr_setup, t_model, **kwargs):
-    """Plot model predictions against observations for a calibration result."""
+def plot_optimization_result(param_x0, calibr_setup, t_model, true_param=None, true_s_x=None, ensemble=None, **kwargs):
+    """Plot model predictions against observations for a calibration result.
+    true_param: [x0 (log10) | ODE] of the true model (in-silico data), same layout as param_x0, with media matrix
+                true_s_x: drawn dashed.
+    ensemble  : list of (param [x0 | ODE], s_x) compatible with the data (e.g. fm.pred_unc.ensemble_from_profile_csv,
+                mapped to this layout): shaded band = envelope over the members and the fit."""
     data = calibr_setup['dfs']
     exps = sorted(list(set([s.split('_')[0] for s in data[0].columns])))
     n_cl = np.shape(data[1])[0]
-    param_opt = param_x0[n_cl*len(exps):]
+    n0 = n_cl*len(exps)
+    param_opt = param_x0[n0:]
     for i, exp in enumerate(exps):
-        plot_one_exp_model(exp, param_opt, 10**np.array(param_x0[n_cl*i:n_cl*(i+1)]), calibr_setup, t_model, media=calibr_setup['media'], **kwargs)
+        sl = slice(n_cl*i, n_cl*(i+1))
+        true = None if true_param is None else \
+            (np.asarray(true_param, dtype=float)[n0:], 10**np.asarray(true_param, dtype=float)[sl], true_s_x)
+        members = None if ensemble is None else \
+            [(np.asarray(p, dtype=float)[n0:], 10**np.asarray(p, dtype=float)[sl], sx) for p, sx in ensemble]
+        plot_one_exp_model(exp, param_opt, 10**np.array(param_x0[sl]), calibr_setup, t_model, media=calibr_setup['media'],
+                           true=true, members=members, **kwargs)
 
 
 def plot_prediction_result(param, x0_dict, prediction_setup, t_model, **kwargs):
@@ -109,26 +121,119 @@ def medium_label(med):
 
 
 def species_label(bact):
-    """Name of a species in the figures, as in the parameter names: 'Bacteria_00' -> 'Species 00'."""
+    """Name of a species in the figures, as in the parameter names: 'Bacteria_00' -> 'Species 00'
+    (paper style: numbered from 1, 'Bacteria_00' -> 'Species 1')."""
     suffix = bact.split('_')[-1]
-    return f'Species {suffix}' if suffix.isdigit() else bact
+    if not suffix.isdigit():
+        return bact
+    start = plt_templ.paper_style['number_from']
+    return f'Species {int(suffix) + start}' if start is not None else f'Species {suffix}'
 
 
 def species_legend(ax, lines, outside=False, **kwargs):
-    """Legend of the species: inside the axes with kwargs, or outside right of the axes, centred vertically."""
+    """Legend of the species: inside the axes with kwargs, or outside right of the axes, centred vertically
+    (none in the paper style: save_legend_strip)."""
+    if not plt_templ.paper_style['legend']:
+        return None
     if outside:
         return ax.legend(handles=lines, loc='center left', bbox_to_anchor=(1.02, 0.5), borderaxespad=0., ncol=1)
     return ax.legend(handles=lines, **kwargs)
 
 
+def _errorbar(ax, x, y, **kwargs):
+    """Data points with error bars in the current style (paper style: light, thin bars without caps)."""
+    cont = ax.errorbar(x, y, **{**plt_templ.errorbar_kwargs(), **kwargs})
+    if plt_templ.paper_style['thin_errorbars']:
+        for bars in cont[2]:
+            bars.set_alpha(0.45)
+    return cont
+
+
+def _model_extras(ax, t, true, band, clr):
+    """True model (dashed) and band of the fit (shaded) of one curve; returns their maximum (for the y range)."""
+    top = -np.inf
+    if band is not None:
+        ax.fill_between(t, band[0], band[1], color=clr, alpha=0.22, lw=0, zorder=0.5)
+        top = max(top, float(np.nanmax(band[1])))
+    if true is not None:
+        ax.plot(t, true, color=clr, ls=(0, (3, 2)), lw=0.75*rcParams['lines.linewidth'])
+        top = max(top, float(np.nanmax(true)))
+    return top
+
+
+def _sub(arr, *idx):
+    """arr[idx] of an optional array / (lo, hi) pair."""
+    if arr is None:
+        return None
+    if isinstance(arr, tuple):
+        return tuple(_sub(a, *idx) for a in arr)
+    out = arr
+    for i in idx:
+        out = out[i]
+    return out
+
+
+def _panel_letter(ax, coord, letter):
+    """Panel letter inside the axes (none in the paper style: added in LaTeX)."""
+    if plt_templ.paper_style['panel_label']:
+        ax.text(*coord, letter, fontsize=20, horizontalalignment='center', verticalalignment='center',
+                transform=ax.transAxes)
+
+
+def _title(ax, title):
+    """Title of a figure (none in the paper style: the caption says what the panel shows)."""
+    if title is not None and plt_templ.paper_style['title']:
+        ax.set_title(title, fontsize=13)
+
+
+def save_legend_strip(bact_all, path, media=(), clrs=None, model_label='fitted model', model_ls='-', fname=None,
+                      fontsize=None, true_model=False, band_label=None, maldi_band=False):
+    """One legend for all panels of a paper figure, two rows filled column by column:
+    data / model, [true model / band, MALDI +-1 SD], general / selective medium (if media), species 1 / 2, 3 / 4, ...
+    true_model: entry of the dashed true model; band_label: entry of the shaded band (e.g. '95% confidence');
+    maldi_band: entry of the MALDI spread band (paper_style['maldi_band']).
+    Written to path + fname (default 'Legend_strip.pdf'); include it above the panels in LaTeX."""
+    paper = plt_templ.paper_style['tight']   # paper style: printed size (text width 16 cm), 8 pt
+    fontsize = fontsize or (8 if paper else 15)
+    msize = 3.6 if paper else 8
+
+    def mk(color, marker, label, size=msize, ls='-'):
+        return mlines.Line2D([], [], color=color, marker=marker, markeredgecolor='white', markersize=size, ls=ls,
+                             label=label)
+    h = [mlines.Line2D([], [], color='0.3', ls='none', marker='o', markersize=msize*0.75, label='data'),
+         mlines.Line2D([], [], color='0.3', ls=model_ls, label=model_label)]
+    if true_model:
+        h.append(mlines.Line2D([], [], color='0.3', ls=(0, (3, 2)), lw=0.75*rcParams['lines.linewidth'],
+                               label='true model'))
+    if band_label:
+        h.append(mpatches.Patch(color='0.3', alpha=0.22, lw=0, label=band_label))
+    if maldi_band:
+        h.append(mpatches.Patch(color='0.3', alpha=0.10, lw=0, label=r'MALDI $\pm$1 SD'))
+    if len(h) % 2:   # keep the pairs of the next groups in columns
+        h.append(mlines.Line2D([], [], ls='none', label=' '))
+    for med in sorted(media, key=lambda m: not is_general_medium(m)):
+        h.append(mk(plt_templ.medium_color(med, list(media)), 'o',
+                    f"{'general' if is_general_medium(med) else 'selective'} medium"))
+    for k, b in enumerate(bact_all):
+        h.append(mk(clrs[b] if clrs is not None else plt_templ.species_color(k), plt_templ.species_marker(k),
+                    species_label(b)))
+    fig = plt.figure(figsize=(6.3, 0.45) if paper else (14, 1.0))
+    fig.legend(handles=h, loc='center', ncol=int(np.ceil(len(h) / 2)), frameon=False, fontsize=fontsize,
+               handlelength=2.2, columnspacing=1.2 if paper else 1.6)
+    fig.savefig(path + (fname or 'Legend_strip.pdf'), bbox_inches='tight')
+    plt.close(fig)
+
+
 def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=[''], clrs=None, path='', add_name='',
                        relnoise=0.1, maldi_n=None, platecount_log10_sd=None, ngs_dm=None, time_label=r'Time, $t$',
-                       legend_outside=False):
+                       legend_outside=False, true=None, members=None):
     """Plot one experiment's predicted bacterial counts and observation types
     (error bars: relnoise * data of plate counts, MALDI and NGS; maldi_n: MALDI as N identified colonies per plate,
     see plot_opt_res_maldi; platecount_log10_sd: plate count noise on log10 of the counts, see plot_opt_res_platecount;
     ngs_dm: NGS as (reads N, concentration A), see plot_opt_res_ngs; time_label: x-axis label, e.g. r'Time, $t$ [day]';
-    legend_outside: legend of the species right of the axes, centred vertically)."""
+    legend_outside: legend of the species right of the axes, centred vertically;
+    true: (ODE parameters, L0, s_x) of the true model, drawn dashed; members: list of such tuples, shaded band =
+    envelope over the members and the fit)."""
     data = prediction_setup['dfs']
     n_cl = np.shape(data[1])[0]
 
@@ -142,16 +247,28 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
     days = dtf.get_meas_days(df_platecount0, exp)
     t_model = np.linspace(0., np.max(days)+0.7, 100)
     const = [[temp], n_cl, media]
-    # lag cells, growing cells 1, inhibitor loads 0 (pool models), exact R(0) (model.ode_structure.initial_state)
-    C0_opt = mdl.initial_state(prediction_setup['model'], L0, n_cl, param_opt, temp)
-    C = mdl.model_ODE_solution(prediction_setup['model'], t_model, param_opt, C0_opt, const)
 
-    n_C = mdl.get_bacterial_count(C, n_cl, 2)
-    n_C0 = mdl.get_bacterial_count(np.array(C0_opt).reshape(len(C0_opt), 1), n_cl, 2)
+    def observables(ode, L0_, s_x):
+        """x(t), NGS, MALDI, plate counts on t_model."""
+        # lag cells, growing cells 1, inhibitor loads 0 (pool models), exact R(0) (model.ode_structure.initial_state)
+        C0 = mdl.initial_state(prediction_setup['model'], L0_, n_cl, ode, temp)
+        C = mdl.model_ODE_solution(prediction_setup['model'], t_model, ode, C0, const)
+        nC = mdl.get_bacterial_count(C, n_cl, 2)
+        nC0 = mdl.get_bacterial_count(np.array(C0).reshape(len(C0), 1), n_cl, 2)
+        _, o_ngs = mdl.observable_NGS(t_model, nC, prediction_setup['T_x'], nC0, const, t_model)
+        _, o_maldi = mdl.observable_MALDI(t_model, nC, s_x, nC0, const, t_model)
+        _, o_pc = mdl.observable_platecount(t_model, nC, s_x, nC0, const, t_model)
+        return dict(x=np.asarray(nC, dtype=float), ngs=np.asarray(o_ngs, dtype=float),
+                    maldi=np.asarray(o_maldi, dtype=float), pc=np.asarray(o_pc, dtype=float))
 
-    days_ngs, obs_ngs = mdl.observable_NGS(t_model, n_C, prediction_setup['T_x'], n_C0, const, t_model)
-    days_maldi, obs_maldi = mdl.observable_MALDI(t_model, n_C, prediction_setup['s_x'], n_C0, const, t_model)
-    days_platecount, obs_platecount = mdl.observable_platecount(t_model, n_C, prediction_setup['s_x'], n_C0, const, t_model)
+    fit = observables(param_opt, L0, prediction_setup['s_x'])
+    n_C, obs_ngs, obs_maldi, obs_platecount = fit['x'], fit['ngs'], fit['maldi'], fit['pc']
+    days_ngs = days_maldi = days_platecount = t_model
+    obs_true = observables(*true) if true is not None else {}
+    band = {}
+    if members:
+        curves = [observables(*m) for m in members] + [fit]
+        band = {k: (np.nanmin([c[k] for c in curves], axis=0), np.nanmax([c[k] for c in curves], axis=0)) for k in fit}
 
     #f_x = mdl.media_filtering(t_model, n_C, prediction_setup['s_x'], n_C0, const)
 
@@ -159,20 +276,25 @@ def plot_one_exp_model(exp, param_opt, L0, prediction_setup, t_model, media=['']
     # real data has no measurement of x (df_x0 is the NGS data, only for the days and species): model curves only
     plot_opt_res_realx(df_x0, t_model, n_C, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name,
                        title=f'Cells, {where}' if len(data) == 4 else f'$x(t)$, {where}', time_label=time_label,
-                       legend_outside=legend_outside, plot_meas=len(data) == 4)
+                       legend_outside=legend_outside, plot_meas=len(data) == 4, obs_true=obs_true.get('x'),
+                       band=band.get('x'))
     #for i in range (len(media)):
     #    plot_opt_res_realx(df_x0, t_model, f_x[i], exp, path=path+f'Sx_{media[i]}_', clrs=clrs, add_name=add_name, plot_meas=False,
     #                       title=f'Cells recovered on {medium_label(media[i])}, {where}')
     plot_opt_res_ngs(df_ngs0, days_ngs, obs_ngs, exp, path=path+'Param_estim_', clrs=clrs, add_name=add_name,
-                     relnoise=relnoise, ngs_dm=ngs_dm, title=f'NGS, {where}', time_label=time_label, legend_outside=legend_outside)
+                     relnoise=relnoise, ngs_dm=ngs_dm, title=f'NGS, {where}', time_label=time_label, legend_outside=legend_outside,
+                     obs_true=obs_true.get('ngs'), band=band.get('ngs'))
     plot_opt_res_maldi(df_maldi0, days_maldi, obs_maldi, exp, media=media, path=path+'Param_estim_', clrs=clrs,
-                       add_name=add_name, relnoise=relnoise, maldi_n=maldi_n, title=where, time_label=time_label, legend_outside=legend_outside)
+                       add_name=add_name, relnoise=relnoise, maldi_n=maldi_n, title=where, time_label=time_label, legend_outside=legend_outside,
+                       obs_true=obs_true.get('maldi'), band=band.get('maldi'))
     plot_opt_res_platecount(df_platecount0, days_platecount, obs_platecount, exp, media=media, path=path+'Param_estim_', add_name=add_name,
-                      relnoise=relnoise, log10_sd=platecount_log10_sd, title=f'Plate counts, {where}', time_label=time_label)
+                      relnoise=relnoise, log10_sd=platecount_log10_sd, title=f'Plate counts, {where}', time_label=time_label,
+                      obs_true=obs_true.get('pc'), band=band.get('pc'))
 
 
 def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add_name='', clrs=None, relnoise=0.1,
-                     title=None, ngs_dm=None, relnoise_of_model=False, time_label=r'Time, $t$', legend_outside=False):
+                     title=None, ngs_dm=None, relnoise_of_model=False, time_label=r'Time, $t$', legend_outside=False,
+                     obs_true=None, band=None):
     """Plot modeled NGS proportions against measurements for one experiment
     (error bars std, if None relnoise * data; ngs_dm = (N, A): Dirichlet-multinomial standard deviation;
     relnoise_of_model: relnoise * model at the measured days, the SD of data with relative Gaussian noise)."""
@@ -181,7 +303,7 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
     days_meas = [float(f.split('_')[3]) for f in df_ngs0.columns]
     obs_meas = np.array([df_ngs0[f] for f in df_ngs0.columns])
     days_meas, obs_meas = zip(*sorted(zip(days_meas, obs_meas)))
-    lines = []
+    lines, tops = [], []
     for k, (o_n, o_meas, bact) in enumerate(zip(np.array(obs_model), np.array(obs_meas).T, df_ngs0.T.columns)):
         err = relnoise*o_meas if std is None else std
         if std is None and ngs_dm is not None:
@@ -191,21 +313,28 @@ def plot_opt_res_ngs(df_ngs0, days_model, obs_model, exp, std=None, path='', add
         if clrs is not None:
             clr = clrs[bact]
         else:
-            clr = plt_templ.colors_ngs[4*k]
-        ax.errorbar(days_meas, o_meas, yerr=err, fmt='o', capsize=3, color=clr, label=f'{bact}') # , label=f'Data Cl. {k}'
+            clr = plt_templ.species_color(k)
+        mrk = plt_templ.species_marker(k)
+        _errorbar(ax, plt_templ.dodge(days_meas, k, len(obs_model)), o_meas, yerr=err, fmt=mrk, color=clr, label=f'{bact}')
+        tops.append(max(plt_templ.errorbar_top(o_meas, err), float(np.nanmax(o_n)),
+                        _model_extras(ax, days_model, _sub(obs_true, k), _sub(band, k), clr)))
         #ax.scatter(days_model, o_n,label=f'{bact}', color='w', marker='o', s=40, edgecolors=clr)
         ax.plot(days_model, o_n, color=clr)
-        lines.append(mlines.Line2D([], [], color=clr, marker='o', label=species_label(bact)))
+        lines.append(mlines.Line2D([], [], color=clr, marker=mrk, label=species_label(bact)))
     fig, ax = plt_templ.set_labels(fig, ax, time_label, r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$T \mathbf{x   } / \lVert T \mathbf{x} \rVert$')
     #ax.set_ylim(-0.05, 1.05)
-    ax.set_ylim(-0.05, np.max(obs_meas)*(1+0.2)+0.1)
-    ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
+    if plt_templ.paper_style['tight']:   # no headroom for a legend
+        top = max(tops)
+        ax.set_ylim(-0.025*top, top*1.04)
+        plt_templ.tight_xlim(ax, days_meas, len(obs_model))
+    else:
+        ax.set_ylim(-0.05, np.max(obs_meas)*(1+0.2)+0.1)
+        ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
     coord_text = (0.06, 0.92)
-    ax.text(*coord_text, '(b)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+    _panel_letter(ax, coord_text, '(b)')
     species_legend(ax, lines, legend_outside, ncol=2)
-    if title is not None:
-        ax.set_title(title, fontsize=13)
+    _title(ax, title)
     #ax.legend(fontsize=13, framealpha=0., handlelength=2., bbox_to_anchor=(1.,1.))# bbox_to_anchor=(1., 0.1, 0.5, 0.5))#, bbox_to_anchor=(1, 1)) # 
     plt.savefig(path+exp+add_name+'_ngs.pdf', bbox_inches='tight')
     plt.close(fig)
@@ -221,7 +350,8 @@ def wilson_error_bars(p, n, z=1.):
 
 
 def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=[' '], path='', add_name='', clrs=None,
-                       relnoise=0.1, maldi_n=None, title=None, relnoise_of_model=False, time_label=r'Time, $t$', legend_outside=False):
+                       relnoise=0.1, maldi_n=None, title=None, relnoise_of_model=False, time_label=r'Time, $t$', legend_outside=False,
+                       obs_true=None, band=None):
     """Plot modeled MALDI proportions against measurements for one experiment
     (error bars std, if None relnoise * data; maldi_n = N identified colonies per plate: wilson_error_bars;
     relnoise_of_model: relnoise * model at the measured days, the SD of data with relative Gaussian noise).
@@ -234,12 +364,13 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
         obs_meas = np.array([df_maldi0.filter(like=med)[f] for f in df_maldi0.filter(like=med).columns])
         days_meas, obs_meas = zip(*sorted(zip(days_meas, obs_meas)))
         o_model = obs_model[j]
-        lines = []
+        lines, tops = [], []
         for k, (o_m, o_meas, bact) in enumerate(zip(np.array(o_model), np.array(obs_meas).T, df_maldi0.T.columns)):
             if clrs is not None:
                 clr = clrs[bact]
             else:
-                clr = plt_templ.colors_ngs[4*k]
+                clr = plt_templ.species_color(k)
+            mrk = plt_templ.species_marker(k)
             if std is not None:
                 err = std
             elif maldi_n is not None:
@@ -248,32 +379,47 @@ def plot_opt_res_maldi(df_maldi0, days_model, obs_model, exp, std=None, media=['
                 err = relnoise*np.interp(days_meas, days_model, o_m)
             else:
                 err = relnoise*o_meas
-            ax.errorbar(days_meas, o_meas, yerr=err, fmt='o', capsize=3, color=clr, label=f'{bact}')
+            if plt_templ.paper_style['maldi_band'] and maldi_n is not None:
+                # no error bars: expected spread of the data around the model (+-1 SD of the share, maldi_n colonies)
+                sd = np.sqrt(np.clip(o_m*(1 - o_m), 0., None)/maldi_n)
+                ax.fill_between(days_model, np.clip(o_m - sd, 0., None), o_m + sd, color=clr, alpha=0.10, lw=0, zorder=0.4)
+                kw = plt_templ.errorbar_kwargs()
+                ax.plot(plt_templ.dodge(days_meas, k, len(o_model)), o_meas, mrk, color=clr, ls='none', label=f'{bact}',
+                        **{key: kw[key] for key in ('markeredgecolor', 'markeredgewidth', 'markersize') if key in kw})
+                tops.append(max(float(np.nanmax(o_meas)), float(np.nanmax(o_m + sd))))
+            else:
+                _errorbar(ax, plt_templ.dodge(days_meas, k, len(o_model)), o_meas, yerr=err, fmt=mrk, color=clr, label=f'{bact}')
+                tops.append(max(plt_templ.errorbar_top(o_meas, err), float(np.nanmax(o_m))))
+            tops.append(_model_extras(ax, days_model, _sub(obs_true, j, k), _sub(band, j, k), clr))
             ax.plot(days_model, o_m, color=clr)
-            lines.append(mlines.Line2D([], [], color=clr, marker='o', label=species_label(bact)))
-        ax.set_ylim(-0.05, np.nanmax([np.nanmax(obs_meas), np.nanmax(o_model)])*1.1)#+0.1)
-        ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
+            lines.append(mlines.Line2D([], [], color=clr, marker=mrk, label=species_label(bact)))
+        if plt_templ.paper_style['tight']:   # no headroom for a legend
+            top = np.nanmax(tops)
+            ax.set_ylim(-0.025*top, top*1.04)
+            plt_templ.tight_xlim(ax, days_meas, len(o_model))
+        else:
+            ax.set_ylim(-0.05, np.nanmax([np.nanmax(obs_meas), np.nanmax(o_model)])*1.1)#+0.1)
+            ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
         fig, ax = plt_templ.set_labels(fig, ax, time_label, r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'$S \mathbf{x} / \lVert S \mathbf{x}\rVert$')
         
         coord_text = (0.06, 0.92)
         # (c) general, (d) selective medium; two media of the same kind: in their order
         first = j == 0 if len(media) > 1 and len(set(general)) == 1 else general[j]
-        ax.text(*coord_text, '(c)' if first else '(d)', fontsize=20,
-                horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+        _panel_letter(ax, coord_text, '(c)' if first else '(d)')
         if is_general_medium(med):
             species_legend(ax, lines, legend_outside, bbox_to_anchor=(0.72, 0.3))
         else:
             species_legend(ax, lines, legend_outside)
-        if title is not None:
-            ax.set_title(f'MALDI, {medium_label(med)}, {title}', fontsize=13)
+        _title(ax, None if title is None else f'MALDI, {medium_label(med)}, {title}')
         #ax.legend(bbox_to_anchor=(1., 1.))#, bbox_to_anchor=(1., 0.1, 0.5, 0.5)) #, bbox_to_anchor=(1, 1)
         plt.savefig(path+exp+add_name+f'_{med}'+'_maldi.pdf', bbox_inches='tight')
         plt.close(fig)
     
 
 def plot_opt_res_platecount(df_platecount0, days_model, obs_model, exp, std=None, media=[''], path='', add_name='', clrs=None,
-                      relnoise=0.1, log10_sd=None, title=None, relnoise_of_model=False, time_label=r'Time, $t$'):
+                      relnoise=0.1, log10_sd=None, title=None, relnoise_of_model=False, time_label=r'Time, $t$',
+                      obs_true=None, band=None):
     """Plot modeled plate counts counts against measurements for one experiment (error bars relnoise * data;
     log10_sd: noise on log10 of the counts, error bars +- log10_sd in log10 units;
     relnoise_of_model: relnoise * model at the measured days, the SD of data with relative Gaussian noise)."""
@@ -292,23 +438,29 @@ def plot_opt_res_platecount(df_platecount0, days_model, obs_model, exp, std=None
         o_model = obs_model[j]
         if log10_sd is None and relnoise_of_model:
             stds = relnoise*np.interp(days_meas, days_model, o_model)
-        ax.plot(days_model, o_model, color=plt_templ.colors_ngs[2*j], label=med_label+' (model)')
-        ax.errorbar(days_meas, obs_meas, yerr=stds, fmt='o', capsize=3, color=plt_templ.colors_ngs[2*j], label=med_label+' (data)')
-        lines.append(mlines.Line2D([], [], color=plt_templ.colors_ngs[2*j], marker='o', label=med_label))
+        med_clr = plt_templ.medium_color(med, media)
+        ax.plot(days_model, o_model, color=med_clr, label=med_label+' (model)')
+        _errorbar(ax, days_meas, obs_meas, yerr=stds, fmt='o', color=med_clr, label=med_label+' (data)')
+        lines.append(mlines.Line2D([], [], color=med_clr, marker='o', label=med_label))
+        _model_extras(ax, days_model, _sub(obs_true, j), _sub(band, j), med_clr)
     coord_text = (0.06, 0.92)
-    ax.text(*coord_text, '(a)', fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
+    _panel_letter(ax, coord_text, '(a)')
     ax.set_yscale('log')
-    ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
-    fig, ax = plt_templ.set_labels(fig, ax, time_label, r'log CFU mL$^{-1}$')
+    if plt_templ.paper_style['tight']:
+        plt_templ.tight_xlim(ax, days_meas, 1)
+    else:
+        ax.set_xlim(np.min(days_meas)-0.25, np.max(days_meas)+0.5)
+    fig, ax = plt_templ.set_labels(fig, ax, time_label, plt_templ.paper_style['ylabel_pc'])
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
-    ax.legend()#, handles=lines)
-    if title is not None:
-        ax.set_title(title, fontsize=13)
+    if plt_templ.paper_style['legend']:
+        ax.legend()#, handles=lines)
+    _title(ax, title)
     plt.savefig(path+exp+add_name+'_platecount.pdf', bbox_inches='tight')
     plt.close(fig)
 
 
-def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None, plot_meas=True, title=None, time_label=r'Time, $t$', legend_outside=False):
+def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', clrs=None, plot_meas=True, title=None, time_label=r'Time, $t$', legend_outside=False,
+                       obs_true=None, band=None):
     """Plot modeled bacterial trajectories against measured count data.
     title: figure of a fit result, full time range and y-range of the curves, legend inside the axes, no panel
     letter; None: layout of the data-generation figures (panel letter = temperature, days 0-10 above 2 C)."""
@@ -323,21 +475,28 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
         if clrs is not None:
             clr = clrs[bact_all[k]]
         else:
-            clr = plt_templ.colors_ngs[4*k]
+            clr = plt_templ.species_color(k)
+        mrk = plt_templ.species_marker(k)
         ax.plot(days_model, o_n, label=f'{bact_all[k]}', color=clr)
+        _model_extras(ax, days_model, _sub(obs_true, k), _sub(band, k), clr)
         if plot_meas:
-            ax.errorbar(days_meas, o_meas, yerr=0., fmt='o', color=clr, label=f'{bact_all[k]}') # , label=f'Data Cl. {k}'
-        lines.append(mlines.Line2D([], [], color=clr, marker='o' if plot_meas else '', label=species_label(bact_all[k])))
+            _errorbar(ax, plt_templ.dodge(days_meas, k, len(bact_all)), o_meas, yerr=0., fmt=mrk, color=clr,
+                        label=f'{bact_all[k]}')
+        lines.append(mlines.Line2D([], [], color=clr, marker=mrk if plot_meas else '', label=species_label(bact_all[k])))
     ax.set_yscale('log')
     if title is not None:
         shown = np.array(obs_model, dtype=float)[:, np.asarray(days_model) <= np.max(days_meas)]
         low, high = (np.min(obs_meas), np.max(obs_meas)) if plot_meas else (np.min(shown), np.max(shown))
-        ax.set_xlim(0., np.max(days_meas)+0.3)
-        ax.set_ylim(low*0.5, high*2.5)
-        fig, ax = plt_templ.set_labels(fig, ax, time_label, r'log $x(t)$')
+        if plt_templ.paper_style['tight']:   # no headroom for a legend
+            plt_templ.tight_xlim(ax, days_meas, len(bact_all) if plot_meas else 1)
+            ax.set_ylim(low*0.7, high*1.6)
+        else:
+            ax.set_xlim(0., np.max(days_meas)+0.3)
+            ax.set_ylim(low*0.5, high*2.5)
+        fig, ax = plt_templ.set_labels(fig, ax, time_label, plt_templ.paper_style['ylabel_x'])
         species_legend(ax, lines, legend_outside, ncol=max(1, len(bact_all)//4))
         if title:
-            ax.set_title(title, fontsize=13)
+            _title(ax, title)
         plt.savefig(path+exp+add_name+'_realx.pdf', bbox_inches='tight')
         plt.close(fig)
         return
@@ -348,7 +507,9 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
         #ax.set_xlim(-0.25, 10)
         ax.set_xlim(0., 10)
         ax.set_ylim(np.min(obs_meas)*0.6, np.max(obs_meas)*2.7)
-    fig, ax = plt_templ.set_labels(fig, ax, time_label, r'log $x(t)$')
+    if plt_templ.paper_style['tight']:   # no headroom for a legend
+        ax.set_ylim(np.min(obs_meas)*0.7, np.max(obs_meas)*1.6)
+    fig, ax = plt_templ.set_labels(fig, ax, time_label, plt_templ.paper_style['ylabel_x'])
     #fig, ax = plt_templ.set_labels(fig, ax, 'Tag', r'log CFU mL$^{-1}$')
     #coord_text = (0.95, 0.07)
     coord_text = (0.06, 0.92)
@@ -361,8 +522,9 @@ def plot_opt_res_realx(df0, days_model, obs_model, exp, path='', add_name='', cl
     else:
         text_lbl = '(c)'
         legend_box = [0.317, 0.427]
-    ax.text(*coord_text, text_lbl, fontsize=20, horizontalalignment='center', verticalalignment='center', transform=ax.transAxes)
-    ax.legend(ncol=max(1, len(bact_all)//4), handles=lines, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
+    _panel_letter(ax, coord_text, text_lbl)
+    if plt_templ.paper_style['legend']:
+        ax.legend(ncol=max(1, len(bact_all)//4), handles=lines, bbox_to_anchor=legend_box, bbox_transform=fig.transFigure)
     #ax.legend(handlelength=1.3, ncol=len(bact_all)//4)#, bbox_to_anchor=(1, 1))
     plt.savefig(path+exp+add_name+'_realx.pdf', bbox_inches='tight')
     plt.close(fig)

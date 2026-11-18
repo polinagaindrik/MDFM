@@ -19,11 +19,11 @@ from ..analysis.prediction_uncertainty import prediction_bands
 
 
 def _species_color(k, bact, clrs):
-    return clrs[bact] if clrs is not None and bact in clrs else plt_templ.colors_ngs[4*k]
+    return clrs[bact] if clrs is not None and bact in clrs else plt_templ.species_color(k)
 
 
-def _medium_color(j):
-    return plt_templ.colors_ngs[2*j]
+def _medium_color(med, media):
+    return plt_templ.medium_color(med, media)
 
 
 def _data_points(df, exp, med=None, row=None):
@@ -189,7 +189,7 @@ def plot_prediction_uncertainty(prediction, setup, path='', add_name='', exps=No
             handles = []
             any_data = False
             for j, med in enumerate(media):
-                clr = _medium_color(j)
+                clr = _medium_color(med, media)
                 _band_and_estimate(ax, t, b['platecount'][0][j], b['platecount'][1][j],
                                    None if est is None else est['platecount'][j], clr, alpha, plot_estimate,
                                    mem['platecount'][:, j], plot_members, nb(exp, 'platecount', j))

@@ -27,8 +27,8 @@ def plot_insilico_x(df, model, t, param, x0, n_cl, path='', add_name=''):
         days_model = t_model
         for k, (o_n, o_meas, bact) in enumerate(zip(np.array(obs_model).T, np.array(obs_meas).T, df0.T.columns)):
             std = 0.01 + o_meas*0.1
-            ax.plot(days_model, o_n, linewidth=2., label=f'{bact}', color=plt_templ.colors_ngs[4*k])
-            ax.errorbar(days_meas, o_meas, yerr=std, fmt='o', color=plt_templ.colors_ngs[4*k]) #, label=f'Data Cl. {k}'
+            ax.plot(days_model, o_n, linewidth=2., label=f'{bact}', color=plt_templ.species_color(k))
+            ax.errorbar(days_meas, o_meas, yerr=std, fmt=plt_templ.species_marker(k), color=plt_templ.species_color(k)) #, label=f'Data Cl. {k}'
         ax.set_yscale('log')
         ax.set_title(r'In-silico model $x(t)$', fontsize=15)
         ax.set_yscale('log')
